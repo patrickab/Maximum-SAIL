@@ -1,10 +1,15 @@
 EVALUATION_BUDGET    = 1000
 SIZE_INITIAL_ARCHIVE = 50
 PARALLEL_BATCH_SIZE  = 10
-BEHAVORAL_NICHES = [
+BEHAVIORAL_NICHES = [
     behavior_dim1 = define_dimension([0 ; 100], 10),
     behavior_dim2 = define_dimension([-42; 42], 42),
     behavior_dim3 = define_dimension([123;456], 78)
+]
+ACQUISITION_ARCHIVE = [
+    acquisition_dim1 = define_dimension([0   ;   10],1)
+    acquisition_dim1 = define_dimension([-4,2;  4,2],4.2)
+    acquisition_dim1 = define_dimension([12,3; 4,56],7.8)
 ]
 
 function define_dimension(interval, n_bins){
@@ -44,3 +49,4 @@ function sail(){
     prediction_map = map_elites(predict_performance(), solution_archive)                  // Calculate elite perofrmance solutions
 
 }
+
