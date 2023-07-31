@@ -1,17 +1,20 @@
 ###### Archive packages #####
 from ribs.archives import GridArchive
+from botorch.sampling import SobolQMCNormalSampler
+from botorch.utils.sampling import draw_sobol_samples
 from chaospy import Uniform, Iid
 import numpy as np
+import torch
 
 ###### Import Custom Scripts ######
-import acq_normal_distribution
+import acq_functions.acq_normal_distribution as acq_normal_distribution
+from train_GP import init_gp_model, update_gp_model
 import map_elites
 import train_GP
 
 
 ######## Define Parameters ######## 
 # (adjust settings in map_elites.py)
-EVALUATION_BUDGET = 1000
 ACQ_N_EVALS = 1000
 PRED_N_EVALS = 1000
 PARALLEL_BATCH_SIZE = 10
@@ -71,7 +74,7 @@ def example_variation_function(genomes):
                 dim -=  1
             i += 1
 
-
+# Reminder: Architecture of Grid Archive Datatype
 example_archive = GridArchive(
     solution_dim=SOL_DIMENSION,         # Dimension of solution vector
     dims=BHV_ARCHIVE_DIMENSION,         # Dimension of behavior vector
@@ -96,35 +99,48 @@ def sail(archive):
             rule="sobol")
     
         obj_evals = example_objective_function(init_solutions)       # Calculate objective
-        bhv_evals = example_behavior_function(init_solutions)        # Calculate performance
-        ACQ_N_EVALS -= PARALLEL_BATCH_SIZE 
+        bhv_evals = example_behavior_function(init_solutions)        # Calculate performance 
         archive.add(init_solutions, obj_evals, bhv_evals)            # Save elite solutions
 
-    gp_observations = (init_solutions, obj_evals)
-    # (... train GP)
+    obj_eval_archive = (init_solutions, obj_evals)
 
+    gp_model = init_gp_model(init_solutions, obj_evals)
+  
 
     ########################
     ### Acquisition loop ###
     ########################
 
-    # (...do things)
-    n_evals = ACQ_N_EVALS
-    while(n_evals-PARALLEL_BATCH_SIZE >= 0): # future addition: add threshhold condition for predictive model performance
-        archive, gp_observations = map_elites(PARALLEL_BATCH_SIZE, archive, acq_normal_distribution(), example_behavior_function(), example_variation_function())
-        n_evals -= PARALLEL_BATCH_SIZE
-        train_GP(gp_observations)
+    eval_budget = ACQ_N_EVALS
+
+    while(eval_budget-PARALLEL_BATCH_SIZE >= 0): # future addition: add threshhold condition for predictive model performance
+        
+        # Calculate and store acquisition elites
+        archive = map_elites(PARALLEL_BATCH_SIZE, archive, acq_normal_distribution(), example_behavior_function(), example_variation_function())
+        
+        # Select & evaluate acquisition elites (sobol sample in original paper)
+        acq_elites = archive.sample_elites(PARALLEL_BATCH_SIZE)
+        obj_evals = example_objective_function(acq_elites)
+        bhv_evals = example_behavior_function(acq_elites)
+
+        obj_eval_archive = obj_eval_archive + (acq_elites, obj_evals)
+
+        eval_budget -= PARALLEL_BATCH_SIZE
+
+        gp_model = update_gp_model(obj_eval_archive)
         # future addition: calculate residuals & build mean over predictive model performance
-
-    # (...do things)
-
+    
+    
     ########################
     ### Prediction loop ####
     ########################
 
     # (... do things)
-    n_evals = PRED_N_EVALS
-    while(n_evals-PARALLEL_BATCH_SIZE >= 0):
-        archive, gp_observations = map_elites(PARALLEL_BATCH_SIZE, archive, predict_objective(), example_behavior_function(), example_variation_function())
-        n_evals-=PARALLEL_BATCH_SIZE
+    eval_budget = PRED_N_EVALS
+
+    while(eval_budget-PARALLEL_BATCH_SIZE >= 0):
+        archive = map_elites(PARALLEL_BATCH_SIZE, archive, predict_objective(), example_behavior_function(), example_variation_function())
+        eval_budget-=PARALLEL_BATCH_SIZE
+
+    return archive
     # (...do things)

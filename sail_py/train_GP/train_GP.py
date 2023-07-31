@@ -1,37 +1,58 @@
-import botorch
 import torch
 from botorch.models import SingleTaskGP
 from botorch.fit import fit_gpytorch_model
-from botorch.optim import optimize_acqf
 from gpytorch.mlls import ExactMarginalLogLikelihood
+from gpytorch.constraints import GreaterThan
 
 # 'gp_observations = (new_solutions, new_obj_evals)'
 #   'with new_solutions = scheduler.ask()'
 
 
+def init_gp_model(init_solutions, obj_evals):
 
-def create_gp_model(X, Y):
-    # X: torch.Tensor of shape (num_samples, num_features)
-    # Y: torch.Tensor of shape (num_samples,)
-    gp_model = SingleTaskGP(X, Y)
-    mll = ExactMarginalLogLikelihood(gp_model.likelihood, gp_model)
-    return gp_model, mll
+    # Use a GPU if available
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    dtype = torch.float
 
+    # Convert variables to tensor if necessary
+    init_solutions = torch.tensor(init_solutions, device=device, dtype=dtype)
+    obj_evals = torch.tensor(obj_evals, device=device, dtype=dtype)
 
-def update_gp_model(gp_model, mll, new_solutions, new_obj_evals):
-    # new_solutions: torch.Tensor of shape (num_new_samples, num_features)
-    # new_obj_evals: torch.Tensor of shape (num_new_samples,)
+    # Initialize model
+    gp_model = SingleTaskGP(train_X=init_solutions, train_Y=obj_evals)
+    gp_model.likelihood.noise_covar.register_constraint("raw_noise", GreaterThan(1e-5)) # ???
+    
+    # Define marginal log likelihood
+    mll = ExactMarginalLogLikelihood(likelihood=gp_model.likelihood, model=gp_model)
+    mll.to(init_solutions) # ???
 
-    # Append the new observations to the existing data
-    X = torch.cat([gp_model.train_inputs[0], new_solutions])
-    Y = torch.cat([gp_model.train_targets, new_obj_evals])
+    fit_gpytorch_model(mll)
+
+    return gp_model
+
+    
+    
+
+def update_gp_model(obj_eval_archive, gp_model):
+
+    # Use a GPU if available
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    dtype = torch.float
+
+    x, y = obj_eval_archive
+
+    # Convert variables to tensor if necessary
+    x_tensor = torch.tensor(x, device=device, dtype=dtype)
+    y_tensor = torch.tensor(y, device=device, dtype=dtype)
 
     # Update the GP model with new data
-    gp_model = SingleTaskGP(X, Y)
-    mll = ExactMarginalLogLikelihood(gp_model.likelihood, gp_model)
+        # How can I fit GP on existing gp_model?
+    gp_model = SingleTaskGP(train_X=x, train_Y=y)
+    mll = ExactMarginalLogLikelihood(likelihood=gp_model.likelihood, model=gp_model)
+    mll.to(x) # ???
 
     # Re-fit the GP model to the updated data   	
     fit_gpytorch_model(mll)
 
-    return gp_model, mll
+    return gp_model
 

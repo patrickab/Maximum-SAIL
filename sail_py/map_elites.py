@@ -36,12 +36,10 @@ def map_elites(n_evals, sol_archive, fuct_objective, fuct_behavior, fuct_variati
         obj_evals = fuct_objective(sol_candidates)
         bhv_evals = fuct_behavior(sol_candidates)
 
-        gp_data = (sol_candidates,obj_evals)
-
         i += PARALLEL_BATCH_SIZE
 
         # Update Archive
         scheduler.tell(obj_evals, bhv_evals)
     
-    return sol_archive, gp_data
+    return sol_archive
 

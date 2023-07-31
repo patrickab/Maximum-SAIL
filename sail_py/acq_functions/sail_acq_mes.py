@@ -3,7 +3,39 @@ import botorch
 from botorch.optim import optimize_acqf
 
 
-def acquisition_mes(archive, gpModel, genome):
+def acquisition_mes(drag, lift, gpModel, genome):
+    """
+    python translation of velo_AcquisitionFunc()
+    implementing MES instead of UCB
+        (with minor modifications)
+
+    Note: 
+        simplified input values 
+            (drag, lift):               // extract variables from generate_xfouil_output.py
+                here:     2x1 matrices
+                original: 2xN matrices
+            (genome):
+                here:     1xDim matrices
+                original: NxDim matrices
+                            
+        renamed variables
+            fitness   -> acq_fitness
+            predValue -> acq_behavior  
+
+    Inputs: 
+        drag                : (mean, variance)   ->  (Luftwiderstand) ; found in 
+        lift                : (mean, variance)   ->  (Auftrieb)
+        gpModel             : result from train_gp()
+        genomes : tensor struct of candidate solutions
+                              (provided by MAP-Elites line 1 acquisition loop)
+    
+    Outputs:
+        acq_fitness  : float
+            Fitness value (lower drag is better)
+
+        acq_behavior : 
+            Predicted drag force (mean and variance)
+    """
 
     X = torch.tensor(genome)                                                # Convert genome to tensor
     acq_fitness  = botorch.acquisition.qMaxValueEntropy(gpModel, genome)    # Evaluate fitness using MES // qMaxValueEntropy supports "n x Dim" genomes
