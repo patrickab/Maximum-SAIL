@@ -31,4 +31,3 @@ def map_elites(n_evals, archive, fuct_objective, fuct_behavior, fuct_variation_o
         scheduler.tell(obj_evals, bhv_evals)
     
     return archive
-
