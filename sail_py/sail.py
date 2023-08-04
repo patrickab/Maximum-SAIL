@@ -17,14 +17,15 @@ PARALLEL_BATCH_SIZE = config.PARALLEL_BATCH_SIZE
 SOL_DIMENSION = config.SOL_DIMENSION
 BHV_ARCHIVE_DIMENSION = config.BHV_ARCHIVE_DIMENSION
 BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
+ARCHIVE = config.ARCHIVE
 
 def predict_objective(gp_model): 
     return np.mean(gp_model)
 
-def sail(archive):
+def sail():
 
     # current logic allows (archiv.size() > INIT_ARCHIVE_SIZE) but ensures (archiv.size() >= INIT_ARCHIVE_SIZE)
-    archive, init_solutions, init_obj_evals = initialize_archive(archive, example_objective_function(),example_behavior_function())
+    ARCHIVE, init_solutions, init_obj_evals = initialize_archive(example_objective_function(),example_behavior_function())
     gp_model = init_gp_model(init_solutions, init_obj_evals)
     
     #### ACQUISITION LOOP
@@ -33,20 +34,18 @@ def sail(archive):
     while(eval_budget-PARALLEL_BATCH_SIZE >= 0): # future addition: add threshhold condition for predictive performance of the model
         
         # Calculate and store acquisition elites
-        archive = map_elites(ACQ_N_EVALS, archive, acq_normal_distribution(), example_behavior_function(), example_variation_function())
+        ARCHIVE = map_elites(ACQ_N_EVALS, acq_normal_distribution(), example_behavior_function(), example_variation_function())
         
         # Select & evaluate acquisition elites (sobol sample in original paper)
-        acq_elites = archive.sample_elites(PARALLEL_BATCH_SIZE)
+        acq_elites = ARCHIVE.sample_elites(PARALLEL_BATCH_SIZE)
         obj_evals = example_objective_function(acq_elites)
-        bhv_evals = example_behavior_function(acq_elites)
 
         obj_eval_archive = obj_eval_archive + (acq_elites, obj_evals)
-
         eval_budget -= PARALLEL_BATCH_SIZE
 
         gp_model = update_gp_model(obj_eval_archive)
     
     #### PREDICTION MAP
-    archive = map_elites(PRED_N_EVALS, archive, predict_objective(), example_behavior_function(), example_variation_function())
+    ARCHIVE = map_elites(PRED_N_EVALS, predict_objective(gp_model), example_behavior_function(), example_variation_function())
 
-    return archive
+    return ARCHIVE

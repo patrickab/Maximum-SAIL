@@ -3,7 +3,6 @@ from botorch.models.transforms import Standardize, Normalize
 from botorch.models import SingleTaskGP
 from botorch.fit import fit_gpytorch_model
 from gpytorch.mlls import ExactMarginalLogLikelihood
-from gpytorch.constraints import GreaterThan
 
 from ..config import Config
 config = Config('../config.ini')
