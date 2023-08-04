@@ -10,39 +10,17 @@ import torch
 import acq_functions.acq_normal_distribution as acq_normal_distribution
 from train_GP import init_gp_model, update_gp_model
 import map_elites
-import train_GP
+import utils.initialize_archive as initialize_archive
 
-
-######## Define Parameters ######## 
-# (adjust settings in map_elites.py)
-ACQ_N_EVALS = 1000
-PRED_N_EVALS = 1000
-PARALLEL_BATCH_SIZE = 10
-# Define solution space
-SOL_DIMENSION = [3]
-SOL_VALUE_RANGE = [
-    (0,10), # dim1
-    (5,10), # dim2
-    (2,32)  # dim3
-    ]
-
-INIT_ARCHIVE_SIZE = 50      # Note: current state of code 
-                            # allows (archiv.size() > INIT_ARCHIVE_SIZE) 
-                            # but ensures (archiv.size() >= INIT_ARCHIVE_SIZE)
-
-
-
-######### Define Archive #########ä
-# Note: current state of work does not differentiate between 
-# behavior in acquisition vs prediction map
-BHV_ARCHIVE_DIMENSION = [2]
-BHV_NUMBER_BINS = [50,20]
-BHV_VALUE_RANGE = [
-    (0,100), # dim1
-    (10,20)  # dim2
-    ]
-
-
+###### Configurable Variables ######
+from config import Config
+config = Config('config.ini')
+ACQ_N_EVALS = config.ACQ_N_EVALS
+PRED_N_EVALS = config.PRED_N_EVALS
+PARALLEL_BATCH_SIZE = config.PARALLEL_BATCH_SIZE
+SOL_DIMENSION = config.SOL_DIMENSION
+BHV_ARCHIVE_DIMENSION = config.BHV_ARCHIVE_DIMENSION
+BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 
 def example_objective_function(genome):
     
@@ -82,41 +60,22 @@ example_archive = GridArchive(
     qd_score_offset=-600
 )
 
-sol_distribution = Iid([                # Define uniform iid distribution among dimensions
-    Uniform(lower_bound, upper_bound)
-        for lower_bound, upper_bound in SOL_VALUE_RANGE
-])
-
 def predict_objective(gp_model): 
     return np.mean(gp_model)
 
 def sail(archive):
 
-    # logic allows (archiv.size() > INIT_ARCHIVE_SIZE) but ensures (archiv.size() >= INIT_ARCHIVE_SIZE)
-    while archive.size() < INIT_ARCHIVE_SIZE:
-        init_solutions = sol_distribution.sample(                    # Generate initial solutions
-            INIT_ARCHIVE_SIZE,
-            rule="sobol")
+    # current logic allows (archiv.size() > INIT_ARCHIVE_SIZE) but ensures (archiv.size() >= INIT_ARCHIVE_SIZE)
+    archive, init_solutions, init_obj_evals = initialize_archive(archive, example_objective_function(),example_behavior_function())
+    gp_model = init_gp_model(init_solutions, init_obj_evals)
     
-        obj_evals = example_objective_function(init_solutions)       # Calculate objective
-        bhv_evals = example_behavior_function(init_solutions)        # Calculate performance 
-        archive.add(init_solutions, obj_evals, bhv_evals)            # Save elite solutions
-
-    obj_eval_archive = (init_solutions, obj_evals)
-
-    gp_model = init_gp_model(init_solutions, obj_evals)
-  
-
-    ########################
-    ### Acquisition loop ###
-    ########################
-
+    #### ACQUISITION LOOP
     eval_budget = ACQ_N_EVALS
 
     while(eval_budget-PARALLEL_BATCH_SIZE >= 0): # future addition: add threshhold condition for predictive model performance
         
         # Calculate and store acquisition elites
-        archive = map_elites(PARALLEL_BATCH_SIZE, archive, acq_normal_distribution(), example_behavior_function(), example_variation_function())
+        archive = map_elites(ACQ_N_EVALS, archive, acq_normal_distribution(), example_behavior_function(), example_variation_function())
         
         # Select & evaluate acquisition elites (sobol sample in original paper)
         acq_elites = archive.sample_elites(PARALLEL_BATCH_SIZE)
@@ -130,12 +89,7 @@ def sail(archive):
         gp_model = update_gp_model(obj_eval_archive)
         # future addition: calculate residuals & build mean over predictive model performance
     
-    
-    ########################
-    ### Prediction loop ####
-    ########################
-
-    # (... do things)
+    ##### PREDICTION LOOP
     eval_budget = PRED_N_EVALS
 
     while(eval_budget-PARALLEL_BATCH_SIZE >= 0):
@@ -143,4 +97,3 @@ def sail(archive):
         eval_budget-=PARALLEL_BATCH_SIZE
 
     return archive
-    # (...do things)

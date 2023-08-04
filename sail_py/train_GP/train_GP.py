@@ -1,12 +1,13 @@
 import torch
+from botorch.models.transforms import Standardize, Normalize
 from botorch.models import SingleTaskGP
 from botorch.fit import fit_gpytorch_model
 from gpytorch.mlls import ExactMarginalLogLikelihood
 from gpytorch.constraints import GreaterThan
 
-# 'gp_observations = (new_solutions, new_obj_evals)'
-#   'with new_solutions = scheduler.ask()'
-
+from ..config import Config
+config = Config('../config.ini')
+SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 
 def init_gp_model(init_solutions, obj_evals):
 
@@ -19,19 +20,15 @@ def init_gp_model(init_solutions, obj_evals):
     obj_evals = torch.tensor(obj_evals, device=device, dtype=dtype)
 
     # Initialize model
-    gp_model = SingleTaskGP(train_X=init_solutions, train_Y=obj_evals)
-    gp_model.likelihood.noise_covar.register_constraint("raw_noise", GreaterThan(1e-5)) # ???
+    gp_model = SingleTaskGP(train_X=init_solutions, train_Y=obj_evals, input_transform=Normalize) # "output_transform = " torch tensor containing bounds
     
     # Define marginal log likelihood
     mll = ExactMarginalLogLikelihood(likelihood=gp_model.likelihood, model=gp_model)
-    mll.to(init_solutions) # ???
 
     fit_gpytorch_model(mll)
 
     return gp_model
 
-    
-    
 
 def update_gp_model(obj_eval_archive, gp_model):
 
