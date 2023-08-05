@@ -8,6 +8,8 @@ ARCHIVE = config.ARCHIVE
 # logic allows (archiv.size() > INIT_ARCHIVE_SIZE) but ensures (archiv.size() >= INIT_ARCHIVE_SIZE)
 def initialize_archive(example_objective_function, example_behavior_function):
 
+    global ARCHIVE
+
     while ARCHIVE.size() < INIT_ARCHIVE_SIZE:
         init_solutions = SOL_DISTRIBUTION.sample(                    # Generate initial solutions
             INIT_ARCHIVE_SIZE,

@@ -5,7 +5,7 @@ import numpy as np
 import map_elites
 import acq_functions.acq_normal_distribution as acq_normal_distribution
 import utils.initialize_archive as initialize_archive
-from train_GP import init_gp_model, update_gp_model
+from train_GP import fit_gp_model, update_gp_model
 from example.example_functions import example_objective_function, example_behavior_function, example_variation_function
 
 ###### Configurable Variables ######
@@ -24,9 +24,13 @@ def predict_objective(gp_model):
 
 def sail():
 
+    global ARCHIVE
+
     # current logic allows (archiv.size() > INIT_ARCHIVE_SIZE) but ensures (archiv.size() >= INIT_ARCHIVE_SIZE)
     ARCHIVE, init_solutions, init_obj_evals = initialize_archive(example_objective_function(),example_behavior_function())
-    gp_model = init_gp_model(init_solutions, init_obj_evals)
+    obj_eval_archive = obj_eval_archive + (init_solutions, init_obj_evals)
+
+    gp_model = fit_gp_model(obj_eval_archive)
     
     #### ACQUISITION LOOP
     eval_budget = ACQ_N_EVALS
@@ -43,8 +47,8 @@ def sail():
         obj_eval_archive = obj_eval_archive + (acq_elites, obj_evals)
         eval_budget -= PARALLEL_BATCH_SIZE
 
-        gp_model = update_gp_model(obj_eval_archive)
-    
+        gp_model = fit_gp_model(obj_eval_archive)
+
     #### PREDICTION MAP
     ARCHIVE = map_elites(PRED_N_EVALS, predict_objective(gp_model), example_behavior_function(), example_variation_function())
 

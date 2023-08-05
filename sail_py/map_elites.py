@@ -1,5 +1,4 @@
 ###### Archive packages #####
-from ribs.emitters import GaussianEmitter
 from ribs.schedulers import Scheduler
 
 from config import Config
@@ -7,11 +6,14 @@ config = Config('config.ini')
 PARALLEL_BATCH_SIZE = config.PARALLEL_BATCH_SIZE
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 EMITTER = config.EMITTER
+ARCHIVE = config.ARCHIVE
 
-def map_elites(n_evals, archive, fuct_objective, fuct_behavior, fuct_variation_opeartor):
+def map_elites(n_evals, fuct_objective, fuct_behavior, fuct_variation_opeartor):
         
+    global ARCHIVE
+    
     # Archive Scheduler
-    scheduler = Scheduler(archive, EMITTER)
+    scheduler = Scheduler(ARCHIVE, EMITTER)
 
     for i in n_evals:
 
@@ -30,4 +32,4 @@ def map_elites(n_evals, archive, fuct_objective, fuct_behavior, fuct_variation_o
         # Update Archive
         scheduler.tell(obj_evals, bhv_evals)
     
-    return archive
+    return ARCHIVE
