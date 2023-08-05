@@ -21,7 +21,7 @@ def fit_gp_model(obj_eval_archive):
     y_tensor = torch.tensor(y, device=device, dtype=dtype)
 
     # Initialize model
-    gp_model = SingleTaskGP(train_X=x_tensor, train_Y=y_tensor, input_transform=Normalize, output_transform=Standardize)
+    gp_model = SingleTaskGP(train_X=x_tensor, train_Y=y_tensor, input_transform=Normalize(x.shape[-1], bounds=SOL_VALUE_RANGE), outcome_transform=Standardize(m=1))
     
     # Define marginal log likelihood
     mll = ExactMarginalLogLikelihood(likelihood=gp_model.likelihood, model=gp_model)
@@ -30,4 +30,3 @@ def fit_gp_model(obj_eval_archive):
     fit_gpytorch_model(mll)
 
     return gp_model
-
