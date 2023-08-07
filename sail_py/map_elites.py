@@ -1,35 +1,51 @@
-###### Archive packages #####
+###### Import packages #####
 from ribs.schedulers import Scheduler
+import numpy
+
+##### Import custom scripts #####
+from example.example_functions import example_objective_function
+from utils.pprint import pprint
 
 from config import Config
 config = Config('config.ini')
-PARALLEL_BATCH_SIZE = config.PARALLEL_BATCH_SIZE
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
-EMITTER = config.EMITTER
-ARCHIVE = config.ARCHIVE
+PARALLEL_BATCH_SIZE = config.PARALLEL_BATCH_SIZE
 
-def map_elites(n_evals, fuct_objective, fuct_behavior, fuct_variation_opeartor):
-        
-    global ARCHIVE
+def map_elites(archive, emitter, n_evals, fuct_objective, fuct_behavior, fuct_variation_opeartor):
     
+    print("\nInitialize Map-Elites [...]\n")
+
     # Archive Scheduler
-    scheduler = Scheduler(ARCHIVE, EMITTER)
+    scheduler = Scheduler(archive, emitter)
 
-    for i in n_evals:
+    remaining_evals = n_evals
+    while((remaining_evals)>0):    
+        
+        print("Enter Loop")
+        print("Remaining Evals: " + str(remaining_evals))
+        sol_candidates = scheduler.ask() # Generates n=PARALLEL_BATCH_SIZE solutions according to emitter
 
-        # Generate n=PARALLEL_BATCH_SIZE candidate solutions according to emitter
-        sol_candidates = scheduler.ask()
+        # Variation Operator
 
-        # Apply variation operator
-        sol_candidates = fuct_variation_opeartor(sol_candidates)
+        obj_evals = example_objective_function(sol_candidates)      # Calculate objective       (replace with dynamic 'fuct_objective' parameters)
+        bhv_evals = fuct_behavior(sol_candidates)                   # Calculate behavior
 
-        # Evaluate Performance and Behavior
-        obj_evals = fuct_objective(sol_candidates)
-        bhv_evals = fuct_behavior(sol_candidates)
+        for i in range(len(sol_candidates)):
+            sol_candidate = sol_candidates[i]
+            for j in range(len(sol_candidate)):
+                lower_bound, upper_bound = SOL_VALUE_RANGE[j]
+                sol_candidates[i][j] = (sol_candidates[i][j] % upper_bound+1) + lower_bound
 
-        i += PARALLEL_BATCH_SIZE
+        remaining_evals -= 250 # after debugging: set back to PARRALLEL_BATCH_SIZE
 
-        # Update Archive
-        scheduler.tell(obj_evals, bhv_evals)
+        print("Update Archive")
+
+        elite_status_vector = scheduler.tell(obj_evals, bhv_evals)
+        print("Exit Loop")
+        if remaining_evals > 0:
+            print()
+
+
+    print("\n[...] Terminate Map-Elites\n")
     
-    return ARCHIVE
+    return archive

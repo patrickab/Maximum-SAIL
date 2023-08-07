@@ -1,36 +1,58 @@
-def example_objective_function(genome):
+import numpy
+
+def example_objective_function(samples):
     
-    genome_sum = 0
+    if samples is None:
+        return
+
+    obj_evals = []
+
+    for sample in samples:
+        obj_evals.append(numpy.random.normal(0,1))
     
-    for dim in genome:
-        genome_sum += dim
+    obj_evals = numpy.array(obj_evals)
 
-    return genome_sum
+    return obj_evals
 
-def example_behavior_function(genome):
+def example_behavior_function(samples):
 
-    bhv_vector = [None,None]
+    if samples is None:
+        return
+
+    bhv_evals = [numpy.array([], dtype=float), numpy.array([], dtype=float)]
+
+    for sample in samples:
+        # nothing meaningful being done, just calculates "random" behavioral values within value range from given sample input    
+        dim1_bhv_eval = 0
+        dim2_bhv_eval = 0
+
+        for dim in sample:
+            dim1_bhv_eval += (dim*3.1415 + numpy.random.normal(20, 9)) % 100 # generates value between 0 and 100
+            dim2_bhv_eval += (dim*2.7182 + numpy.random.normal(10, 2)) % 20 # generates value between 0 and 20
+        
+        bhv_evals[0] = numpy.append(bhv_evals[0], dim1_bhv_eval)
+        bhv_evals[1] = numpy.append(bhv_evals[1], dim2_bhv_eval)
+
+    bhv_evals = numpy.array(bhv_evals, dtype=float)
+
+    return bhv_evals.T
+
+def example_variation_function(samples):
     
-    # nothing meaningful being done, just calculates "random" behavioral values within value range from given genome input
-    bhv_vector[0] = 0
-    for dim in genome:
-        bhv_vector[0] += dim*3.1415 % 100 # generates value between 0 and 100
+    if samples is None:
+        return
 
-    bhv_vector[1] = 0
-    for dim in genome:
-        bhv_vector[1] += dim*2.7182 % 20 # generates value between 0 and 20
+    print(samples)
 
-    return bhv_vector
-
-def example_variation_function(genomes):
-    
-    for genome in genomes:
+    for sample in samples:
         i=0
-        for dim in genome:
+        for dim in sample:
             if i%2 == 0:
-                dim += -1
+                dim += 0.1
             else:
-                dim -=  1
+                dim -= 0.1
             i += 1
 
-    return genomes
+    print(samples)
+
+    return samples
