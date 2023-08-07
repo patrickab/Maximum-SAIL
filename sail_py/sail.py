@@ -25,8 +25,8 @@ BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 BHV_NUMBER_BINS = config.BHV_NUMBER_BINS
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 
-def predict_objective(gp_model): 
-    return 1
+def predict_objective(genomes): 
+    return acq_normal_distribution
 
 def sail():
 
@@ -37,12 +37,8 @@ def sail():
         dims=BHV_NUMBER_BINS,               # Dimension of behavior vector
         ranges=BHV_VALUE_RANGE,             # Possible values for behavior vector
         qd_score_offset=-600)
-    
-    archive, init_solutions, init_obj_evals = initialize_archive(archive, example_objective_function,example_behavior_function)
 
-    pprint(init_solutions)
-    print()
-    pprint(init_obj_evals)
+    archive, init_solutions, init_obj_evals = initialize_archive(archive, example_objective_function,example_behavior_function)
 
     sol_archive = []
     obj_archive = []
@@ -63,8 +59,11 @@ def sail():
         initial_solutions=init_solutions
     )]
 
+    print(" ## Exit Initialization ##")
+    print(" ## Enter Acquisition Loop ##")
+    
     eval_budget = ACQ_N_OBJ_EVALS
-    print("\n Enter Acquisition Loop")
+
     while(eval_budget-PARALLEL_BATCH_SIZE >= 0): # future addition: add threshhold condition for predictive performance of the model
         
         # Calculate and store acquisition elites
@@ -78,14 +77,9 @@ def sail():
         obj_evals = obj_evals.reshape(-1,1)
 
         sol_archive = np.vstack((sol_archive, acq_elites), dtype=float)
-        print("\n\n")
-        pprint(obj_archive)
-        print()
-        pprint(obj_evals)
-
         obj_archive = np.vstack((obj_archive, obj_evals), dtype=float)
 
-        print("appended new solutions to archives")
+        print("Append new solutions to archives")
 
         if eval_budget == ACQ_N_OBJ_EVALS:
             observation_archive = (acq_elites, obj_evals)
@@ -94,11 +88,10 @@ def sail():
 
         eval_budget -= 250
 
-        print(acq_elites[1].T)
-
         gp_model = fit_gp_model(sol_archive, obj_archive)
 
-    print("Exit Acquisition Loop")
+    print(" ## Exit Acquisition Loop ##")
+    print(" ## Enter Prediction Loop ##")
 
     #### PREDICTION MAP
     archive = map_elites(archive, emitter, PRED_N_EVALS, predict_objective(gp_model), example_behavior_function, example_variation_function)

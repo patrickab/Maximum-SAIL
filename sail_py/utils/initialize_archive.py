@@ -1,4 +1,5 @@
 from ribs.archives import GridArchive
+from numpy import float64
 from chaospy import create_sobol_samples
 import numpy
 import os
@@ -19,8 +20,8 @@ def initialize_archive(archive: GridArchive, example_objective_function, example
 
     print("\nInitialize init_archive() [...]\n")
 
-    init_solutions = numpy.empty((0, SOL_DIMENSION), dtype=float)
-    init_obj_evals = numpy.empty((0, OBJ_DIMENSION), dtype=float)
+    init_solutions = numpy.empty((0, SOL_DIMENSION), dtype=float64)
+    init_obj_evals = numpy.empty((0, OBJ_DIMENSION), dtype=float64)
     i_seed = 123
 
     while archive.stats.num_elites < INIT_ARCHIVE_SIZE:
@@ -31,7 +32,7 @@ def initialize_archive(archive: GridArchive, example_objective_function, example
         samples = create_sobol_samples(order=n_samples, dim=len(SOL_VALUE_RANGE), seed=i_seed)
         samples = samples.T
 
-        for i in range(len(samples)):
+        for i in range(len(samples)):                       # Scale Samples
             for j in range(len(samples[i])):
                 lower_bound, upper_bound = SOL_VALUE_RANGE[j]
                 samples[i][j] = samples[i][j] *(upper_bound - lower_bound) + lower_bound
@@ -42,9 +43,9 @@ def initialize_archive(archive: GridArchive, example_objective_function, example
         bhv_eval = example_behavior_function(samples)       # Calculate behavior
 
         print("Add samples to Archive")
-        print("Current Elites in Archive: " + str(archive.stats.num_elites))
+        print("Current Elites in Archive (before): " + str(archive.stats.num_elites))
         archive.add(samples, obj_eval, bhv_eval)            # Store elite solutions
-        print("Current Elites in Archive: " + str(archive.stats.num_elites))
+        print("Current Elites in Archive  (after): " + str(archive.stats.num_elites))
 
         init_solutions = numpy.vstack((init_solutions, samples))
         init_obj_evals = numpy.vstack((init_obj_evals, obj_eval.reshape(-1,1)))
@@ -52,5 +53,5 @@ def initialize_archive(archive: GridArchive, example_objective_function, example
         if archive.stats.num_elites != INIT_ARCHIVE_SIZE:
             print("")
 
-    print("\n[...] Terminate init_archive()\n")
+    print("\n[...] Terminate init_archive()")
     return archive, init_solutions, init_obj_evals

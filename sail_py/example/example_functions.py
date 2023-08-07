@@ -1,4 +1,5 @@
 import numpy
+from numpy import float64
 
 def example_objective_function(samples):
     
@@ -19,7 +20,7 @@ def example_behavior_function(samples):
     if samples is None:
         return
 
-    bhv_evals = [numpy.array([], dtype=float), numpy.array([], dtype=float)]
+    bhv_evals = [numpy.array([], dtype=float), numpy.array([], dtype=float64)]
 
     for sample in samples:
         # nothing meaningful being done, just calculates "random" behavioral values within value range from given sample input    
