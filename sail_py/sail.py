@@ -6,11 +6,14 @@ from ribs.archives import GridArchive
 
 ###### Import Custom Scripts ######
 from acq_functions.acq_normal_distribution import acq_normal_distribution
+from acq_functions.acq_ucb import acq_ucb
 from example.example_functions import example_objective_function, example_behavior_function, example_variation_function
 from utils.initialize_archive import initialize_archive
 from utils.train_GP import fit_gp_model
 from utils.pprint import pprint
+from utils.predict_objective import predict_objective
 from map_elites import map_elites
+from torch import float64
 
 ###### Configurable Variables ######
 from config import Config
@@ -24,9 +27,6 @@ BHV_ARCHIVE_DIMENSION = config.BHV_ARCHIVE_DIMENSION
 BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 BHV_NUMBER_BINS = config.BHV_NUMBER_BINS
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
-
-def predict_objective(genomes): 
-    return acq_normal_distribution
 
 def sail():
 
@@ -56,18 +56,18 @@ def sail():
         sigma=0.5,
         bounds= SOL_VALUE_RANGE,
         batch_size=PARALLEL_BATCH_SIZE,
-        initial_solutions=init_solutions
+        initial_solutions=init_solutions,
     )]
 
     print(" ## Exit Initialization ##")
     print(" ## Enter Acquisition Loop ##")
-    
+
     eval_budget = ACQ_N_OBJ_EVALS
 
     while(eval_budget-PARALLEL_BATCH_SIZE >= 0): # future addition: add threshhold condition for predictive performance of the model
         
         # Calculate and store acquisition elites
-        archive = map_elites(archive, emitter, ACQ_N_MAP_EVALS, acq_normal_distribution, example_behavior_function, example_variation_function)
+        archive = map_elites(archive, emitter, gp_model, ACQ_N_MAP_EVALS, acq_ucb, example_behavior_function, example_variation_function)
         
         # Select & evaluate acquisition elites (sobol sample in original paper)
         acq_elites = archive.sample_elites(PARALLEL_BATCH_SIZE)
@@ -94,7 +94,7 @@ def sail():
     print(" ## Enter Prediction Loop ##")
 
     #### PREDICTION MAP
-    archive = map_elites(archive, emitter, PRED_N_EVALS, predict_objective(gp_model), example_behavior_function, example_variation_function)
+    archive = map_elites(archive, emitter, gp_model, PRED_N_EVALS, predict_objective, example_behavior_function, example_variation_function)
 
     print("[...] Terminate sail()")
 

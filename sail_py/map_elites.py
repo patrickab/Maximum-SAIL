@@ -10,7 +10,7 @@ config = Config('config.ini')
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 PARALLEL_BATCH_SIZE = config.PARALLEL_BATCH_SIZE
 
-def map_elites(archive, emitter, n_evals, fuct_objective, fuct_behavior, fuct_variation_operator):
+def map_elites(archive, emitter, gp_model, n_evals, fuct_objective, fuct_behavior, fuct_variation_operator):
     
     print("\nInitialize Map-Elites [...]\n")
 
@@ -26,8 +26,8 @@ def map_elites(archive, emitter, n_evals, fuct_objective, fuct_behavior, fuct_va
 
         # Variation Operator
 
-        obj_evals = fuct_objective(sol_candidates)          # Calculate objective
-        bhv_evals = fuct_behavior(sol_candidates)           # Calculate behavior
+        obj_evals = fuct_objective(sol_candidates, gp_model)          # Calculate objective
+        bhv_evals = fuct_behavior(sol_candidates)                     # Calculate behavior
 
         # for i in range(len(sol_candidates)):
         #     sol_candidate = sol_candidates[i]
@@ -35,7 +35,7 @@ def map_elites(archive, emitter, n_evals, fuct_objective, fuct_behavior, fuct_va
         #         lower_bound, upper_bound = SOL_VALUE_RANGE[j]
         #         sol_candidates[i][j] = (sol_candidates[i][j] % upper_bound+1) + lower_bound
 
-        remaining_evals -= 250 # after debugging: set back to PARRALLEL_BATCH_SIZE
+        remaining_evals -= PARALLEL_BATCH_SIZE
 
         print("Elites in Archive (before): " + str(archive.stats.num_elites))
         elite_status_vector = scheduler.tell(obj_evals, bhv_evals)
