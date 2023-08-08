@@ -8,7 +8,7 @@ from utils.pprint import pprint
 
 def predict_objective(genomes, gp_model):
 
-    print("Initialize predict_objective() [...]")
+    print("\nInitialize predict_objective() [...]")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     gp_model.eval()
@@ -39,6 +39,6 @@ def predict_objective(genomes, gp_model):
     print(format_string_names)
     print(format_string)
 
-    print("[...] Terminate predict_objective()")
+    print("\n\n[...] Terminate predict_objective()\n")
 
     return mean_predictions

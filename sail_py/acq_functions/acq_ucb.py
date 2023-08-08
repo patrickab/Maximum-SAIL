@@ -29,6 +29,6 @@ def acq_ucb(genomes, gp_model):
 
     ucb_tensor = UCB(transformed_genomes)
 
-    print("[...] Terminate acq_ucb()")
+    print("[...] Terminate acq_ucb()\n")
 
     return ucb_tensor.detach().numpy()

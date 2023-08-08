@@ -9,7 +9,7 @@ from acq_functions.acq_normal_distribution import acq_normal_distribution
 from acq_functions.acq_ucb import acq_ucb
 from example.example_functions import example_objective_function, example_behavior_function, example_variation_function
 from utils.initialize_archive import initialize_archive
-from utils.train_GP import fit_gp_model
+from utils.fit_gp_model import fit_gp_model
 from utils.pprint import pprint
 from utils.predict_objective import predict_objective
 from map_elites import map_elites
@@ -32,27 +32,35 @@ def sail():
 
     print("Initialize sail() [...]")
 
-    archive = GridArchive(
+    obj_archive = GridArchive(
         solution_dim=SOL_DIMENSION,         # Dimension of solution vector
-        dims=BHV_NUMBER_BINS,               # Dimension of behavior vector
+        dims=BHV_NUMBER_BINS,               # Discretization of behavioral bins
         ranges=BHV_VALUE_RANGE,             # Possible values for behavior vector
         qd_score_offset=-600)
+    
+    acq_archive = GridArchive(
+        solution_dim=SOL_DIMENSION,
+        dims=BHV_NUMBER_BINS,
+        ranges=BHV_VALUE_RANGE,
+        qd_score_offset=-600)
 
-    archive, init_solutions, init_obj_evals = initialize_archive(archive, example_objective_function,example_behavior_function)
+    obj_archive, init_solutions, init_obj_evals = initialize_archive(obj_archive, example_objective_function,example_behavior_function)
 
-    sol_archive = []
-    obj_archive = []
+    init_bhv_evals = example_behavior_function(init_solutions)
+    
+    obj_archive.add(init_solutions, init_obj_evals.ravel(), init_bhv_evals)
 
-    sol_archive = init_solutions
-    obj_archive = init_obj_evals
+    sol_array = []
+    obj_array = []
 
-    gp_model = fit_gp_model(sol_archive, obj_archive)
+    sol_array = init_solutions
+    obj_array = init_obj_evals
 
-    #### ACQUISITION LOOP
+    gp_model = fit_gp_model(sol_array, obj_array)
 
-    emitter = [
+    acq_emitter = [
         GaussianEmitter(
-        archive=archive,
+        archive=acq_archive,
         sigma=0.5,
         bounds= SOL_VALUE_RANGE,
         batch_size=PARALLEL_BATCH_SIZE,
@@ -66,39 +74,42 @@ def sail():
 
     while(eval_budget-PARALLEL_BATCH_SIZE >= 0): # future addition: add threshhold condition for predictive performance of the model
         
-        # Calculate and store acquisition elites
-        archive = map_elites(archive, emitter, gp_model, ACQ_N_MAP_EVALS, acq_ucb, example_behavior_function, example_variation_function)
+        print("Enter ACQ Loop")
+        print("Remaining Evals: " + str(eval_budget))
+
+        acq_archive = map_elites(acq_archive, acq_emitter, gp_model, ACQ_N_MAP_EVALS, acq_ucb, example_behavior_function, example_variation_function)
         
-        # Select & evaluate acquisition elites (sobol sample in original paper)
-        acq_elites = archive.sample_elites(PARALLEL_BATCH_SIZE)
+        acq_elites = acq_archive.sample_elites(PARALLEL_BATCH_SIZE)     # Select acquisition elites (sobol sample in original paper)
         obj_evals = example_objective_function(acq_elites[0])
-        # Select/Restructure returned values
-        acq_elites = acq_elites[0]        
-        obj_evals = obj_evals.reshape(-1,1)
+        
+        obj_archive.add(acq_elites[0], obj_evals.ravel(), acq_elites[2])
 
-        sol_archive = np.vstack((sol_archive, acq_elites), dtype=float)
-        obj_archive = np.vstack((obj_archive, obj_evals), dtype=float)
+        eval_budget -= 250 # PARALLEL_BATCH_SIZE
 
-        print("Append new solutions to archives")
+        sol_array = np.vstack((sol_array, acq_elites[0]), dtype=float)
+        obj_array = np.vstack((obj_array, obj_evals.reshape(-1,1)), dtype=float)
 
-        if eval_budget == ACQ_N_OBJ_EVALS:
-            observation_archive = (acq_elites, obj_evals)
-        else:
-            observation_archive = observation_archive + (acq_elites, obj_evals)
+        gp_model = fit_gp_model(sol_array, obj_array)
 
-        eval_budget -= 250
-
-        gp_model = fit_gp_model(sol_archive, obj_archive)
+        print("Exit ACQ Loop")
 
     print(" ## Exit Acquisition Loop ##")
     print(" ## Enter Prediction Loop ##")
 
-    #### PREDICTION MAP
-    archive = map_elites(archive, emitter, gp_model, PRED_N_EVALS, predict_objective, example_behavior_function, example_variation_function)
+    obj_emitter = [
+        GaussianEmitter(
+        archive=obj_archive,
+        sigma=0.5,
+        bounds=SOL_VALUE_RANGE,
+        batch_size=PARALLEL_BATCH_SIZE,
+        initial_solutions=sol_array,
+    )]
+
+    obj_archive = map_elites(obj_archive, obj_emitter, gp_model, PRED_N_EVALS, predict_objective, example_behavior_function, example_variation_function)
 
     print("[...] Terminate sail()")
 
-    return archive
+    return obj_archive
 
 if __name__ == "__main__":
     sail()

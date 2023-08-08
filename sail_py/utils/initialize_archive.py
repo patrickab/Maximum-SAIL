@@ -32,12 +32,13 @@ def initialize_archive(archive: GridArchive, example_objective_function, example
         samples = create_sobol_samples(order=n_samples, dim=len(SOL_VALUE_RANGE), seed=i_seed)
         samples = samples.T
 
-        for i in range(len(samples)):                       # Scale Samples
+        # Scale Samples to Solution Space
+        for i in range(len(samples)):
             for j in range(len(samples[i])):
                 lower_bound, upper_bound = SOL_VALUE_RANGE[j]
                 samples[i][j] = samples[i][j] *(upper_bound - lower_bound) + lower_bound
 
-        i_seed = (i_seed + 321) % 2000
+        i_seed = (i_seed + 321) % 1234
 
         obj_eval = example_objective_function(samples)      # Calculate objective
         bhv_eval = example_behavior_function(samples)       # Calculate behavior
