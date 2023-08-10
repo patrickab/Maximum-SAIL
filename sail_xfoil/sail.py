@@ -5,9 +5,8 @@ from ribs.archives import GridArchive
 
 
 ###### Import Custom Scripts ######
-from utils.simulate_robotarm import simulate_obj, simulate_bhv
+from utils.simulate_airfoils import simulate_obj, simulate_bhv
 from acq_functions.acq_ucb import acq_ucb
-from example.example_functions import example_objective_function, example_behavior_function, example_variation_function
 from utils.initialize_archive import initialize_archive
 from utils.fit_gp_model import fit_gp_model
 from utils.pprint import pprint

@@ -1,3 +1,5 @@
+# %% Imports
+
 import os
 import subprocess
 import numpy
@@ -38,3 +40,4 @@ input_file.close()
 xfoil_path = r"/mnt/c/'Program Files'/xfoil/./xfoil.exe"
 subprocess.call(xfoil_path + " < input_file.in", shell=True)
 output_data = numpy.loadtxt("output_file.txt", skiprows=12)
+# %%

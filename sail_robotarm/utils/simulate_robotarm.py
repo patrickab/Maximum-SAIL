@@ -34,7 +34,6 @@ def simulate_obj(samples, link_lengths = None):
 
     if not isinstance(samples, np.ndarray):
         samples = samples.numpy()
-        pprint(samples)
 
     objs = -np.std(samples, axis=1)
 
