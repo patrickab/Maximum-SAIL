@@ -1,4 +1,5 @@
 import inspect
+import numpy as np
 
 def pprint(variable):
 
@@ -12,6 +13,14 @@ def pprint(variable):
             variable_name = name
             break
 
-    print("\nType " + variable_name + ": " + str(type(variable)))
+    if isinstance(variable, np.ndarray):
+        shape_string = str(variable.shape)
+
+    print("\n Name: " + variable_name)
+    print(" Type: " + str(type(variable)))
+    print("Shape: " + str(variable.shape))
+
     print(variable_name + ": ")
     print(variable)
+
+    return

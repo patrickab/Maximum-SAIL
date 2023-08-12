@@ -4,6 +4,8 @@ import numpy
 
 ##### Import custom scripts #####
 from utils.pprint import pprint
+from utils.pprint_nd import pprint_nd
+#from utils.new_elites import count_new_elites
 
 from config import Config
 config = Config('config.ini')
@@ -27,10 +29,12 @@ def map_elites(archive, emitter, gp_model, n_evals, fuct_obj, fuct_bhv, fuct_var
         # Variation Operator
         obj_evals = fuct_obj(samples, gp_model)
         bhv_evals = fuct_bhv(samples)
-
+        
         print("Elites in Archive (before): " + str(archive.stats.num_elites))
         elite_status_vector = scheduler.tell(obj_evals, bhv_evals)
         print("Elites in Archive  (after): " + str(archive.stats.num_elites))
+
+        pprint(elite_status_vector)
 
         remaining_evals -= PARALLEL_BATCH_SIZE
 

@@ -4,8 +4,9 @@ import numpy
 from torch import float64
 
 from acq_functions.acq_ucb import acq_ucb
-from utils.simulate_robotarm import simulate_obj
+from generate_xfoil_output.simulate_airfoils import simulate_obj
 from utils.pprint import pprint
+from utils.pprint_nd import pprint_nd_array
 
 def predict_objective(genomes, gp_model):
 
@@ -32,13 +33,15 @@ def predict_objective(genomes, gp_model):
     stacked_arrays = numpy.column_stack((true_obj, pred_obj, pred_error))
 
     # Define the format strings
-    format_string_names = f"True Obj:\tPred Obj:\tPred Error:"
-    format_string = "\n".join(["\t".join(map(str, row)) for row in stacked_arrays])
-    format_string = "\n".join(["\t\t".join([f"{value:.4f}" for value in row]) for row in stacked_arrays])
+    # format_string_names = f"True Obj:\tPred Obj:\tPred Error:"
+    # format_string = "\n".join(["\t".join(map(str, row)) for row in stacked_arrays])
+    # format_string = "\n".join(["\t\t".join([f"{value:.4f}" for value in row]) for row in stacked_arrays])
 
-    print("\nRobot Arm Results:\n")
-    print(format_string_names)
-    print(format_string)
+    pprint_nd_array(true_obj, pred_obj, pred_error)
+
+    # print("\nRobot Arm Results:\n")
+    # print(format_string_names)
+    # print(format_string)
 
     print("\n\n[...] Terminate predict_objective()\n")
 

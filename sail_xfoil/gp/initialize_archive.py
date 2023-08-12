@@ -7,7 +7,9 @@ import os
 
 ### Custom Scripts ###
 from utils.pprint import pprint
-from utils.np_nested_list import np_nested_list
+from utils.pprint_nd import pprint_nd
+from utils.scale_samples import scale_samples
+from generate_xfoil_output.generate_airfoils import generate_parsec_coordinates
 
 from config import Config
 config = Config(os.path.join(os.path.dirname(__file__), '..', 'config.ini'))
@@ -20,7 +22,7 @@ BHV_DIMENSION = config.BHV_DIMENSION
 
 def initialize_archive(archive: GridArchive, fuct_obj, fuct_bhv):
 
-    print("Initialize init_archive() [...]")
+    print("Initialize init_archive() [...]\n")
 
     init_solutions = np.empty((0, SOL_DIMENSION), dtype=float64)
     init_obj_evals = np.empty((0, OBJ_DIMENSION), dtype=float64)
@@ -33,18 +35,16 @@ def initialize_archive(archive: GridArchive, fuct_obj, fuct_bhv):
         n_missing = (INIT_ARCHIVE_SIZE - archive.stats.num_elites)
         n_samples = PARALLEL_BATCH_SIZE if (n_missing>PARALLEL_BATCH_SIZE) else n_missing
 
-        samples = create_sobol_samples(order=n_samples, dim=len(SOL_VALUE_RANGE), seed=i_seed)
+        samples = create_sobol_samples(order=n_missing, dim=len(SOL_VALUE_RANGE), seed=i_seed)
         samples = samples.T
-
-        # Scale Samples to Solution Space
-        for i in range(len(samples)):
-            for j in range(len(samples[i])):
-                lower_bound, upper_bound = SOL_VALUE_RANGE[j]
-                samples[i][j] = samples[i][j] *(upper_bound - lower_bound) + lower_bound
+        
+        scale_samples(samples)
+        
+        generate_parsec_coordinates(samples)
 
         i_seed = (i_seed + 321) % 1234
 
-        obj_evals = fuct_obj(samples)      # Calculate objective
+        obj_evals = fuct_obj(samples)       # Calculate objective
         bhv_evals = fuct_bhv(samples)       # Calculate behavior
 
         print("\nAdd samples to Archive")

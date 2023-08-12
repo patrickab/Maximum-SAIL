@@ -5,12 +5,12 @@ from ribs.archives import GridArchive
 
 
 ###### Import Custom Scripts ######
-from utils.simulate_airfoils import simulate_obj, simulate_bhv
+from generate_xfoil_output.simulate_airfoils import simulate_obj, simulate_bhv
 from acq_functions.acq_ucb import acq_ucb
-from utils.initialize_archive import initialize_archive
-from utils.fit_gp_model import fit_gp_model
+from gp.initialize_archive import initialize_archive
+from gp.fit_gp_model import fit_gp_model
+from gp.predict_objective import predict_objective
 from utils.pprint import pprint
-from utils.predict_objective import predict_objective
 from map_elites import map_elites
 from torch import float64
 
@@ -27,7 +27,10 @@ BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 BHV_NUMBER_BINS = config.BHV_NUMBER_BINS
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 
+
 def sail():
+
+    np.set_printoptions(precision=4, suppress=True, floatmode='fixed', linewidth=120)
 
     print("Initialize sail() [...]")
 
@@ -87,8 +90,8 @@ def sail():
 
         gp_model = fit_gp_model(sol_array, obj_array)
 
-    print(" ## Exit Acquisition Loop ##")
-    print(" ## Enter Prediction Loop ##")
+    print("\n\n ## Exit Acquisition Loop ##")
+    print(" ## Enter Prediction Loop ##\n\n")
 
     obj_emitter = [
         GaussianEmitter(
