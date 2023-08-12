@@ -11,11 +11,11 @@ from config import Config
 config = Config(os.path.join(os.path.dirname(__file__), '..', 'config.ini'))
 PARALLEL_BATCH_SIZE = config.PARALLEL_BATCH_SIZE
 
-
-### ToDo: perform correct calculation by adding square roots to coordinates
+### ADD EXPONENTIAL TERMS TO MATRICES
+### PRODUCE NEGATIVE Y VALUES
     ### write coordinates into text file
         ### pass coordinates to simulate_objective()
-            ### [...]
+            ### [XFoil]
 
 def generate_parsec_coordinates(samples, xte=1.0): # 'n points' and 'x trailing edge'
     """
@@ -84,22 +84,6 @@ def lower_y_solutions(lower_polynomial_parameters, n_pts=200):
     return y_lower_coordinates
 
 
-def generate_polynomial_terms(sample):
-    """Generates Set of Linear Equations"""
-
-    x = np.asarray(sample)
-
-    x_matrix = np.array([
-        np.array(np.ones(6)),
-        x**((np.arange(1, 12, 2)/2)),
-        (np.arange(1, 12, 2) / 2),
-        np.array([(1/2) *x**(-1/2), (3/2)*x**(1/2) , (5/2) *x**(3/2), (7/2) *x**(5/2), (9/2) *x**(7/2), (11/2)*x**(9/2)]),
-        np.array([(-1/4)*x**(-3/2), (3/4)*x**(-1/2), (15/4)*x**(1/2), (35/4)*x**(3/2), (53/4)*x**(5/2), (99/4)*x**(7/2)]),
-        np.array([1, 0, 0, 0, 0, 0])])
-    
-    return x_matrix
-
-
 def get_upper_y_vector(args):
     """Calculates Solution Values for Linear Equations"""
     z_trailing_edge, dz_trailing_edge, z_up, alpha_up, alpha_low, upper_curvature, upper_le_radius = args[0], args[1], args[2], args[3], args[4], args[5], args[6]
@@ -159,28 +143,17 @@ def generate_parsec_polynomials(samples):
     return upper_polynomial_coefficients, lower_polynomial_coefficients
 
 
+def generate_polynomial_terms(sample):
+    """Generates Set of Linear Equations"""
 
+    x = np.asarray(sample)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-### ADD EXPONENTIAL TERMS TO MATRICES
-### PRODUCE NEGATIVE Y VALUES
-
-
-
-
-
+    x_matrix = np.array([
+        np.array(np.ones(6)),
+        x**((np.arange(1, 12, 2)/2)),
+        (np.arange(1, 12, 2) / 2),
+        np.array([(1/2) *x**(-1/2), (3/2)*x**(1/2) , (5/2) *x**(3/2), (7/2) *x**(5/2), (9/2) *x**(7/2), (11/2)*x**(9/2)]),
+        np.array([(-1/4)*x**(-3/2), (3/4)*x**(-1/2), (15/4)*x**(1/2), (35/4)*x**(3/2), (53/4)*x**(5/2), (99/4)*x**(7/2)]),
+        np.array([1, 0, 0, 0, 0, 0])])
+    
+    return x_matrix
