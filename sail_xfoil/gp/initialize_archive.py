@@ -6,9 +6,8 @@ import numpy as np
 import os
 
 ### Custom Scripts ###
-from utils.pprint import pprint
-from utils.pprint_nd import pprint_nd
-from utils.scale_samples import scale_samples
+from utils.pprint_nd import pprint_nd, pprint
+from utils.utils import scale_samples
 from xfoil.generate_airfoils import generate_parsec_coordinates
 
 from config.config import Config

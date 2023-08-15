@@ -5,8 +5,7 @@ from torch import float64
 
 from acq_functions.acq_ucb import acq_ucb
 from xfoil.simulate_airfoils import simulate_obj
-from utils.pprint import pprint
-from utils.pprint_nd import pprint_nd_array
+from utils.pprint_nd import pprint, pprint_nd_array
 
 def predict_objective(genomes, gp_model):
 

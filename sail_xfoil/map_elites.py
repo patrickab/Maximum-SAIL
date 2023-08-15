@@ -3,8 +3,7 @@ from ribs.schedulers import Scheduler
 import numpy
 
 ##### Import custom scripts #####
-from utils.pprint import pprint
-from utils.pprint_nd import pprint_nd
+from utils.pprint_nd import pprint_nd, pprint
 #from utils.new_elites import count_new_elites
 
 from config.config import Config

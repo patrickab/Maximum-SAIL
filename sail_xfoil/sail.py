@@ -10,7 +10,6 @@ from acq_functions.acq_ucb import acq_ucb
 from gp.initialize_archive import initialize_archive
 from gp.fit_gp_model import fit_gp_model
 from gp.predict_objective import predict_objective
-from utils.pprint import pprint
 from map_elites import map_elites
 from torch import float64
 

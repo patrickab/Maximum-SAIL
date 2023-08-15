@@ -3,8 +3,7 @@ import numpy as np
 from numpy import tan, sqrt
 
 ### Custom Scripts ###
-from utils.pprint import pprint
-from utils.pprint_nd import pprint_nd
+from utils.pprint_nd import pprint, pprint_nd
 
 ### Global Variables ###
 from config.config import Config
