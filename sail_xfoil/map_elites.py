@@ -7,8 +7,8 @@ from utils.pprint import pprint
 from utils.pprint_nd import pprint_nd
 #from utils.new_elites import count_new_elites
 
-from config import Config
-config = Config('config.ini')
+from config.config import Config
+config = Config('config/config.ini')
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 PARALLEL_BATCH_SIZE = config.PARALLEL_BATCH_SIZE
 

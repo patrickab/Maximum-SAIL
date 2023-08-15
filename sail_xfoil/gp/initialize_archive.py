@@ -9,10 +9,10 @@ import os
 from utils.pprint import pprint
 from utils.pprint_nd import pprint_nd
 from utils.scale_samples import scale_samples
-from generate_xfoil_output.generate_airfoils import generate_parsec_coordinates
+from xfoil.generate_airfoils import generate_parsec_coordinates
 
-from config import Config
-config = Config(os.path.join(os.path.dirname(__file__), '..', 'config.ini'))
+from config.config import Config
+config = Config(os.path.join(os.path.dirname(__file__), '../config', 'config.ini'))
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 INIT_ARCHIVE_SIZE = config.INIT_ARCHIVE_SIZE
 SOL_DIMENSION = config.SOL_DIMENSION
@@ -35,7 +35,7 @@ def initialize_archive(archive: GridArchive, fuct_obj, fuct_bhv):
         n_missing = (INIT_ARCHIVE_SIZE - archive.stats.num_elites)
         n_samples = PARALLEL_BATCH_SIZE if (n_missing>PARALLEL_BATCH_SIZE) else n_missing
 
-        samples = create_sobol_samples(order=n_missing, dim=len(SOL_VALUE_RANGE), seed=i_seed)
+        samples = create_sobol_samples(order=n_samples, dim=len(SOL_VALUE_RANGE), seed=i_seed)
         samples = samples.T
         
         scale_samples(samples)

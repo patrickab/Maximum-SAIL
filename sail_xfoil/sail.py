@@ -5,7 +5,7 @@ from ribs.archives import GridArchive
 
 
 ###### Import Custom Scripts ######
-from generate_xfoil_output.simulate_airfoils import simulate_obj, simulate_bhv
+from xfoil.simulate_airfoils import simulate_obj, simulate_bhv
 from acq_functions.acq_ucb import acq_ucb
 from gp.initialize_archive import initialize_archive
 from gp.fit_gp_model import fit_gp_model
@@ -15,8 +15,8 @@ from map_elites import map_elites
 from torch import float64
 
 ###### Configurable Variables ######
-from config import Config
-config = Config('config.ini')
+from config.config import Config
+config = Config('config/config.ini')
 ACQ_N_OBJ_EVALS = config.ACQ_N_OBJ_EVALS
 ACQ_N_MAP_EVALS = config.ACQ_N_MAP_EVALS
 PRED_N_EVALS = config.PRED_N_EVALS
@@ -67,7 +67,7 @@ def sail():
         initial_solutions=init_solutions,
     )]
 
-    print(" ## Exit Initialization ##")
+    print("\n ## Exit Initialization ##")
     print(" ## Enter Acquisition Loop ##\n\n")
 
     eval_budget = ACQ_N_OBJ_EVALS
@@ -85,8 +85,8 @@ def sail():
 
         eval_budget -= PARALLEL_BATCH_SIZE
 
-        sol_array = np.vstack((sol_array, acq_elites[0]), dtype=float)
-        obj_array = np.vstack((obj_array, obj_evals.reshape(-1,1)), dtype=float)
+        sol_array = np.vstack((sol_array, acq_elites[0]), dtype=float64)
+        obj_array = np.vstack((obj_array, obj_evals.reshape(-1,1)), dtype=float64)
 
         gp_model = fit_gp_model(sol_array, obj_array)
 

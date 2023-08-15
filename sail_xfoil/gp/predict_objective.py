@@ -4,7 +4,7 @@ import numpy
 from torch import float64
 
 from acq_functions.acq_ucb import acq_ucb
-from generate_xfoil_output.simulate_airfoils import simulate_obj
+from xfoil.simulate_airfoils import simulate_obj
 from utils.pprint import pprint
 from utils.pprint_nd import pprint_nd_array
 

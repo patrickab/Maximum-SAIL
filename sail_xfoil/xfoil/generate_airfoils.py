@@ -7,15 +7,17 @@ from utils.pprint import pprint
 from utils.pprint_nd import pprint_nd
 
 ### Global Variables ###
-from config import Config
-config = Config(os.path.join(os.path.dirname(__file__), '..', 'config.ini'))
+from config.config import Config
+config = Config(os.path.join(os.path.dirname(__file__), '../config', 'config.ini'))
 PARALLEL_BATCH_SIZE = config.PARALLEL_BATCH_SIZE
+
 
 ### ADD EXPONENTIAL TERMS TO MATRICES
 ### PRODUCE NEGATIVE Y VALUES
     ### write coordinates into text file
         ### pass coordinates to simulate_objective()
             ### [XFoil]
+
 
 def generate_parsec_coordinates(samples, xte=1.0): # 'n points' and 'x trailing edge'
     """
@@ -36,13 +38,55 @@ def generate_parsec_coordinates(samples, xte=1.0): # 'n points' and 'x trailing 
     upper_y = vec_upper_y_solutions(upper_polynomial_coefficients)
     lower_y = vec_lower_y_solutions(lower_polynomial_coefficients)
 
-    pprint(upper_y  )
+    pprint(upper_y)
     pprint(lower_y)
 
 
+def generate_parsec_polynomials(samples):    # PARSEC API: https://github.com/dqsis/parsec-airfoils/blob/master/parsecexport.py
+    """Solves Linear Equation System"""
 
-    # PARSEC API: https://github.com/dqsis/parsec-airfoils/blob/master/parsecexport.py
+    # Parallelize element-wise operations & define I/O shape of vectorized function
+    vec_generate_polynomial_terms  = np.vectorize(generate_polynomial_terms, signature='()->(6,6)')
+    vec_get_upper_y_sol_vector = np.vectorize(get_upper_y_vector, signature='(7)->(6)')
+    vec_get_lower_y_sol_vector = np.vectorize(get_lower_y_vector, signature='(7)->(6)')
 
+    # Calculate Vector of Linear Equation Systems
+    x_up_matrices = vec_generate_polynomial_terms(samples[:,1].ravel())
+    x_low_matrices = vec_generate_polynomial_terms(samples[:,5].ravel())
+
+    # Z position / Thickness of Trailing edge ('z_te' 'dz_te' in seedpaper)
+    z_trailing_edge  = samples[:,8]
+    dz_trailing_edge = samples[:,9]
+
+    # Z position of trailing edge
+    z_up  = samples[:,2]
+    z_low = samples[:,6]
+    
+    # Trailing edge angles =('a_te b_te' in seedpaper)
+    alpha_up  = samples[:,10]
+    alpha_low = samples[:,11]
+
+    # Curvature of suction/pressure side ('z_XXup z_XXlo' in seedpaper)
+    upper_curvature =  samples[:,3]
+    lower_curvature = -samples[:,7]
+
+    # Leading Edge Radius of suction/pressure
+    upper_le_radius = samples[:,0]
+    lower_le_radius = samples[:,4]
+
+    # Define Parameter Matrix for vec_get_upper_y_sol_vector
+    upper_args = (np.array([z_trailing_edge, dz_trailing_edge, z_up, alpha_up, alpha_low, upper_curvature, upper_le_radius])).T
+    lower_args = (np.array([z_trailing_edge, dz_trailing_edge, z_low, alpha_up, alpha_low, lower_curvature, lower_le_radius])).T
+
+    # Calculate Solution Vectors for Linear Equation Systems
+    b_up = vec_get_upper_y_sol_vector(upper_args)
+    b_low = vec_get_lower_y_sol_vector(lower_args)
+
+    # Solve Linear Equation systems
+    upper_polynomial_coefficients = np.linalg.solve(x_up_matrices, b_up)
+    lower_polynomial_coefficients = np.linalg.solve(x_low_matrices, b_low)
+
+    return upper_polynomial_coefficients, lower_polynomial_coefficients
 
 
 def upper_y_solutions(upper_polynomial_parameters, n_pts=200):
@@ -94,53 +138,6 @@ def get_lower_y_vector(args):
     """Calculates Solution Values for Linear Equations"""
     z_trailing_edge, dz_trailing_edge, z_low, alpha_up, alpha_low, lower_curvature, lower_le_radius = args[0], args[1], args[2], args[3], args[4], args[5], args[6]
     return np.array([-z_trailing_edge + (dz_trailing_edge/2), z_low, tan(alpha_up + (alpha_low/2)), 0, lower_curvature, sqrt(2*lower_le_radius)])
-
-
-def generate_parsec_polynomials(samples):
-    """Solves Linear Equation System"""
-
-    # Parallelize element-wise operations & define I/O shape of vectorized function
-    vec_generate_polynomial_terms  = np.vectorize(generate_polynomial_terms, signature='()->(6,6)')
-    vec_get_upper_y_sol_vector = np.vectorize(get_upper_y_vector, signature='(7)->(6)')
-    vec_get_lower_y_sol_vector = np.vectorize(get_lower_y_vector, signature='(7)->(6)')
-
-    # Calculate Vector of Linear Equation Systems
-    x_up_matrices = vec_generate_polynomial_terms(samples[:,1].ravel())
-    x_low_matrices = vec_generate_polynomial_terms(samples[:,5].ravel())
-
-    # Z position / Thickness of Trailing edge ('z_te' 'dz_te' in seedpaper)
-    z_trailing_edge  = samples[:,8]
-    dz_trailing_edge = samples[:,9]
-
-    # Z position of trailing edge
-    z_up  = samples[:,2]
-    z_low = samples[:,6]
-    
-    # Trailing edge angles =('a_te b_te' in seedpaper)
-    alpha_up  = samples[:,10]
-    alpha_low = samples[:,11]
-
-    # Curvature of suction/pressure side ('z_XXup z_XXlo' in seedpaper)
-    upper_curvature =  samples[:,3]
-    lower_curvature = -samples[:,7]
-
-    # Leading Edge Radius of suction/pressure
-    upper_le_radius = samples[:,0]
-    lower_le_radius = samples[:,4]
-
-    # Define Parameter Matrix for vec_get_upper_y_sol_vector
-    upper_args = (np.array([z_trailing_edge, dz_trailing_edge, z_up, alpha_up, alpha_low, upper_curvature, upper_le_radius])).T
-    lower_args = (np.array([z_trailing_edge, dz_trailing_edge, z_low, alpha_up, alpha_low, lower_curvature, lower_le_radius])).T
-
-    # Calculate Solution Vectors for Linear Equation Systems
-    b_up = vec_get_upper_y_sol_vector(upper_args)
-    b_low = vec_get_lower_y_sol_vector(lower_args)
-
-    # Solve Linear Equation systems
-    upper_polynomial_coefficients = np.linalg.solve(x_up_matrices, b_up)
-    lower_polynomial_coefficients = np.linalg.solve(x_low_matrices, b_low)
-
-    return upper_polynomial_coefficients, lower_polynomial_coefficients
 
 
 def generate_polynomial_terms(sample):

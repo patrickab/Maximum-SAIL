@@ -1,8 +1,8 @@
 import os
 
 ### Global Parameters ###
-from config import Config
-config = Config(os.path.join(os.path.dirname(__file__), '..', 'config.ini'))
+from config.config import Config
+config = Config(os.path.join(os.path.dirname(__file__), '../config', 'config.ini'))
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 
 def scale_samples(samples):

@@ -6,12 +6,11 @@ from torch import float64
 from botorch.acquisition import UpperConfidenceBound
 from botorch.optim import optimize_acqf
 
-### Custom Scripts ###
-from utils.pprint import pprint
+### Custom Scripts ###w
 
 ### Global Ressources ###
-from config import Config
-config = Config(os.path.join(os.path.dirname(__file__), '..', 'config.ini'))
+from config.config import Config
+config = Config(os.path.join(os.path.dirname(__file__), '../config', 'config.ini'))
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 SOL_DIMENSION = config.SOL_DIMENSION
 PARALLEL_BATCH_SIZE = config.PARALLEL_BATCH_SIZE
