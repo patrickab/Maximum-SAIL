@@ -25,6 +25,7 @@ def map_elites(archive, emitter, gp_model, n_evals, fuct_obj, fuct_bhv, fuct_var
         samples = scheduler.ask()
 
         # Variation Operator
+        
         obj_evals = fuct_obj(samples, gp_model)
         bhv_evals = fuct_bhv(samples)
 

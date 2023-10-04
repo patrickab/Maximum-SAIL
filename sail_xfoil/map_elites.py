@@ -1,47 +1,54 @@
 ###### Import packages #####
 from ribs.schedulers import Scheduler
+from tqdm import tqdm
 import numpy
+import torch
 
 ##### Import custom scripts #####
 from utils.pprint_nd import pprint_nd, pprint
-#from utils.new_elites import count_new_elites
+from xfoil.generate_airfoils import generate_parsec_coordinates
 
 from config.config import Config
 config = Config('config/config.ini')
+TEST_RUNS = config.TEST_RUNS
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
-PARALLEL_BATCH_SIZE = config.PARALLEL_BATCH_SIZE
+BATCH_SIZE = config.BATCH_SIZE
 
-def map_elites(archive, emitter, gp_model, n_evals, fuct_obj, fuct_bhv, fuct_variation_operator=None):
+def map_elites(archive, emitter, gp_model, n_evals, fuct_obj):
     
-    print("\nInitialize Map-Elites [...]\n")
+    print("\nInitialize Map-Elites [...]")
 
     # Archive Scheduler
     scheduler = Scheduler(archive, emitter)
 
     remaining_evals = n_evals
-    while(remaining_evals-PARALLEL_BATCH_SIZE >= 0):    
+    total_iterations = remaining_evals // BATCH_SIZE
+    
+    with tqdm(total=total_iterations) as progress:
+        while(remaining_evals-BATCH_SIZE >= 0):
+            progress.update(1)
 
-        print("Enter MAP Loop")
-        print("Remaining MAP Evals: " + str(remaining_evals))
-        samples = scheduler.ask()
+            valid_indices = numpy.empty(0, dtype=int) 
 
-        # Variation Operator
-        obj_evals = fuct_obj(samples, gp_model)
-        bhv_evals = fuct_bhv(samples)
-        
-        print("Elites in Archive (before): " + str(archive.stats.num_elites))
-        elite_status_vector = scheduler.tell(obj_evals, bhv_evals)
-        print("Elites in Archive  (after): " + str(archive.stats.num_elites))
+            samples = scheduler.ask()
+            archive._seed += TEST_RUNS
+            #print("Seed: " + str(archive._seed))
 
-        pprint(elite_status_vector)
+            valid_indices = generate_parsec_coordinates(samples)
+            valid_samples = samples[valid_indices]
 
-        remaining_evals -= PARALLEL_BATCH_SIZE
+            bhv_evals = samples[:,[1,2]]
+            obj_evals = fuct_obj(valid_samples, gp_model)
 
-        print("Exit MAP Loop")
-        if remaining_evals > 0:
-            print()
+            # Insert -1000 for invalid samples to avoid them being selected as elites
+            for index in range(samples.shape[0]):
+                if index not in valid_indices:
+                    obj_evals = numpy.insert(obj_evals, index, -1000, axis=0)
 
+            scheduler.tell(obj_evals, bhv_evals)
+            remaining_evals -= BATCH_SIZE
 
-    print("\n[...] Terminate Map-Elites\n")
+    print("Elites in Archive: " + str(archive.stats.num_elites))
+    print("[...] Terminate Map-Elites\n")
     
     return archive

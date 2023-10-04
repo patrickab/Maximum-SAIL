@@ -22,7 +22,7 @@ def predict_objective(genomes, gp_model):
 
     mean_predictions = posterior.mean.numpy()
 
-    mean_predictions = numpy.array([prediction[0] for prediction_array in mean_predictions for prediction in prediction_array]).T
+    mean_predictions = numpy.array([prediction[0] for prediction_array in mean_predictions for prediction in prediction_array]).T # (remove double for loop?)
 
     true_obj = simulate_obj(genomes)
     pred_obj = mean_predictions

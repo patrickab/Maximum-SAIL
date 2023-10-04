@@ -1,4 +1,4 @@
-### used for parallel execution of multiple sail processes
+### singleprocess sail - n_core xfoil processes ###
 
 
 import os
@@ -13,7 +13,7 @@ from utils.pprint_nd import pprint, pprint_nd
 
 ### Global Variables ###
 from config.config import Config
-config = Config(os.path.join(os.path.dirname(__file__), '../config', 'config.ini'))
+config = Config(os.path.join(os.path.dirname(__file__), 'config', 'config.ini'))
 N_XY_COORDINATES = config.N_XY_COORDINATES
 
 # xfoil parameters
@@ -34,8 +34,9 @@ def xfoil(iterations):
     """Executes xfoil with given parameters, implements Thread counting errors on stdout"""
 
     print("\nstart xfoil [...]")
-          
-    executor = concurrent.futures.ProcessPoolExecutor(max_workers=1)
+      
+    n_cores = os.cpu_count()
+    executor = concurrent.futures.ProcessPoolExecutor(max_workers=n_cores)
     
     # Submit tasks to the ThreadPoolExecutor for concurrent execution
     futures = [executor.submit(run_xfoil, i) for i in range(iterations)]
@@ -174,7 +175,7 @@ def capture_errors(process, queue, i):
 
     while True:
         try:
-            line = queue.get(timeout=1)
+            line = queue.get(timeout=0.5)
             #print(line.strip())
 
             if not line: # empty line
@@ -195,12 +196,12 @@ def capture_errors(process, queue, i):
 
             if "VISCAL:  Convergence failed" in line:
                 print(f"\n{i}: (viscal error)")
-                kill_subprocess(process, i)
+                terminate_subprocess(process, i)
                 return False
             
         except Empty: # when viscal error occurs, stdout will stop producing output, thus queue.get() will throw an Empty exception, however, viscal errors are *sometimes* not printed to stdout, so it cant always be captured
             print(f"\n{i}: (queue.Empty)")
-            kill_subprocess(process, i)
+            terminate_subprocess(process, i)
             return False
 
 
@@ -242,8 +243,8 @@ def kill_subprocess(process, i):
 
     print("killing process...")
 
-    process.stdout.close()
     os.kill(process.pid, 9) # 9 = SIGKILL. SIGKILL forcefully terminates the process & cannot be ignored, compared to SIGTERM process.terminate(). XFOIL is implemented in a way that it ignores SIGTERM, whenever VISCAL ERRORS occur, thus, SIGKILL is used to terminate the process.
+    process.stdout.close()
 
     print("...process killed\n")
 

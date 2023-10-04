@@ -33,16 +33,16 @@ def fit_gp_model(x_solutions, y_obj_evals):
     bounds = torch.stack((lower_bounds, upper_bounds))
 
     input_transform = Normalize(d=SOL_DIMENSION, bounds=bounds)
+    outcome_transform = Standardize(m=1)
 
-    gp_model = SingleTaskGP(train_X=x_tensor, train_Y=y_tensor, input_transform=input_transform, outcome_transform=Standardize(m=1))
-
-    # RISES ERROR:    gp_model = SingleTaskGP(train_X=x_tensor, train_Y=y_tensor, input_transform=Normalize(x_tensor.shape[-1], bounds=sol_value_range_tensor), outcome_transform=Standardize(m=1))
-    # ERROR:    botorch.exceptions.errors.BotorchTensorDimensionError: Dimensions of provided `bounds` are incompatible with transform_dimension = 0!
+    gp_model = SingleTaskGP(train_X=x_tensor, train_Y=y_tensor, input_transform=input_transform, outcome_transform=outcome_transform)
 
     # Define marginal log likelihood
     mll = ExactMarginalLogLikelihood(likelihood=gp_model.likelihood, model=gp_model)
     mll.to(x_tensor)
 
     fit_gpytorch_model(mll)
+
+    print(gp_model)
 
     return gp_model

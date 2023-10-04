@@ -7,7 +7,7 @@ import numpy
 # %% Inputs
 
 # calling "NACA xxxx" maps to specific airfoil design parameters - can later be replaced by own airfoil designs
-airfoil_name = "rae2822"
+airfoil_name = "NACA 1234"
 # initial/final angle of attack & evaluation steplength
 alpha_i = 0
 alpha_f = 10

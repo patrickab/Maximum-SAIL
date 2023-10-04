@@ -1,4 +1,4 @@
-### used for parallel execution of multiple sail processes
+### multiprocess sail - 1 xfoil process ###
 
 
 import os
@@ -29,7 +29,7 @@ xfoil_path = r"/mnt/c/Program Files/xfoil/./xfoil.exe"
 np.set_printoptions(precision=4, suppress=True, floatmode='fixed', linewidth=120)
 
 
-def xfoil(iterations):
+def xfoil(iterations, initial_seed):
 
     """Executes xfoil with given parameters, implements Thread counting errors on stdout"""
 
@@ -38,7 +38,7 @@ def xfoil(iterations):
     executor = concurrent.futures.ProcessPoolExecutor(max_workers=1)
     
     # Submit tasks to the ThreadPoolExecutor for concurrent execution
-    futures = [executor.submit(run_xfoil, i) for i in range(iterations)]
+    futures = [executor.submit(run_xfoil, i, initial_seed) for i in range(iterations)]
 
     # Wait for all tasks to complete
     concurrent.futures.wait(futures)
@@ -54,10 +54,10 @@ def xfoil(iterations):
     obj_batch = []
     for index in success_indices:
 
-        output_index_data = numpy.loadtxt(f'airfoil_{index}.log', skiprows=12)
+        output_index_data = numpy.loadtxt(f'airfoil_{index}_process{initial_seed}.log', skiprows=12)
 
         lift, drag = output_index_data[1], output_index_data[2]
-        surface_area = calculate_surface_area(index)
+        surface_area = calculate_surface_area(index, initial_seed)
 
         obj = calculate_obj(drag, lift, surface_area)
         obj_batch.append(obj)
@@ -70,7 +70,7 @@ def xfoil(iterations):
     return convergence_errors, success_indices, numpy.array(obj_batch)
 
 
-def run_xfoil(index):
+def run_xfoil(index, initial_seed):
     """
     returns:
         True    (for converged airfoils)
@@ -79,14 +79,14 @@ def run_xfoil(index):
     ON_POSIX = 'posix' in sys.builtin_module_names
 
     try:
-        os.remove(f'airfoil_{index}.log')
+        os.remove(f'airfoil_{index}_process{initial_seed}.log')
     except FileNotFoundError:
         pass
 
     process = subprocess.Popen(xfoil_path, stdin=subprocess.PIPE, stdout=subprocess.PIPE, universal_newlines=True, close_fds=ON_POSIX, bufsize=1)
     queue = Queue()
 
-    with open(f"airfoil_{index}.dat", 'r') as file:
+    with open(f'airfoil_{index}_process{initial_seed}.dat', 'r') as file:
         line = file.readlines()[2]
 
     if line == "Invalid Airfoil\n":
@@ -100,14 +100,14 @@ def run_xfoil(index):
     # command part
     commands = ''
     commands += command('NORM')
-    commands += command('LOAD ' + f'airfoil_{index}' + '.dat')
+    commands += command('LOAD ' + f'airfoil_{index}_process{initial_seed}' + '.dat')
     commands += command('PANE')  # smooth airfoil to improve convergence
     commands += command('OPER')  # load parameters 
     commands += command('VISC ' + str(REYNOLDS))
     commands += command('MACH ' + str(MACH))
     commands += command('ITER ' + str(xfoil_iterations))
     commands += command('PACC')
-    commands += command(f'airfoil_{index}' + '.log')  # output file
+    commands += command(f'airfoil_{index}_process{initial_seed}' + '.log')  # output file
     commands += command('')  # no dump file
     commands += command('alfa ' + str(ALFA))
     commands += command(' ')  # escape OPER
@@ -135,9 +135,9 @@ def calculate_obj(drag, lift, surface_area):
     return obj
 
 
-def calculate_surface_area(index):
+def calculate_surface_area(index, initial_seed):
 
-    data = np.loadtxt(f'airfoil_{index}.dat', skiprows=2)
+    data = np.loadtxt(f'airfoil_{index}_process{initial_seed}.dat', skiprows=2)
 
     upper_xy = np.array([data[0:N_XY_COORDINATES, 0], np.abs(data[0:N_XY_COORDINATES, 1])]).T
     lower_xy = np.array([data[N_XY_COORDINATES:, 0], np.abs(data[N_XY_COORDINATES:, 1])]).T

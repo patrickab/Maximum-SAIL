@@ -31,6 +31,8 @@ def fit_gp_model(x_solutions, y_obj_evals):
     upper_bounds = torch.tensor([upper for _, upper in SOL_VALUE_RANGE])
     bounds = torch.stack((lower_bounds, upper_bounds))
     # Define Normalize() for GP
+    pprint(x_solutions)
+    pprint(y_obj_evals)
     input_transform = Normalize(d=SOL_DIMENSION, bounds=bounds) #torch.stack([torch.zeros(SOL_DIMENSION), input_ranges]))
 
     gp_model = SingleTaskGP(train_X=x_tensor, train_Y=y_tensor, input_transform=input_transform, outcome_transform=Standardize(m=1))

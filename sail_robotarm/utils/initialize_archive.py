@@ -7,7 +7,6 @@ import os
 
 ### Custom Scripts ###
 from utils.pprint import pprint
-from utils.np_nested_list import np_nested_list
 
 from config import Config
 config = Config(os.path.join(os.path.dirname(__file__), '..', 'config.ini'))
@@ -18,7 +17,7 @@ PARALLEL_BATCH_SIZE = config.PARALLEL_BATCH_SIZE
 OBJ_DIMENSION = config.OBJ_DIMENSION
 BHV_DIMENSION = config.BHV_DIMENSION
 
-def initialize_archive(archive: GridArchive, fuct_obj, fuct_bhv):
+def initialize_archive(archive: GridArchive, fuct_obj, fuct_bhv, initial_seed):
 
     print("Initialize init_archive() [...]")
 
@@ -26,14 +25,14 @@ def initialize_archive(archive: GridArchive, fuct_obj, fuct_bhv):
     init_obj_evals = np.empty((0, OBJ_DIMENSION), dtype=float64)
     init_bhv_evals = np.empty((0, BHV_DIMENSION), dtype=float64)
 
-    i_seed = 123
+    seed = initial_seed
 
     while archive.stats.num_elites < INIT_ARCHIVE_SIZE:
 
         n_missing = (INIT_ARCHIVE_SIZE - archive.stats.num_elites)
         n_samples = PARALLEL_BATCH_SIZE if (n_missing>PARALLEL_BATCH_SIZE) else n_missing
 
-        samples = create_sobol_samples(order=n_samples, dim=len(SOL_VALUE_RANGE), seed=i_seed)
+        samples = create_sobol_samples(order=n_samples, dim=len(SOL_VALUE_RANGE), seed=seed)
         samples = samples.T
 
         # Scale Samples to Solution Space
@@ -42,7 +41,7 @@ def initialize_archive(archive: GridArchive, fuct_obj, fuct_bhv):
                 lower_bound, upper_bound = SOL_VALUE_RANGE[j]
                 samples[i][j] = samples[i][j] *(upper_bound - lower_bound) + lower_bound
 
-        i_seed = (i_seed + 321) % 1234
+        seed += 10
 
         obj_evals = fuct_obj(samples)      # Calculate objective
         bhv_evals = fuct_bhv(samples)       # Calculate behavior

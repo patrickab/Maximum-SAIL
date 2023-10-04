@@ -7,8 +7,8 @@ import os
 ### Custom Scripts ###
 from utils.pprint_nd import pprint_nd, pprint
 from utils.utils import scale_samples
-from xfoil.generate_airfoils import generate_parsec_coordinates
-from xfoil.simulate_airfoils import xfoil
+from xfoil.generate_airfoils_singleprocess import generate_parsec_coordinates
+from xfoil.simulate_airfoils_singleprocess import xfoil
 
 ### Configurable Variables ###
 from config.config import Config

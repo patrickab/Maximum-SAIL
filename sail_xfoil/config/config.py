@@ -18,3 +18,7 @@ class Config:
         for key, value in self.config['TUPLE_ARRAYS'].items():
             key = key.upper()
             setattr(self, key, ast.literal_eval(value))
+
+        for key, value in self.config['FLOAT'].items():
+            key = key.upper()
+            setattr(self, key, float(value))

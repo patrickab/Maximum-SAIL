@@ -12,7 +12,7 @@ BATCH_SIZE = config.BATCH_SIZE
 N_XY_COORDINATES = config.N_XY_COORDINATES
 
 
-def export_parsec_coordinates(upper_xy, lower_xy):
+def export_parsec_coordinates(upper_xy, lower_xy, initial_seed):
     """
     Writes PARSEC-encoded coordinates in 'airfoil_{i}.dat'
 
@@ -23,11 +23,11 @@ def export_parsec_coordinates(upper_xy, lower_xy):
     valid_indices = []
 
     for index in range(BATCH_SIZE):
-        if os.path.exists("airfoil_{index}.dat"):
-            os.remove("airfoil_{index}.dat")
+        if os.path.exists("airfoil_{index}_process_{initial_seed}.dat"):
+            os.remove("airfoil_{index}_process_{initial_seed}.dat")
 
-        if os.path.exists("airfoil_{index}.log"):
-            os.remove("airfoil_{index}.log")
+        if os.path.exists("airfoil_{index}_process_{initial_seed}.log"):
+            os.remove("airfoil_{index}_process_{initial_seed}.log")
 
     for index in range(upper_xy.shape[0]):
 
@@ -39,7 +39,7 @@ def export_parsec_coordinates(upper_xy, lower_xy):
                 is_valid_airfoil = False
                 break
 
-        with open(f'airfoil_{index}.dat', 'w') as f: # automatically ensures that the file will be properly closed under all circumstances
+        with open(f'airfoil_{index}.dat_process_{initial_seed}', 'w') as f: # automatically ensures that the file will be properly closed under all circumstances
 
             if is_valid_airfoil:
 
@@ -47,7 +47,7 @@ def export_parsec_coordinates(upper_xy, lower_xy):
 
                 max_index = N_XY_COORDINATES - 1
 
-                f.write(f'airfoil_{index}\n\n')
+                f.write(f'airfoil_{index}_process_{initial_seed}\n\n')
                 # Write the upper surface coordinates
                 for j in range(N_XY_COORDINATES):
                     f.write(f'{upper_xy[index,j,0]} {upper_xy[index,j,1]}\n')
@@ -56,20 +56,22 @@ def export_parsec_coordinates(upper_xy, lower_xy):
                 for j in range(N_XY_COORDINATES):
                     f.write(f'{lower_xy[index, max_index-j , 0]} {lower_xy[index, max_index-j , 1]}\n') # Reverse the order of the lower coordinates for xfoil compatibility  
             else:
-                f.write(f'airfoil_{index}\n\n')
+                f.write(f'airfoil_{index}_process_{initial_seed}\n\n')
                 f.write("Invalid Airfoil\n")
                 #print("Intersecting Polynomials - Invalid Airfoil")
 
     return np.array(valid_indices)
 
 
-def generate_parsec_coordinates(samples, xte=1.0): # 'x trailing edge'
+def generate_parsec_coordinates(samples, initial_seed): # 'x trailing edge'
     """
     Generates Polynomial (x,y) coordinates for sample genomes
     
     input:      samples (scaled to solution space boundaries)
     output:     .txt file with (x,y) coordinates
     """
+
+    print("generating parsec coordinates...")
 
     upper_polynomial_coefficients, lower_polynomial_coefficients = generate_polynomial_coefficients(samples)
 
@@ -79,7 +81,9 @@ def generate_parsec_coordinates(samples, xte=1.0): # 'x trailing edge'
     upper_xy = vec_upper_y_solutions(upper_polynomial_coefficients)
     lower_xy = vec_lower_y_solutions(lower_polynomial_coefficients)
 
-    valid_indices = export_parsec_coordinates(upper_xy, lower_xy)
+    valid_indices = export_parsec_coordinates(upper_xy, lower_xy, initial_seed)
+
+    print("... parsec coordinates generated")
 
     return valid_indices
 

@@ -1,7 +1,9 @@
 import torch
+import numpy
 import os
 from botorch.models.transforms.input import InputTransform
-from botorch.models.transforms import Standardize, Normalize
+from botorch.models.transforms import Standardize, Normalize, ChainedInputTransform
+from botorch.models.transforms.input import InputStandardize
 from botorch.models import SingleTaskGP
 from botorch.fit import fit_gpytorch_model
 from gpytorch.mlls import ExactMarginalLogLikelihood
@@ -27,22 +29,40 @@ def fit_gp_model(x_solutions, y_obj_evals):
     # Convert variables to tensor
     x_tensor = torch.tensor(x_solutions, device=device, dtype=dtype)
     y_tensor = torch.tensor(y_obj_evals, device=device, dtype=dtype)
-    
+
     lower_bounds = torch.tensor([lower for lower, _ in SOL_VALUE_RANGE])
     upper_bounds = torch.tensor([upper for _, upper in SOL_VALUE_RANGE])
     bounds = torch.stack((lower_bounds, upper_bounds))
+    
+    input_transform   = Normalize(d=SOL_DIMENSION, bounds=bounds)
+    outcome_transform = Standardize(m=1)
 
-    input_transform = Normalize(d=SOL_DIMENSION, bounds=bounds)
-
-    gp_model = SingleTaskGP(train_X=x_tensor, train_Y=y_tensor, input_transform=input_transform, outcome_transform=Standardize(m=1))
-
-    # RISES ERROR:    gp_model = SingleTaskGP(train_X=x_tensor, train_Y=y_tensor, input_transform=Normalize(x_tensor.shape[-1], bounds=sol_value_range_tensor), outcome_transform=Standardize(m=1))
-    # ERROR:    botorch.exceptions.errors.BotorchTensorDimensionError: Dimensions of provided `bounds` are incompatible with transform_dimension = 0!
+    gp_model = SingleTaskGP(train_X=x_tensor, train_Y=y_tensor, input_transform=input_transform, outcome_transform=outcome_transform)
 
     # Define marginal log likelihood
     mll = ExactMarginalLogLikelihood(likelihood=gp_model.likelihood, model=gp_model)
-    mll.to(x_tensor)
+
+    # print("\n\n   mll_val before fit")
+    # output = gp_model(x_tensor)
+    # mll_val = -mll(output, gp_model.train_targets)
+    # print(mll_val)
+
+    # print("\n      mll before fit\n")
+    # print(mll)
+    # mll.to(x_tensor)
 
     fit_gpytorch_model(mll)
+
+    # print("\n\n    mll_val after fit")
+    # output = gp_model(x_tensor)
+    # mll_val = -mll(output, gp_model.train_targets)
+    # print(mll_val)
+
+    # print("\n      mll after fit\n")
+    # print(mll)
+    # print(gp_model.covar_module.base_kernel.lengthscale)
+
+
+    # print(gp_model)
 
     return gp_model
