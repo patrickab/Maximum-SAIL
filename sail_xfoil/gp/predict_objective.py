@@ -26,18 +26,6 @@ def predict_objective(genomes, gp_model):
         posterior = gp_model.posterior(transformed_genomes)
 
     posterior_mean_predictions = posterior.mean.numpy()
-
     posterior_mean_predictions = numpy.array([prediction[0] for prediction_array in posterior_mean_predictions for prediction in prediction_array]).T
-
-    pred_obj = posterior_mean_predictions #[success_indices]
-
-    #pred_error = true_obj-pred_obj    
-    # Stack the arrays horizontally
-    #stacked_arrays = numpy.column_stack((true_obj, pred_obj, pred_error))
-
-    # Define the format strings
-    #format_string_names = f"True Obj:\tPred Obj:\tPred Error:"
-    #format_string = "\n".join(["\t".join(map(str, row)) for row in stacked_arrays])
-    #format_string = "\n".join(["\t\t".join([f"{value:.4f}" for value in row]) for row in stacked_arrays])
 
     return posterior_mean_predictions

@@ -3,19 +3,22 @@ import numpy as np
 import subprocess
 import time
 import json
+import gc
 from ribs.emitters import GaussianEmitter
 from ribs.archives import GridArchive
 
+from memory_profiler import profile
+
 
 ###### Import Custom Scripts ######
-from xfoil.simulate_airfoils_singleprocess import xfoil
+from xfoil.simulate_airfoils import xfoil
 from xfoil.generate_airfoils import generate_parsec_coordinates
 from acq_functions.acq_ucb import acq_ucb
 from gp.initialize_archive import initialize_archive
 from gp.fit_gp_model import fit_gp_model
 from gp.predict_objective import predict_objective
 from map_elites import map_elites
-from utils.pprint_nd import pprint, pprint_nd
+from utils.pprint_nd import pprint, pprint_fstring
 from numpy import float64
 
 ###### Configurable Variables ######
@@ -72,7 +75,6 @@ def sail(initial_seed):
         )
 
     obj_archive, init_solutions, init_obj_evals = initialize_archive(obj_archive, seed)
-    subprocess.run(f"rm *.log *.dat", shell=True)
 
     gp_model = fit_gp_model(init_solutions, init_obj_evals)
 
@@ -101,44 +103,49 @@ def sail(initial_seed):
     print(" ## Enter Acquisition Loop ##\n\n")
 
     eval_budget = ACQ_N_OBJ_EVALS
-
     while(eval_budget >= BATCH_SIZE):
 
-        acq_archive = store_n_best_elites(obj_archive, n=10, update_acq=True, gp_model=gp_model)               # preserve the best 20 acq_elites
-        acq_archive = map_elites(acq_archive, acq_emitter, gp_model, ACQ_N_MAP_EVALS, acq_ucb)
-        acq_archive = store_n_best_elites(acq_archive, n=acq_archive.stats.num_elites-20, update_acq=False)    # remove the worst 20 acq_elites
+        # update acquisition values
+        acq_archive = store_n_best_elites(obj_archive, acq_archive.stats.num_elites, update_acq=True, gp_model=gp_model)
 
-        acq_elite_batch = acq_archive.sample_elites(BATCH_SIZE)     # Select acquisition elites (sobol sample in original paper)
-        acq_elites = acq_elite_batch[0]                             # Select solution batch
+        # evolve acquisition archive
+        acq_archive = map_elites(acq_archive, acq_emitter, gp_model, ACQ_N_MAP_EVALS, acq_ucb)
+
+        # remove worst elites
+        acq_qd_before = acq_archive.stats.qd_score
+        acq_archive = store_n_best_elites(acq_archive, acq_archive.stats.num_elites-20, update_acq=False)
+        acq_qd_after = acq_archive.stats.qd_score
+
+        # select & evaluate acquisition elites
+        acq_elite_batch = acq_archive.sample_elites(BATCH_SIZE)
+        acq_elites = acq_elite_batch[0] 
         
         generate_parsec_coordinates(acq_elites) # acq_archive only contains valid solutions (= non-intersecting polynomials), therefore no need to check for validity
         convergence_errors, success_indices, obj_batch = xfoil(iterations=BATCH_SIZE)
 
-        collect_classifier_data(acq_elites, success_indices, classifier_data)
-
-        convergence_mask = np.isin(np.arange(len(acq_elites)), success_indices)
-        classifier_data["converged"] = np.append(classifier_data["converged"], acq_elites[convergence_mask], axis=0)
-        classifier_data["not_converged"] = np.append(classifier_data["not_converged"], acq_elites[~convergence_mask], axis=0)
-
-        # select converged solutions
-        converged_elites = acq_elites[success_indices]
-        
+        # select & store converged solutions
+        converged_elites = acq_elites[success_indices]        
         obj_archive.add(converged_elites, obj_batch, acq_elite_batch[2][success_indices])
 
+        # store evaluations for GP model
         sol_array = np.vstack((sol_array, converged_elites)) # dtype=float64
         obj_array = np.vstack((obj_array, obj_batch.reshape(-1,1))) # dtype=float64
 
         eval_budget -= BATCH_SIZE
-        pprint(obj_batch)
-        print("\n\nAirfoil Convergence Errors: " + str(convergence_errors))
-        print('Success Indices:  '+ str(success_indices))
+
+        # Define the format strings
+        acq_batch = acq_elite_batch[1][success_indices]
+        pprint_fstring(acq_batch, obj_batch)
+        print("Acq QD Score Before Removal: " + str(acq_qd_before))
+        print("Acq QD Score After Removal: " + str(acq_qd_after))
+        print("Acq Archive Size: " + str(acq_archive.stats.num_elites))
+        print("Airfoil Convergence Errors: " + str(convergence_errors))
         print("Remaining ACQ Precise Evals: " + str(eval_budget) + "\n\n")
+
         gp_model = fit_gp_model(sol_array, obj_array)
 
     print("\n\n ## Exit Acquisition Loop ##")
     print(" ## Enter Prediction Loop ##\n\n")
-
-    train_classifieres(classifier_data)
 
     pred_emitter = [
         GaussianEmitter(
@@ -153,26 +160,9 @@ def sail(initial_seed):
     pred_archive = map_elites(pred_archive, pred_emitter, gp_model, PRED_N_EVALS, predict_objective)
 
     print("[...] Terminate sail()")
+    gc.collect()
 
-    return obj_archive, acq_archive, pred_archive
-
-
-def store_n_best_elites(archive, n, update_acq=True, gp_model=None):
-
-    n_elites = sorted(archive, key=lambda x: x.objective, reverse=True)[:n]
-
-    print("n elites: " + str(n))
-
-    if update_acq:
-        n_elite_acq = acq_ucb(np.array([elite.solution for elite in n_elites]), gp_model)
-        pprint(n_elite_acq)
-    else:
-        n_elite_acq = [elite.objective for elite in n_elites]
-
-    archive.clear()
-    archive.add([elite.solution for elite in n_elites], n_elite_acq, [elite.measures for elite in n_elites])
-
-    return archive
+    return obj_archive, acq_archive, pred_archive, classifier_data
 
 
 def collect_classifier_data(acq_elites, success_indices, classifier_data):
@@ -180,6 +170,21 @@ def collect_classifier_data(acq_elites, success_indices, classifier_data):
     for index in success_indices:
         classifier_data["converged"] = np.append(classifier_data["converged"], acq_elites[index].reshape(1,-1), axis=0)
         classifier_data["not_converged"] = np.append(classifier_data["not_converged"], acq_elites[index].reshape(1,-1), axis=0)
+
+
+def store_n_best_elites(archive, n, update_acq=True, gp_model=None):
+
+    n_elites = sorted(archive, key=lambda x: x.objective, reverse=True)[:n]
+
+    if update_acq:
+        n_elite_acq = acq_ucb(np.array([elite.solution for elite in n_elites]), gp_model)
+    else:
+        n_elite_acq = [elite.objective for elite in n_elites]
+
+    archive.clear()
+    archive.add([elite.solution for elite in n_elites], n_elite_acq, [elite.measures for elite in n_elites])
+
+    return archive        
 
 
 def train_classifieres(classifier_data):
@@ -321,29 +326,30 @@ if __name__ == "__main__":
 
     exec_start = time.time()
 
+    mse_array = np.empty(0, dtype=float64)
+    qd_score_array = np.empty(0, dtype=float64) # referring to verified_obj_archive
+
     for i in range(TEST_RUNS):
         data = {}
-        mse_array = np.empty(0, dtype=float64)
-        qd_score_array = np.empty(0, dtype=float64) # referring to verified_obj_archive
 
-        obj_archive, acq_archive, pred_archive = sail(i)
+        obj_archive, acq_archive, pred_archive, classifier_data = sail(i+3)
 
         obj_dataframe = obj_archive.as_pandas(include_solutions=True)
-        obj_dataframe.to_csv(f"obj_archive.csv", index=False)
+        obj_dataframe.to_csv(f"obj_archive_{i}.csv", index=False)
 
         pred_dataframe = pred_archive.as_pandas(include_solutions=True)
-        pred_dataframe.to_csv(f"pred_archive.csv", index=False)
+        pred_dataframe.to_csv(f"pred_archive_{i}.csv", index=False)
 
         verified_obj_archive, unverified_obj_archive, pred_error_archive, perc_invalid_elites = verify_prediction_archive(pred_dataframe)
 
         verified_obj_dataframe = verified_obj_archive.as_pandas(include_solutions=True)
-        verified_obj_dataframe.to_csv(f"verified_obj_archive.csv", index=False)
+        verified_obj_dataframe.to_csv(f"verified_obj_archive_{i}.csv", index=False)
 
         unverified_obj_dataframe = verified_obj_archive.as_pandas(include_solutions=True)
-        unverified_obj_dataframe.to_csv(f"unverified_obj_archive.csv", index=False)
+        unverified_obj_dataframe.to_csv(f"unverified_obj_archive_{i}.csv", index=False)
 
         pred_error_dataframe = pred_error_archive.as_pandas(include_solutions=True)
-        pred_error_dataframe.to_csv(f"pred_error_archive.csv", index=False)
+        pred_error_dataframe.to_csv(f"pred_error_archive_{i}.csv", index=False)
 
         mse = np.mean(pred_error_dataframe["objective"])
         mse_array = np.append(mse_array, mse)
@@ -352,7 +358,7 @@ if __name__ == "__main__":
         qd_score_array = np.append(qd_score_array, qd_score)
 
         # copy files to windows directory for usage in Rstudio
-        subprocess.run(f"cp obj_archive.csv pred_archive.csv verified_obj_archive.csv pred_error_archive.csv unverified_obj_archive.csv /mnt/c/Users/patri/Desktop/Thesis/archives_xfoil", shell=True, check=True)
+        subprocess.run(f"cp obj_archive_{i}.csv pred_archive_{i}.csv verified_obj_archive_{i}.csv pred_error_archive_{i}.csv unverified_obj_archive_{i}.csv /mnt/c/Users/patri/Desktop/Thesis/archives_xfoil", shell=True, check=True)
 
         # pack all data from the current iteration into one dictionary
         run_data = {
@@ -367,8 +373,20 @@ if __name__ == "__main__":
 
         data[f"run"] = run_data
 
-        with open("results.json", "w") as json_file:
+        with open(f"run_data_{i}.json", "w") as json_file:
             json.dump(data, json_file, indent=4)
+
+        # with open(f"classifier_data_{i}.json", "w") as json_file:
+        #     json.dump(classifier_data, json_file, indent=4)
+
+        run_data = {}
+        data = {}
+        obj_archive.clear()
+        acq_archive.clear()
+        pred_archive.clear()
+        verified_obj_archive.clear()
+        unverified_obj_archive.clear()
+        pred_error_archive.clear()
 
         pprint(mse_array)
         pprint(qd_score_array)

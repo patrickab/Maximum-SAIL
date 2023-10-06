@@ -3,6 +3,7 @@ from ribs.schedulers import Scheduler
 from tqdm import tqdm
 import numpy
 import torch
+import gc
 
 ##### Import custom scripts #####
 from utils.pprint_nd import pprint_nd, pprint
@@ -18,7 +19,6 @@ def map_elites(archive, emitter, gp_model, n_evals, fuct_obj):
     
     print("\nInitialize Map-Elites [...]")
 
-    # Archive Scheduler
     scheduler = Scheduler(archive, emitter)
 
     remaining_evals = n_evals
@@ -32,7 +32,6 @@ def map_elites(archive, emitter, gp_model, n_evals, fuct_obj):
 
             samples = scheduler.ask()
             archive._seed += TEST_RUNS
-            #print("Seed: " + str(archive._seed))
 
             valid_indices = generate_parsec_coordinates(samples)
             valid_samples = samples[valid_indices]

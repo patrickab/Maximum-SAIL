@@ -1,6 +1,6 @@
-### used for parallel execution of multiple sail processes
+### singleprocess sail - n_core xfoil processes ###
 
-
+import gc
 import os
 import sys
 import numpy
@@ -10,6 +10,8 @@ import numpy as np
 import concurrent.futures
 from queue import Queue, Empty
 from utils.pprint_nd import pprint, pprint_nd
+
+from memory_profiler import profile
 
 ### Global Variables ###
 from config.config import Config
@@ -34,8 +36,9 @@ def xfoil(iterations):
     """Executes xfoil with given parameters, implements Thread counting errors on stdout"""
 
     print("\nstart xfoil [...]")
-          
-    executor = concurrent.futures.ProcessPoolExecutor(max_workers=1)
+      
+    n_cores = os.cpu_count()
+    executor = concurrent.futures.ProcessPoolExecutor(max_workers=n_cores)
     
     # Submit tasks to the ThreadPoolExecutor for concurrent execution
     futures = [executor.submit(run_xfoil, i) for i in range(iterations)]
@@ -90,7 +93,8 @@ def run_xfoil(index):
         line = file.readlines()[2]
 
     if line == "Invalid Airfoil\n":
-        kill_subprocess(process, index)
+        terminate_subprocess(process, index)
+        return False
 
     # start thread to populate queue
     output_thread = threading.Thread(target=populate_queue, args=(process.stdout, queue)) # mysteriously, threads are executed twice (debug in future)
@@ -121,6 +125,8 @@ def run_xfoil(index):
             
     process.stdout.close()
     process.terminate()
+
+    gc.collect()
 
     return is_valid_solution
 
@@ -188,19 +194,19 @@ def capture_errors(process, queue, i):
             if "TRCHEK2: N2 convergence failed" in line or "PANLST: Side 1, inviscid convergence failed" in line:
                 error_counter += 1
                 if error_counter >= 2000:
-                    print(f"\n{i}: (convergence failed)")
+                    print(f"{i}: (convergence failed)")
                     terminate_subprocess(process, i)
                     process.stdout.close()
                     return False
 
             if "VISCAL:  Convergence failed" in line:
-                print(f"\n{i}: (viscal error)")
-                kill_subprocess(process, i)
+                print(f"{i}: (viscal error)")
+                terminate_subprocess(process, i)
                 return False
             
         except Empty: # when viscal error occurs, stdout will stop producing output, thus queue.get() will throw an Empty exception, however, viscal errors are *sometimes* not printed to stdout, so it cant always be captured
-            print(f"\n{i}: (queue.Empty)")
-            kill_subprocess(process, i)
+            print(f"{i}: (queue.Empty)")
+            terminate_subprocess(process, i)
             return False
 
 
@@ -231,21 +237,13 @@ def populate_queue(stdout, queue):
 
 def terminate_subprocess(process, i):
 
-    print("terminating process...")
-
-    process.stdout.close
     process.terminate()
-
-    print("... process terminated")
+    process.stdout.close()
 
 def kill_subprocess(process, i):
 
-    print("killing process...")
-
-    process.stdout.close()
     os.kill(process.pid, 9) # 9 = SIGKILL. SIGKILL forcefully terminates the process & cannot be ignored, compared to SIGTERM process.terminate(). XFOIL is implemented in a way that it ignores SIGTERM, whenever VISCAL ERRORS occur, thus, SIGKILL is used to terminate the process.
-
-    print("...process killed\n")
+    process.stdout.close()
 
 
 if __name__ == "__main__":

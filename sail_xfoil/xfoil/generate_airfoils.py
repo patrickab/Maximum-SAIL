@@ -5,12 +5,13 @@ from numpy import tan, sqrt
 ### Custom Scripts ###
 from utils.pprint_nd import pprint, pprint_nd
 
+from memory_profiler import profile
+
 ### Global Variables ###
 from config.config import Config
 config = Config(os.path.join(os.path.dirname(__file__), '../config', 'config.ini'))
 BATCH_SIZE = config.BATCH_SIZE
 N_XY_COORDINATES = config.N_XY_COORDINATES
-
 
 def export_parsec_coordinates(upper_xy, lower_xy):
     """
@@ -61,7 +62,6 @@ def export_parsec_coordinates(upper_xy, lower_xy):
                 #print("Intersecting Polynomials - Invalid Airfoil")
 
     return np.array(valid_indices)
-
 
 def generate_parsec_coordinates(samples, xte=1.0): # 'x trailing edge'
     """
