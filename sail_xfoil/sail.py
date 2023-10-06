@@ -60,7 +60,7 @@ def sail(initial_seed):
         dims=BHV_NUMBER_BINS,
         ranges=BHV_VALUE_RANGE,
         qd_score_offset=-600,
-        threshold_min = -1,
+        threshold_min = 0.2,
         seed=seed
         )
     
@@ -73,7 +73,7 @@ def sail(initial_seed):
         threshold_min = -1,
         seed=seed,
         )
-
+    
     obj_archive, init_solutions, init_obj_evals = initialize_archive(obj_archive, seed)
 
     gp_model = fit_gp_model(init_solutions, init_obj_evals)
@@ -81,13 +81,16 @@ def sail(initial_seed):
     sol_array = np.array(init_solutions)
     obj_array = np.array(init_obj_evals)
 
-    for elite in obj_archive:   # add obj_elites with dummy acquisition values
-        acq_archive.add_single(elite.solution, np.zeros(1), elite.measures)
+    obj_elites = np.array([elite.solution for elite in obj_archive])
+    obj_elites_acq = acq_ucb(obj_elites, gp_model)
+    obj_elites_measures = np.array([elite.measures for elite in obj_archive])
+
+    acq_archive.add(obj_elites, obj_elites_acq, obj_elites_measures)
 
     acq_emitter = [
         GaussianEmitter(
         archive=acq_archive,
-        sigma=0.5,
+        sigma=1,
         bounds= np.array(SOL_VALUE_RANGE),
         batch_size=BATCH_SIZE,
         initial_solutions=init_solutions, # these solutions are never used, as the archive is never empty - however, specification is required for initializing the GaussianEmitter class
@@ -106,22 +109,19 @@ def sail(initial_seed):
     while(eval_budget >= BATCH_SIZE):
 
         # update acquisition values
-        acq_archive = store_n_best_elites(obj_archive, acq_archive.stats.num_elites, update_acq=True, gp_model=gp_model)
+        acq_archive = store_n_best_elites(obj_archive, obj_archive.stats.num_elites, update_acq=True, gp_model=gp_model)
 
         # evolve acquisition archive
-        acq_archive = map_elites(acq_archive, acq_emitter, gp_model, ACQ_N_MAP_EVALS, acq_ucb)
-
-        # remove worst elites
-        acq_qd_before = acq_archive.stats.qd_score
-        acq_archive = store_n_best_elites(acq_archive, acq_archive.stats.num_elites-20, update_acq=False)
-        acq_qd_after = acq_archive.stats.qd_score
+        acq_archive, new_elite_archive = map_elites(acq_archive, acq_emitter, gp_model, ACQ_N_MAP_EVALS, acq_ucb)
 
         # select & evaluate acquisition elites
-        acq_elite_batch = acq_archive.sample_elites(BATCH_SIZE)
-        acq_elites = acq_elite_batch[0] 
-        
-        generate_parsec_coordinates(acq_elites) # acq_archive only contains valid solutions (= non-intersecting polynomials), therefore no need to check for validity
-        convergence_errors, success_indices, obj_batch = xfoil(iterations=BATCH_SIZE)
+        #acq_elite_batch = new_elite_archive.sample_elites(BATCH_SIZE)
+        acq_elite_batch = sorted(new_elite_archive, key=lambda x: x.objective, reverse=True)[:10]
+        acq_elites = acq_elite_batch
+
+        # acq_archive only contains valid solutions (= non-intersecting polynomials), therefore no need to check for validity using valid_indices
+        valid_indices, surface_area_batch = generate_parsec_coordinates(acq_elites)
+        convergence_errors, success_indices, obj_batch = xfoil(BATCH_SIZE, surface_area_batch)
 
         # select & store converged solutions
         converged_elites = acq_elites[success_indices]        
@@ -136,9 +136,8 @@ def sail(initial_seed):
         # Define the format strings
         acq_batch = acq_elite_batch[1][success_indices]
         pprint_fstring(acq_batch, obj_batch)
-        print("Acq QD Score Before Removal: " + str(acq_qd_before))
-        print("Acq QD Score After Removal: " + str(acq_qd_after))
         print("Acq Archive Size: " + str(acq_archive.stats.num_elites))
+        print("Acq QD Score: " +  str(acq_archive.stats.qd_score))
         print("Airfoil Convergence Errors: " + str(convergence_errors))
         print("Remaining ACQ Precise Evals: " + str(eval_budget) + "\n\n")
 
@@ -157,7 +156,7 @@ def sail(initial_seed):
         seed=seed
     )]
 
-    pred_archive = map_elites(pred_archive, pred_emitter, gp_model, PRED_N_EVALS, predict_objective)
+    pred_archive, new_elites = map_elites(pred_archive, pred_emitter, gp_model, PRED_N_EVALS, predict_objective)
 
     print("[...] Terminate sail()")
     gc.collect()
@@ -218,12 +217,12 @@ def train_classifieres(classifier_data):
 
     # Initialize classifiers
     classifiers = {
-        "Support Vector Machine": SVC(random_state=1337),
-        "Neural Network": MLPClassifier(random_state=1337),
+        #"Support Vector Machine": SVC(random_state=1337),
+        #"Neural Network": MLPClassifier(random_state=1337),
         "Random Forest": RandomForestClassifier(random_state=1337),
-        "Logistic Regression": LogisticRegression(random_state=1337),
-        "Naive Bayes": GaussianNB(),
-        "K-Nearest Neighbors": KNeighborsClassifier()
+        #"Logistic Regression": LogisticRegression(random_state=1337),
+        #"Naive Bayes": GaussianNB(),
+        #"K-Nearest Neighbors": KNeighborsClassifier()
     }
 
     # Train and evaluate classifiers
@@ -332,7 +331,7 @@ if __name__ == "__main__":
     for i in range(TEST_RUNS):
         data = {}
 
-        obj_archive, acq_archive, pred_archive, classifier_data = sail(i+3)
+        obj_archive, acq_archive, pred_archive, classifier_data = sail(i)
 
         obj_dataframe = obj_archive.as_pandas(include_solutions=True)
         obj_dataframe.to_csv(f"obj_archive_{i}.csv", index=False)
@@ -354,6 +353,7 @@ if __name__ == "__main__":
         mse = np.mean(pred_error_dataframe["objective"])
         mse_array = np.append(mse_array, mse)
 
+        print("Verfied Obj QD Score: " +  str(acq_archive.stats.qd_score))
         qd_score = np.sum(verified_obj_dataframe.loc[:, "objective"])
         qd_score_array = np.append(qd_score_array, qd_score)
 

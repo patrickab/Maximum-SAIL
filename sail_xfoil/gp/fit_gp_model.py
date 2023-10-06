@@ -42,27 +42,6 @@ def fit_gp_model(x_solutions, y_obj_evals):
     # Define marginal log likelihood
     mll = ExactMarginalLogLikelihood(likelihood=gp_model.likelihood, model=gp_model)
 
-    # print("\n\n   mll_val before fit")
-    # output = gp_model(x_tensor)
-    # mll_val = -mll(output, gp_model.train_targets)
-    # print(mll_val)
-
-    # print("\n      mll before fit\n")
-    # print(mll)
-    # mll.to(x_tensor)
-
     fit_gpytorch_model(mll)
-
-    # print("\n\n    mll_val after fit")
-    # output = gp_model(x_tensor)
-    # mll_val = -mll(output, gp_model.train_targets)
-    # print(mll_val)
-
-    # print("\n      mll after fit\n")
-    # print(mll)
-    # print(gp_model.covar_module.base_kernel.lengthscale)
-
-
-    # print(gp_model)
 
     return gp_model

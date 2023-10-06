@@ -34,11 +34,6 @@ def main():
     seed=1
     )
 
-    # q: how can i determine, in which bin the init_samples_bhv are?
-    # a: use the index_of method of the archive
-    # q: 
-
-
     obj_archive.add(init_samples, np.ones(BATCH_SIZE), init_samples_bhv)
     print(str(obj_archive.stats.num_elites))
 

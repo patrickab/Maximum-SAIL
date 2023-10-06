@@ -3,7 +3,7 @@ import numpy as np
 from numpy import tan, sqrt
 
 ### Custom Scripts ###
-from utils.pprint_nd import pprint, pprint_nd
+from utils.pprint_nd import pprint, pprint_nd, pprint_fstring
 
 from memory_profiler import profile
 
@@ -30,38 +30,35 @@ def export_parsec_coordinates(upper_xy, lower_xy):
         if os.path.exists("airfoil_{index}.log"):
             os.remove("airfoil_{index}.log")
 
+    surface_area_batch = np.empty(0)
     for index in range(upper_xy.shape[0]):
 
-        is_valid_airfoil = True
+        # Check if polynomials intersect
+        upper_i_xy = upper_xy[index,:,:]
+        lower_i_xy = lower_xy[index,:,:]
+        upper_y = upper_i_xy[:,1]
+        lower_y = lower_i_xy[:,1]
+        delta_y = upper_y - lower_y
+        is_unvalid_airfoil = np.any(delta_y < 0) # returns True if polynomials dont intersect
 
-        for line in range(N_XY_COORDINATES):
-            # if upper and lower polynomials intersect
-            if upper_xy[index, line, 1] < lower_xy[index, line, 1]:
-                is_valid_airfoil = False
-                break
+        if not is_unvalid_airfoil:
 
-        with open(f'airfoil_{index}.dat', 'w') as f: # automatically ensures that the file will be properly closed under all circumstances
+            valid_indices.append(index)
+            stacked_xy = np.vstack((upper_i_xy, np.flip(lower_i_xy, axis=0)))
+            np.savetxt(f'airfoil_{index}.dat', stacked_xy, fmt='%f', delimiter=' ', newline='\n', header=f'airfoil_{index}\n', comments='')
 
-            if is_valid_airfoil:
+            # Calculate the surface area using the trapezoidal rule in a vectorized manner
+            dx = 1/N_XY_COORDINATES
+            y_avg = (np.abs(stacked_xy[1:,1]) + np.abs(stacked_xy[:-1,1])) / 2.0
+            surface_area = np.sum(dx * y_avg)
+            surface_area_batch = np.append(surface_area_batch, surface_area)
 
-                valid_indices.append(index)
-
-                max_index = N_XY_COORDINATES - 1
-
-                f.write(f'airfoil_{index}\n\n')
-                # Write the upper surface coordinates
-                for j in range(N_XY_COORDINATES):
-                    f.write(f'{upper_xy[index,j,0]} {upper_xy[index,j,1]}\n')
-                f.write("\n")
-                # Write the lower surface coordinates
-                for j in range(N_XY_COORDINATES):
-                    f.write(f'{lower_xy[index, max_index-j , 0]} {lower_xy[index, max_index-j , 1]}\n') # Reverse the order of the lower coordinates for xfoil compatibility  
-            else:
+        else:
+            with open(f'airfoil_{index}.dat', 'w') as f:
                 f.write(f'airfoil_{index}\n\n')
                 f.write("Invalid Airfoil\n")
-                #print("Intersecting Polynomials - Invalid Airfoil")
 
-    return np.array(valid_indices)
+    return np.array(valid_indices), surface_area_batch
 
 def generate_parsec_coordinates(samples, xte=1.0): # 'x trailing edge'
     """

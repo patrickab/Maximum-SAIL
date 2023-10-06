@@ -1,5 +1,3 @@
-### singleprocess sail - n_core xfoil processes ###
-
 import gc
 import os
 import sys
@@ -31,7 +29,7 @@ xfoil_path = r"/mnt/c/Program Files/xfoil/./xfoil.exe"
 np.set_printoptions(precision=4, suppress=True, floatmode='fixed', linewidth=120)
 
 
-def xfoil(iterations):
+def xfoil(iterations, surface_area_batch):
 
     """Executes xfoil with given parameters, implements Thread counting errors on stdout"""
 
@@ -60,7 +58,7 @@ def xfoil(iterations):
         output_index_data = numpy.loadtxt(f'airfoil_{index}.log', skiprows=12)
 
         lift, drag = output_index_data[1], output_index_data[2]
-        surface_area = calculate_surface_area(index)
+        surface_area = surface_area_batch[index]
 
         obj = calculate_obj(drag, lift, surface_area)
         obj_batch.append(obj)
@@ -139,28 +137,6 @@ def calculate_obj(drag, lift, surface_area):
     # for some reason the authors calculate logarithm of drag
     obj = -numpy.log(drag) * area_penalty * lift_penalty
     return obj
-
-
-def calculate_surface_area(index):
-
-    data = np.loadtxt(f'airfoil_{index}.dat', skiprows=2)
-
-    upper_xy = np.array([data[0:N_XY_COORDINATES, 0], np.abs(data[0:N_XY_COORDINATES, 1])]).T
-    lower_xy = np.array([data[N_XY_COORDINATES:, 0], np.abs(data[N_XY_COORDINATES:, 1])]).T
-
-    surface_area = 0.0
-
-    # Calculate the surface area using the trapezoidal rule (edge cases circumvented by using absolute values - results in minor inaccuracy)
-    for i in range(N_XY_COORDINATES-1):
-        upper_dx = upper_xy[i, 0] - upper_xy[i+1, 0]
-        lower_dx = lower_xy[i+1, 0] - lower_xy[i, 0]
-
-        upper_y_avg = (upper_xy[i+1, 1] + upper_xy[i, 1]) / 2.0
-        lower_y_avg = (lower_xy[i+1, 1] + lower_xy[i, 1]) / 2.0
-
-        surface_area += (upper_dx * upper_y_avg) + (lower_dx * lower_y_avg)
-
-    return surface_area
 
 
 def command(cmd):
