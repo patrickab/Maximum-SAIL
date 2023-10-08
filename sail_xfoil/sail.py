@@ -11,9 +11,8 @@ from memory_profiler import profile
 
 
 ###### Import Custom Scripts ######
-from utils.benchmark_utils import sail_vanilla, sail_custom, sail_random, store_benchmark_data
-from xfoil.simulate_airfoils import xfoil
-from xfoil.generate_airfoils import generate_parsec_coordinates
+from utils.while_loops import sail_vanilla, sail_custom, sail_random
+from utils.benchmark_utils import store_benchmark_data
 from acq_functions.acq_ucb import acq_ucb
 from gp.initialize_archive import initialize_archive
 from gp.fit_gp_model import fit_gp_model
@@ -36,6 +35,7 @@ BHV_NUMBER_BINS = config.BHV_NUMBER_BINS
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 TEST_RUNS = config.TEST_RUNS
 BHV_DIMENSION = config.BHV_DIMENSION
+SIGMA_EMITTER = config.SIGMA_EMITTER
 
 import warnings
 warnings.filterwarnings("ignore", message="CUDA initialization: The NVIDIA driver on your system is too old")
@@ -47,7 +47,7 @@ def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_ran
 
     print("Initialize sail() [...]")
 
-    seed = initial_seed
+    seed = initial_seed+10
 
     obj_archive = GridArchive(
         solution_dim=SOL_DIMENSION,         # Dimension of solution vector
@@ -63,7 +63,7 @@ def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_ran
         dims=BHV_NUMBER_BINS,
         ranges=BHV_VALUE_RANGE,
         qd_score_offset=-600,
-        threshold_min = 0.2,
+        threshold_min = -1,
         seed=seed
         )
     
@@ -93,7 +93,7 @@ def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_ran
     acq_emitter = [
         GaussianEmitter(
         archive=acq_archive,
-        sigma=1,
+        sigma=SIGMA_EMITTER,
         bounds= np.array(SOL_VALUE_RANGE),
         batch_size=BATCH_SIZE,
         initial_solutions=init_solutions, # these solutions are never used, as the archive is never empty - however, specification is required for initializing the GaussianEmitter class
@@ -103,13 +103,15 @@ def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_ran
     print("\n ## Exit Initialization ##")
     print(" ## Enter Acquisition Loop ##\n\n")
 
-    eval_budget = ACQ_N_OBJ_EVALS
     if sail_vanilla_flag:
-        obj_archive, gp_model = sail_vanilla(acq_archive, obj_archive, gp_model, acq_emitter, sol_array, obj_array, eval_budget)
+        obj_archive, gp_model = sail_vanilla(acq_archive, obj_archive, gp_model, acq_emitter, sol_array, obj_array)
+        gc.collect()
     if sail_custom_flag:
-        obj_archive, gp_model = sail_custom(acq_archive, obj_archive, gp_model, acq_emitter, sol_array, obj_array, eval_budget)
+        obj_archive, gp_model = sail_custom(acq_archive, obj_archive, gp_model, acq_emitter, sol_array, obj_array)
+        gc.collect()
     if sail_random_flag:
-        obj_archive, gp_model = sail_random(acq_archive, obj_archive, gp_model, acq_emitter, sol_array, obj_array, eval_budget)
+        obj_archive, gp_model = sail_random(acq_archive, obj_archive, gp_model, acq_emitter, sol_array, obj_array)
+        gc.collect()
 
     print("\n\n ## Exit Acquisition Loop ##")
     print(" ## Enter Prediction Loop ##\n\n")
@@ -156,7 +158,7 @@ if __name__ == "__main__":
         data = {}
 
         obj_archive, pred_archive = sail(i, sail_custom_flag=True)
-        mse_custom, qd_custom, perc_invalid = store_benchmark_data(i, obj_archive, pred_archive, sail_vanilla_flag=True)
+        mse_custom, qd_custom, perc_invalid = store_benchmark_data(i, obj_archive, pred_archive, sail_custom_flag=True)
         mse_custom_array = np.append(mse_custom_array, mse_custom)
         qd_custom_array = np.append(qd_custom_array, qd_custom)
         percent_invalid_custom = np.append(percent_invalid_custom, perc_invalid)
