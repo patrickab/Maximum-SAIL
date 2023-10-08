@@ -2,7 +2,6 @@
 import numpy as np
 import subprocess
 import time
-import json
 import gc
 from ribs.emitters import GaussianEmitter
 from ribs.archives import GridArchive
@@ -13,6 +12,7 @@ from memory_profiler import profile
 ###### Import Custom Scripts ######
 from utils.while_loops import sail_vanilla, sail_custom, sail_random
 from utils.benchmark_utils import store_benchmark_data
+from utils.utils import define_archives
 from acq_functions.acq_ucb import acq_ucb
 from gp.initialize_archive import initialize_archive
 from gp.fit_gp_model import fit_gp_model
@@ -48,35 +48,8 @@ def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_ran
     print("Initialize sail() [...]")
 
     seed = initial_seed+10
-
-    obj_archive = GridArchive(
-        solution_dim=SOL_DIMENSION,         # Dimension of solution vector
-        dims=BHV_NUMBER_BINS,               # Discretization of behavioral bins
-        ranges=BHV_VALUE_RANGE,             # Possible values for behavior vector
-        qd_score_offset=-600,
-        threshold_min = -1,
-        seed=seed
-        )
     
-    acq_archive = GridArchive(
-        solution_dim=SOL_DIMENSION,
-        dims=BHV_NUMBER_BINS,
-        ranges=BHV_VALUE_RANGE,
-        qd_score_offset=-600,
-        threshold_min = -1,
-        seed=seed
-        )
-    
-
-    pred_archive = GridArchive(
-        solution_dim=SOL_DIMENSION,
-        dims=BHV_NUMBER_BINS,
-        ranges=BHV_VALUE_RANGE,
-        qd_score_offset=-600,
-        threshold_min = -1,
-        seed=seed,
-        )
-    
+    obj_archive, acq_archive, pred_archive = define_archives(seed)
     obj_archive, init_solutions, init_obj_evals = initialize_archive(obj_archive, seed)
 
     gp_model = fit_gp_model(init_solutions, init_obj_evals)
