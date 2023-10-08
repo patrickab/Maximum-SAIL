@@ -20,7 +20,7 @@ def main(benchmark_domain: str):
     verified_predictions = convert_csv_to_archive(f'combined_verified_obj_{benchmark_domain}.csv', verified_predictions)
     unverified_predictions = convert_csv_to_archive(f'combined_unverified_obj_{benchmark_domain}.csv', unverified_predictions)
 
-    max_obj, max_pred_error, max_verified_obj, max_unverified_obj = determine_elite_argmax("custom", "vanilla", "random")
+    max_obj, max_pred_error, max_verified_obj, max_unverified_obj = determine_elite_argmax("custom")#, "vanilla", "random")
 
     visualize_archive(objective_archive, benchmark_domain, max_obj)
     visualize_archive(pred_error_archive, benchmark_domain, max_pred_error)
@@ -28,8 +28,13 @@ def main(benchmark_domain: str):
     visualize_archive(unverified_predictions, benchmark_domain, max_unverified_obj)   
 
 
-def determine_elite_argmax(benchmark_domain_1: str, benchmark_domain_2: str, benchmark_domain_3: str):
+def determine_elite_argmax(benchmark_domain_1: str, benchmark_domain_2: str = None, benchmark_domain_3: str = None):
     """Determine maximum objectives for all archives in all domains to ensure comparable colorscaling"""
+
+    if benchmark_domain_2 is None:
+        benchmark_domain_2 = benchmark_domain_1
+    if benchmark_domain_3 is None:
+        benchmark_domain_3 = benchmark_domain_1
 
     benchmark_domains = [benchmark_domain_1, benchmark_domain_2, benchmark_domain_3]
     archives = ["objective_archive", "pred_error_archive", "verified_predictions", "unverified_predictions"]
@@ -164,5 +169,5 @@ def define_archives():
 
 if __name__ == '__main__':
     main("custom")
-    main("vanilla")
-    main("random")
+    #main("vanilla")
+    #main("random")

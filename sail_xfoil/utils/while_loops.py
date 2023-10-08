@@ -27,19 +27,29 @@ SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 SIGMA_EMITTER = config.SIGMA_EMITTER
 
 
-def store_n_best_elites(archive, n, update_acq=True, gp_model=None):
+def store_n_best_elites(acq_archive, n, update_acq=True, gp_model=None, obj_archive=None):
+    """
+    Store best elites from an archive
 
-    n_elites = sorted(archive, key=lambda x: x.objective, reverse=True)[:n]
+        options:   - store elites from obj_archive in acq_archive
+                   - store elites from acq_archive in acq_archive
+                   - update acquisition values of acq_archive
+    """
+
+    if obj_archive is None:
+        obj_archive = acq_archive
+
+    n_elites = sorted(obj_archive, key=lambda x: x.objective, reverse=True)[:n]
 
     if update_acq:
         n_elite_acq = acq_ucb(np.array([elite.solution for elite in n_elites]), gp_model)
     else:
         n_elite_acq = [elite.objective for elite in n_elites]
 
-    archive.clear()
-    archive.add([elite.solution for elite in n_elites], n_elite_acq, [elite.measures for elite in n_elites])
+    acq_archive.clear()
+    acq_archive.add([elite.solution for elite in n_elites], n_elite_acq, [elite.measures for elite in n_elites])
 
-    return archive
+    return acq_archive
 
 
 def maximize_acq_improvement(new_elite_archive, old_elites):
@@ -76,11 +86,12 @@ def sail_custom(acq_archive: GridArchive, obj_archive: GridArchive, gp_model, so
 
     acq_emitter = define_acq_emitter(obj_archive, acq_archive, gp_model, seed=0)
 
+    total_improvements = 0
     eval_budget = ACQ_N_OBJ_EVALS
     while(eval_budget >= BATCH_SIZE):
 
         # update acquisition values
-        acq_archive = store_n_best_elites(obj_archive, obj_archive.stats.num_elites, update_acq=True, gp_model=gp_model)
+        acq_archive = store_n_best_elites(acq_archive, obj_archive.stats.num_elites, update_acq=True, gp_model=gp_model, obj_archive=obj_archive)
 
         old_elites = np.array([(elite.solution, elite.index, elite.objective, elite.measures) for elite in acq_archive], dtype=[('solution', object), ('index', int), ('acquisition', float), ('behavior', object)])
         print(acq_archive)
@@ -101,22 +112,27 @@ def sail_custom(acq_archive: GridArchive, obj_archive: GridArchive, gp_model, so
             condition_reached = True
 
         else:
+            iter = 0
+            MAX_ITER = 10
             while len(max_acq_improvement_elites)+len(new_elites) < BATCH_SIZE:
                 print("\n\n### Not enough Acq Improvements: Re-entering acquisition loop###\n\n")
+                print("New Acq Elites found: " + str(len(max_acq_improvement_elites)))
+                print("Archive Seed: " + str(acq_archive._seed))
+                pprint(max_acq_improvement_elites)
+                if iter >= MAX_ITER:
+                    print("Max Iterations Reached: Exiting Acquisition Loop")
+                    break
+                iter += 1
                 acq_archive, new_elite_archive = map_elites(acq_archive, acq_emitter, gp_model, ACQ_N_MAP_EVALS, acq_ucb, new_elite_archive=new_elite_archive)
                 max_acq_improvement_elites_2, new_elites_2 = maximize_acq_improvement(new_elite_archive, old_elites)
-                if len(max_acq_improvement_elites) == 0:
-                    if len(max_acq_improvement_elites_2) == 0:
-                        max_acq_improvement_elites = new_elites_2
-                    else:
-                        max_acq_improvement_elites = np.vstack((max_acq_improvement_elites, max_acq_improvement_elites_2, new_elites_2)) # code doesnt ensure that behaviorally different elites are selected - same bin can be selected multiple times
+                max_acq_improvement_elites = np.concatenate((max_acq_improvement_elites, max_acq_improvement_elites_2, new_elites_2), axis=0) # code doesnt ensure that behaviorally different elites are selected - same bin can be selected multiple times
 
         # select BATCH_SIZE acqisition elites, sorted by acquisition improvement
         max_acq_improvement_elites = np.flip(np.sort(max_acq_improvement_elites, order='acquisition_improvement'))
         max_acq_improvement_elites = max_acq_improvement_elites[:BATCH_SIZE]
 
         new_elite_solutions = np.vstack(max_acq_improvement_elites['solution'])
-        new_elite_acquisition = np.vstack(max_acq_improvement_elites['acquisition_improvement'])
+        acquisition_improvement = np.vstack(max_acq_improvement_elites['acquisition_improvement'])
         new_elite_measures = np.vstack(max_acq_improvement_elites['behavior'])
 
         # acq_archive only contains valid solutions (= non-intersecting polynomials), therefore no need to check for validity using valid_indices
@@ -129,11 +145,15 @@ def sail_custom(acq_archive: GridArchive, obj_archive: GridArchive, gp_model, so
 
         eval_budget -= BATCH_SIZE
 
-        new_elite_acquisition = new_elite_acquisition[success_indices]
+        acquisition_improvement = acquisition_improvement[success_indices]
         print("Obj Elites: " + str(obj_archive.stats.num_elites))
+        # investigate why obj archive grows too fast
         status_vector, value_vector = obj_archive.add(new_elite_solutions[success_indices], new_elites_objectives, new_elite_measures[success_indices])
+        total_improvements += np.sum(status_vector)
+        print("Total Improvements: " + str(total_improvements))
+        print("Percentage Improvements: " + str((total_improvements/BATCH_SIZE)*100) + "%")
         print("Status Vector: " + str(status_vector))
-        pprint_fstring(new_elite_acquisition, status_vector, new_elites_objectives)
+        pprint_fstring(acquisition_improvement, new_elites_objectives)
         print("New Acq Elites: " + str(new_elite_archive.stats.num_elites))
         print("Acq/Obj Archive Size: " + str(acq_archive.stats.num_elites))
         print("Acq QD (Custom): " +  str(int(acq_archive.stats.qd_score)))

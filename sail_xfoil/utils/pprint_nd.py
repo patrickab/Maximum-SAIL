@@ -57,7 +57,7 @@ def pprint_fstring(ndarray1, ndarray2 = None, ndarray3 = None):
         fstring_names = f"{name_ndarray1}:\t{name_ndarray2}:"
         stacked_arrays = np.column_stack((ndarray1, ndarray2))
         format_string = "\n".join(["\t\t".join(map(str, row)) for row in stacked_arrays])
-        format_string = "\n".join(["\t\t\t".join([f"{value:.4f}" if type(value)!=int else value for value in row]) for row in stacked_arrays])
+        format_string = "\n".join(["\t\t\t\t".join([f"{value:.4f}" if type(value)!=int else value for value in row]) for row in stacked_arrays])
     else:
         fstring_names = f"{name_ndarray1}:\t{name_ndarray2}:\t{name_ndarray3}:"
         stacked_arrays = np.column_stack((ndarray1, ndarray2, ndarray3))
