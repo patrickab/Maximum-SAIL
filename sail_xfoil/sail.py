@@ -150,6 +150,9 @@ if __name__ == "__main__":
     percent_invalid_random = np.empty(0, dtype=dtype) # predicted elites, that did not converge in xfoil
 
     for i in range(TEST_RUNS):
+
+        gc.collect()
+
         data = {}
 
         obj_archive, pred_archive = sail(i, sail_custom_flag=True)
@@ -160,6 +163,8 @@ if __name__ == "__main__":
         obj_archive.clear()
         pred_archive.clear()
 
+        gc.collect()
+
         obj_archive, pred_archive = sail(i, sail_vanilla_flag=True)
         mse_vanilla, qd_vanilla, perc_invalid = store_benchmark_data(i, obj_archive, pred_archive, sail_vanilla_flag=True)
         mse_vanilla_array = np.append(mse_vanilla_array, mse_vanilla)
@@ -168,6 +173,8 @@ if __name__ == "__main__":
         obj_archive.clear()
         pred_archive.clear()
 
+        gc.collect()
+
         obj_archive, pred_archive = sail(i, sail_random_flag=True)
         mse_random, qd_random, perc_invalid = store_benchmark_data(i, obj_archive, pred_archive, sail_random_flag=True)
         mse_random_array = np.append(mse_random_array, mse_random)
@@ -175,6 +182,8 @@ if __name__ == "__main__":
         percent_invalid_random = np.append(percent_invalid_random, perc_invalid)
         obj_archive.clear()
         pred_archive.clear()
+
+        gc.collect()
 
         pprint_fstring(mse_custom_array, mse_vanilla_array, mse_random_array)
         pprint_fstring(qd_custom_array, qd_vanilla_array, qd_random_array)
