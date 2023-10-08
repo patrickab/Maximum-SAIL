@@ -18,19 +18,18 @@ SOL_DIMENSION = config.SOL_DIMENSION
 BHV_NUMBER_BINS = config.BHV_NUMBER_BINS
 BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 
-def map_elites(archive, emitter, gp_model, n_evals, fuct_obj):
+def map_elites(archive, emitter, gp_model, n_evals, fuct_obj, new_elite_archive=None):
     
-    print("\nInitialize Map-Elites [...]")
+    print("\n\nInitialize Map-Elites [...]")
 
-    new_elite_archive = GridArchive(
-        solution_dim=SOL_DIMENSION,
-        dims=BHV_NUMBER_BINS,
-        ranges=BHV_VALUE_RANGE,
-        qd_score_offset=-600,
-        threshold_min = -1,
-    )
-    
-    new_elite_archive.clear()
+    if new_elite_archive is None:
+        new_elite_archive = GridArchive(
+            solution_dim=SOL_DIMENSION,
+            dims=BHV_NUMBER_BINS,
+            ranges=BHV_VALUE_RANGE,
+            qd_score_offset=-600,
+            threshold_min = -1,)
+        new_elite_archive.clear()
 
     scheduler = Scheduler(archive, emitter)
 
@@ -38,16 +37,16 @@ def map_elites(archive, emitter, gp_model, n_evals, fuct_obj):
     total_iterations = remaining_evals // BATCH_SIZE
     
     with tqdm(total=total_iterations) as progress:
-        while(remaining_evals-BATCH_SIZE >= 0):
-            progress.update(1)
+        while((remaining_evals-BATCH_SIZE >= 0)):
 
+            progress.update(1)
             valid_indices = numpy.empty(0, dtype=int) 
 
-            samples = scheduler.ask()
+            samples = scheduler.ask() 
             archive._seed += TEST_RUNS
 
             valid_indices, surface_area_batch = generate_parsec_coordinates(samples)
-            valid_samples = samples[valid_indices]
+            valid_samples = samples[valid_indices] 
 
             bhv_evals = samples[:,[1,2]]
             obj_evals = fuct_obj(valid_samples, gp_model)
@@ -66,11 +65,6 @@ def map_elites(archive, emitter, gp_model, n_evals, fuct_obj):
 
             scheduler.tell(obj_evals, bhv_evals)
             remaining_evals -= BATCH_SIZE
-
-    #print("Elites in Archive: " + str(archive.stats.num_elites))
-    print("[...] Terminate Map-Elites\n")
-
-    print("Elites in New Elite Archive: " + str(new_elite_archive.stats.num_elites))
     
     return archive, new_elite_archive
 

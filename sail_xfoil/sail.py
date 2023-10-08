@@ -11,6 +11,7 @@ from memory_profiler import profile
 
 
 ###### Import Custom Scripts ######
+from utils.benchmark_utils import sail_vanilla, sail_custom, sail_random, store_benchmark_data
 from xfoil.simulate_airfoils import xfoil
 from xfoil.generate_airfoils import generate_parsec_coordinates
 from acq_functions.acq_ucb import acq_ucb
@@ -19,7 +20,7 @@ from gp.fit_gp_model import fit_gp_model
 from gp.predict_objective import predict_objective
 from map_elites import map_elites
 from utils.pprint_nd import pprint, pprint_fstring
-from numpy import float64
+from numpy import float32, float16
 
 ###### Configurable Variables ######
 from config.config import Config
@@ -40,7 +41,9 @@ import warnings
 warnings.filterwarnings("ignore", message="CUDA initialization: The NVIDIA driver on your system is too old")
 np.set_printoptions(precision=4, suppress=True, floatmode='fixed', linewidth=120)
 
-def sail(initial_seed):
+dtype = float16
+
+def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False):
 
     print("Initialize sail() [...]")
 
@@ -97,54 +100,20 @@ def sail(initial_seed):
         seed=seed
     )]
 
-    classifier_data = {
-        "converged": np.empty((0, SOL_DIMENSION), dtype=float64),
-        "not_converged": np.empty((0, SOL_DIMENSION), dtype=float64),
-    }
-
     print("\n ## Exit Initialization ##")
     print(" ## Enter Acquisition Loop ##\n\n")
 
     eval_budget = ACQ_N_OBJ_EVALS
-    while(eval_budget >= BATCH_SIZE):
-
-        # update acquisition values
-        acq_archive = store_n_best_elites(obj_archive, obj_archive.stats.num_elites, update_acq=True, gp_model=gp_model)
-
-        # evolve acquisition archive
-        acq_archive, new_elite_archive = map_elites(acq_archive, acq_emitter, gp_model, ACQ_N_MAP_EVALS, acq_ucb)
-
-        # select & evaluate acquisition elites
-        #acq_elite_batch = new_elite_archive.sample_elites(BATCH_SIZE)
-        acq_elite_batch = sorted(new_elite_archive, key=lambda x: x.objective, reverse=True)[:10]
-        acq_elites = acq_elite_batch
-
-        # acq_archive only contains valid solutions (= non-intersecting polynomials), therefore no need to check for validity using valid_indices
-        valid_indices, surface_area_batch = generate_parsec_coordinates(acq_elites)
-        convergence_errors, success_indices, obj_batch = xfoil(BATCH_SIZE, surface_area_batch)
-
-        # select & store converged solutions
-        converged_elites = acq_elites[success_indices]        
-        obj_archive.add(converged_elites, obj_batch, acq_elite_batch[2][success_indices])
-
-        # store evaluations for GP model
-        sol_array = np.vstack((sol_array, converged_elites)) # dtype=float64
-        obj_array = np.vstack((obj_array, obj_batch.reshape(-1,1))) # dtype=float64
-
-        eval_budget -= BATCH_SIZE
-
-        # Define the format strings
-        acq_batch = acq_elite_batch[1][success_indices]
-        pprint_fstring(acq_batch, obj_batch)
-        print("Acq Archive Size: " + str(acq_archive.stats.num_elites))
-        print("Acq QD Score: " +  str(acq_archive.stats.qd_score))
-        print("Airfoil Convergence Errors: " + str(convergence_errors))
-        print("Remaining ACQ Precise Evals: " + str(eval_budget) + "\n\n")
-
-        gp_model = fit_gp_model(sol_array, obj_array)
+    if sail_vanilla_flag:
+        obj_archive, gp_model = sail_vanilla(acq_archive, obj_archive, gp_model, acq_emitter, sol_array, obj_array, eval_budget)
+    if sail_custom_flag:
+        obj_archive, gp_model = sail_custom(acq_archive, obj_archive, gp_model, acq_emitter, sol_array, obj_array, eval_budget)
+    if sail_random_flag:
+        obj_archive, gp_model = sail_random(acq_archive, obj_archive, gp_model, acq_emitter, sol_array, obj_array, eval_budget)
 
     print("\n\n ## Exit Acquisition Loop ##")
     print(" ## Enter Prediction Loop ##\n\n")
+
 
     pred_emitter = [
         GaussianEmitter(
@@ -161,235 +130,57 @@ def sail(initial_seed):
     print("[...] Terminate sail()")
     gc.collect()
 
-    return obj_archive, acq_archive, pred_archive, classifier_data
-
-
-def collect_classifier_data(acq_elites, success_indices, classifier_data):
-
-    for index in success_indices:
-        classifier_data["converged"] = np.append(classifier_data["converged"], acq_elites[index].reshape(1,-1), axis=0)
-        classifier_data["not_converged"] = np.append(classifier_data["not_converged"], acq_elites[index].reshape(1,-1), axis=0)
-
-
-def store_n_best_elites(archive, n, update_acq=True, gp_model=None):
-
-    n_elites = sorted(archive, key=lambda x: x.objective, reverse=True)[:n]
-
-    if update_acq:
-        n_elite_acq = acq_ucb(np.array([elite.solution for elite in n_elites]), gp_model)
-    else:
-        n_elite_acq = [elite.objective for elite in n_elites]
-
-    archive.clear()
-    archive.add([elite.solution for elite in n_elites], n_elite_acq, [elite.measures for elite in n_elites])
-
-    return archive        
-
-
-def train_classifieres(classifier_data):
-
-    import json
-    from sklearn.model_selection import train_test_split
-    from sklearn.ensemble import RandomForestClassifier
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.naive_bayes import GaussianNB
-    from sklearn.neural_network import MLPClassifier
-    from sklearn.svm import SVC
-    from sklearn.neighbors import KNeighborsClassifier
-    from sklearn.metrics import accuracy_score, classification_report
-
-    warnings.filterwarnings("ignore")
-
-    converged_elites = classifier_data["converged"]
-    not_converged_elites = classifier_data["not_converged"]
-
-    # Combine converged and not converged data
-    x = np.vstack((converged_elites, not_converged_elites))
-    y = np.hstack((np.ones(len(converged_elites)), np.zeros(len(not_converged_elites))))
-    X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
-
-    print(y_train)
-    print(y_test)
-    percentage_y_0 = (len(y_train[y_train == 0]) / len(y_train)) * 100
-    percentage_y_1 = (len(y_train[y_train == 1]) / len(y_train)) * 100
-    print(f"Percentage of y_train == 0: {percentage_y_0}")
-    print(f"Percentage of y_train == 1: {percentage_y_1}")
-
-    # Initialize classifiers
-    classifiers = {
-        #"Support Vector Machine": SVC(random_state=1337),
-        #"Neural Network": MLPClassifier(random_state=1337),
-        "Random Forest": RandomForestClassifier(random_state=1337),
-        #"Logistic Regression": LogisticRegression(random_state=1337),
-        #"Naive Bayes": GaussianNB(),
-        #"K-Nearest Neighbors": KNeighborsClassifier()
-    }
-
-    # Train and evaluate classifiers
-    results = {}
-    for classifier_name, classifier in classifiers.items():
-        print(f"Training {classifier_name}...")
-        classifier.fit(X_train, y_train)
-        predictions = classifier.predict(X_test)
-        accuracy = accuracy_score(y_test, predictions)
-        report = classification_report(y_test, predictions)
-        results[classifier_name] = {"Accuracy": accuracy, "Report": report}
-        print(f"Accuracy: {accuracy}")
-        print(report)
-
-    print(results)
-
-    return results
-
-
-def verify_prediction_archive(pred_dataframe):
-        
-        verified_obj_archive = GridArchive(
-            solution_dim=SOL_DIMENSION,
-            dims=BHV_NUMBER_BINS,
-            ranges=BHV_VALUE_RANGE,
-            qd_score_offset=-600,
-            threshold_min = -1
-        )
-
-        unverified_obj_archive = GridArchive( # subset of prediction archive that only contains converged solutions
-            solution_dim=SOL_DIMENSION,
-            dims=BHV_NUMBER_BINS,
-            ranges=BHV_VALUE_RANGE,
-            qd_score_offset=-600,
-            threshold_min = -1
-        )
-
-        pred_error_archive = GridArchive(
-            solution_dim=SOL_DIMENSION,
-            dims=BHV_NUMBER_BINS,
-            ranges=BHV_VALUE_RANGE,
-            qd_score_offset=-600,
-            threshold_min = -1
-        )
-
-        elites = pred_dataframe.loc[:, "solution_0":"solution_10"].to_numpy()
-        behavior = pred_dataframe.loc[:, "measure_0":"measure_1"].to_numpy()
-
-        pred_obj = pred_dataframe.loc[:, "objective"].to_numpy()
-
-        n_invalid_elites = 0
-        converged_elites = np.empty((0, SOL_DIMENSION), dtype=float64)
-        converged_behavior = np.empty((0, BHV_DIMENSION), dtype=float64)
-        converged_obj = np.empty(0, dtype=float64)
-        converged_pred_obj = np.empty(0, dtype=float64)
-
-
-        for i in range(0, elites.shape[0], BATCH_SIZE):
-
-            try:
-                elite_batch = elites[i:i+BATCH_SIZE]
-            except:
-                elite_batch = elites[i:]
-
-            valid_indices = generate_parsec_coordinates(elite_batch)
-
-            if valid_indices.size != elite_batch.shape[0]:
-                print("\n\nwtf? intersecting polynomials during verification? this shouldnt happen\n\n")
-
-            convergence_errors, success_indices, true_obj_batch = xfoil(iterations=elite_batch.shape[0])
-          
-            n_invalid_elites += convergence_errors
-            success_indices_outside = np.array(success_indices, dtype=int) + i
-
-            converged_behavior = np.append(converged_behavior, behavior[success_indices_outside], axis=0)
-            converged_elites = np.append(converged_elites, elite_batch[success_indices], axis=0)
-            converged_obj = np.append(converged_obj, true_obj_batch, axis=0)
-            converged_pred_obj = np.append(converged_pred_obj, pred_obj[success_indices_outside], axis=0)
-        
-        pred_error = (converged_obj - converged_pred_obj) ** 2
-        
-        pprint(converged_elites)
-        pprint(converged_obj)
-        pprint(converged_pred_obj)
-        pprint(pred_error)
-
-        perc_invalid_elites = (n_invalid_elites / elites.shape[0]) * 100
-        print("\nNumber of invalid elites: " + str(n_invalid_elites))
-        print("Percentage of invalid elites: " + str(round(perc_invalid_elites, 2)) + "\n\n")
-
-
-        verified_obj_archive.add(converged_elites, converged_obj, converged_behavior)
-        unverified_obj_archive.add(converged_elites, converged_pred_obj, converged_behavior)
-        pred_error_archive.add(converged_elites, pred_error, converged_behavior)
-
-        return verified_obj_archive, unverified_obj_archive, pred_error_archive, perc_invalid_elites
+    return obj_archive, pred_archive
 
 
 if __name__ == "__main__":
 
     exec_start = time.time()
 
-    mse_array = np.empty(0, dtype=float64)
-    qd_score_array = np.empty(0, dtype=float64) # referring to verified_obj_archive
+    mse_vanilla_array = np.empty(0, dtype=dtype)
+    qd_vanilla_array = np.empty(0, dtype=dtype) # referring to verified_obj_archive
+    percent_invalid_vanilla = np.empty(0, dtype=dtype) # predicted elites, that did not converge in xfoil
+
+    mse_custom_array = np.empty(0, dtype=dtype)
+    qd_custom_array = np.empty(0, dtype=dtype) # referring to verified_obj_archive
+    percent_invalid_custom = np.empty(0, dtype=dtype) # predicted elites, that did not converge in xfoil
+
+    mse_random_array = np.empty(0, dtype=dtype)
+    qd_random_array = np.empty(0, dtype=dtype) # referring to verified_obj_archive
+    percent_invalid_random = np.empty(0, dtype=dtype) # predicted elites, that did not converge in xfoil
 
     for i in range(TEST_RUNS):
         data = {}
 
-        obj_archive, acq_archive, pred_archive, classifier_data = sail(i)
-
-        obj_dataframe = obj_archive.as_pandas(include_solutions=True)
-        obj_dataframe.to_csv(f"obj_archive_{i}.csv", index=False)
-
-        pred_dataframe = pred_archive.as_pandas(include_solutions=True)
-        pred_dataframe.to_csv(f"pred_archive_{i}.csv", index=False)
-
-        verified_obj_archive, unverified_obj_archive, pred_error_archive, perc_invalid_elites = verify_prediction_archive(pred_dataframe)
-
-        verified_obj_dataframe = verified_obj_archive.as_pandas(include_solutions=True)
-        verified_obj_dataframe.to_csv(f"verified_obj_archive_{i}.csv", index=False)
-
-        unverified_obj_dataframe = verified_obj_archive.as_pandas(include_solutions=True)
-        unverified_obj_dataframe.to_csv(f"unverified_obj_archive_{i}.csv", index=False)
-
-        pred_error_dataframe = pred_error_archive.as_pandas(include_solutions=True)
-        pred_error_dataframe.to_csv(f"pred_error_archive_{i}.csv", index=False)
-
-        mse = np.mean(pred_error_dataframe["objective"])
-        mse_array = np.append(mse_array, mse)
-
-        print("Verfied Obj QD Score: " +  str(acq_archive.stats.qd_score))
-        qd_score = np.sum(verified_obj_dataframe.loc[:, "objective"])
-        qd_score_array = np.append(qd_score_array, qd_score)
-
-        # copy files to windows directory for usage in Rstudio
-        subprocess.run(f"cp obj_archive_{i}.csv pred_archive_{i}.csv verified_obj_archive_{i}.csv pred_error_archive_{i}.csv unverified_obj_archive_{i}.csv /mnt/c/Users/patri/Desktop/Thesis/archives_xfoil", shell=True, check=True)
-
-        # pack all data from the current iteration into one dictionary
-        run_data = {
-            "pred_dataframe": pred_dataframe.to_json(orient="split"),
-            "verified_obj_dataframe": verified_obj_dataframe.to_json(orient="split"),
-            "unverified_obj_dataframe": unverified_obj_dataframe.to_json(orient="split"),
-            "pred_error_dataframe": pred_error_dataframe.to_json(orient="split"),
-            "mse": mse,
-            "perc_invalid_elites": perc_invalid_elites,
-            "qd_score": qd_score
-        }
-
-        data[f"run"] = run_data
-
-        with open(f"run_data_{i}.json", "w") as json_file:
-            json.dump(data, json_file, indent=4)
-
-        # with open(f"classifier_data_{i}.json", "w") as json_file:
-        #     json.dump(classifier_data, json_file, indent=4)
-
-        run_data = {}
-        data = {}
+        obj_archive, pred_archive = sail(i, sail_custom_flag=True)
+        mse_custom, qd_custom, perc_invalid = store_benchmark_data(i, obj_archive, pred_archive, sail_vanilla_flag=True)
+        mse_custom_array = np.append(mse_custom_array, mse_custom)
+        qd_custom_array = np.append(qd_custom_array, qd_custom)
+        percent_invalid_custom = np.append(percent_invalid_custom, perc_invalid)
         obj_archive.clear()
-        acq_archive.clear()
         pred_archive.clear()
-        verified_obj_archive.clear()
-        unverified_obj_archive.clear()
-        pred_error_archive.clear()
 
-        pprint(mse_array)
-        pprint(qd_score_array)
+        obj_archive, pred_archive = sail(i, sail_vanilla_flag=True)
+        mse_vanilla, qd_vanilla, perc_invalid = store_benchmark_data(i, obj_archive, pred_archive, sail_vanilla_flag=True)
+        mse_vanilla_array = np.append(mse_vanilla_array, mse_vanilla)
+        qd_vanilla_array = np.append(qd_vanilla_array, qd_vanilla)
+        percent_invalid_vanilla = np.append(percent_invalid_vanilla, perc_invalid)
+        obj_archive.clear()
+        pred_archive.clear()
+
+        obj_archive, pred_archive = sail(i, sail_random_flag=True)
+        mse_random, qd_random, perc_invalid = store_benchmark_data(i, obj_archive, pred_archive, sail_random_flag=True)
+        mse_random_array = np.append(mse_random_array, mse_random)
+        qd_random_array = np.append(qd_random_array, qd_random)
+        percent_invalid_random = np.append(percent_invalid_random, perc_invalid)
+        obj_archive.clear()
+        pred_archive.clear()
+
+        pprint_fstring(mse_custom_array, mse_vanilla_array, mse_random_array)
+        pprint_fstring(qd_custom_array, qd_vanilla_array, qd_random_array)
+        pprint_fstring(percent_invalid_custom, percent_invalid_vanilla, percent_invalid_random)
+
+        gc.collect()
 
     subprocess.run(f"rm *.log *.dat", shell=True)
     subprocess.run(f"mv *.csv csv", shell=True)

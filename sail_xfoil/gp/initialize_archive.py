@@ -51,7 +51,7 @@ def initialize_archive(archive: GridArchive, seed: int):
         scale_samples(samples)                  # sobol samples produce values between [0;1]
 
         valid_indices, surface_area_batch = generate_parsec_coordinates(samples)
-        convergence_errors, success_indices, obj_batch = xfoil(iterations=BATCH_SIZE, surface_area_batch=surface_area_batch)
+        convergence_errors, success_indices, obj_batch = xfoil(iterations=BATCH_SIZE)
         print("\n\nAirfoil Convergence Errors: " + str(convergence_errors))
         print('Success Indices:  '+str(success_indices))
 

@@ -19,7 +19,8 @@ def pprint(variable):
 
     print("\n Name: " + str(variable_name))
     print(" Type: " + str(type(variable)))
-    print("Shape: " + str(variable.shape))
+    if isinstance(variable, np.ndarray):
+        print("Shape: " + str(variable.shape))
     print(variable)
     print()
     return
@@ -53,15 +54,16 @@ def pprint_fstring(ndarray1, ndarray2 = None, ndarray3 = None):
         format_string = "\n".join(["\t".join(map(str, row)) for row in ndarray1])
         format_string = "\n".join(["\t".join([f"{value:.4f}" for value in row]) for row in ndarray1])
     if ndarray3 is None:
-        fstring_names = f"{name_ndarray1}:\t{name_ndarray2}:"
+        fstring_names = f"{name_ndarray1}:\t\t{name_ndarray2}:"
         stacked_arrays = np.column_stack((ndarray1, ndarray2))
         format_string = "\n".join(["\t".join(map(str, row)) for row in stacked_arrays])
-        format_string = "\n".join(["\t\t".join([f"{value:.4f}" for value in row]) for row in stacked_arrays])
+        format_string = "\n".join(["\t\t\t".join([f"{value:.4f}" for value in row]) for row in stacked_arrays])
     else:
         fstring_names = f"{name_ndarray1}:\t{name_ndarray2}:\t{name_ndarray3}:"
         stacked_arrays = np.column_stack((ndarray1, ndarray2, ndarray3))
         format_string = "\n".join(["\t".join(map(str, row)) for row in stacked_arrays])
-        format_string = "\n".join(["\t\t".join([f"{value:.4f}" for value in row]) for row in stacked_arrays])
+        format_string = "\n".join(["\t\t\t".join([f"{value:.4f}" for value in row]) for row in stacked_arrays])
+
 
     print("\n" + fstring_names + "\n" + format_string + "\n")
 

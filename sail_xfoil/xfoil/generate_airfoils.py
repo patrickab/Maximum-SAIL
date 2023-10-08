@@ -67,6 +67,11 @@ def generate_parsec_coordinates(samples, xte=1.0): # 'x trailing edge'
     input:      samples (scaled to solution space boundaries)
     output:     .txt file with (x,y) coordinates
     """
+    
+    n_samples = samples.shape[0]
+    
+    if n_samples != BATCH_SIZE:
+        print("### GENERATE PARSEC: n_samples != BATCH_SIZE ###")
 
     upper_polynomial_coefficients, lower_polynomial_coefficients = generate_polynomial_coefficients(samples)
 
