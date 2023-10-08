@@ -56,6 +56,7 @@ def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_ran
 
     print("\n\n ## Exit Acquisition Loop ##")
     print(" ## Enter Prediction Loop ##\n\n")
+    pred_archive.add([elite.solution for elite in obj_archive], [elite.objective for elite in obj_archive], [elite.measure for elite in obj_archive])
     pred_emitter = define_emitter(init_solutions=[elite.solution for elite in obj_archive], archive=pred_archive, seed=seed)
     pred_archive, _ = map_elites(pred_archive, pred_emitter, gp_model, PRED_N_EVALS, predict_objective)
     _.clear()

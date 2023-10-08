@@ -65,7 +65,8 @@ def maximize_acq_improvement(new_elite_archive, old_elites):
         improved_elites['behavior'])), 
         dtype=[('solution', object), ('acquisition_improvement', float), ('behavior', object)])
     
-    max_acq_improvement_elites = np.flip(np.sort(max_acq_improvement_elites, order='acquisition_improvement'))
+    max_acq_improvement_elites = max_acq_improvement_elites[np.argsort(max_acq_improvement_elites['acquisition_improvement'])]
+    max_acq_improvement_elites = np.flip(max_acq_improvement_elites)
     new_elites = np.array(list(zip(new_elites['solution'], new_elites['acquisition'], new_elites['behavior'])), dtype=[('solution', object), ('acquisition_improvement', float), ('behavior', object)])
 
     return max_acq_improvement_elites, new_elites
