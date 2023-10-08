@@ -11,7 +11,6 @@ from xfoil.simulate_airfoils import xfoil
 from xfoil.generate_airfoils import generate_parsec_coordinates
 from acq_functions.acq_ucb import acq_ucb
 from utils.pprint_nd import pprint, pprint_fstring
-from sail import sail
 
 ###### Configurable Variables ######
 from config.config import Config
@@ -27,25 +26,6 @@ BHV_NUMBER_BINS = config.BHV_NUMBER_BINS
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 TEST_RUNS = config.TEST_RUNS
 BHV_DIMENSION = config.BHV_DIMENSION
-
-
-def benchmark_sail(i, flag, mse_array, qd_array, percent_invalid_array):
-
-    obj_archive, pred_archive = sail(i, flag)
-
-    mse, qd, perc_invalid = store_benchmark_data(i, obj_archive, pred_archive, flag)
-
-    mse_array = np.append(mse_array, mse)
-    qd_array = np.append(qd_array, qd)
-    percent_invalid_array = np.append(percent_invalid_array, perc_invalid)
-
-    obj_archive.clear()
-    pred_archive.clear()
-
-    gc.collect()
-
-    return mse_array, qd_array, percent_invalid_array
-
 
 
 def store_benchmark_data(i, obj_archive, pred_archive, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False):

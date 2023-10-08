@@ -11,54 +11,62 @@ BHV_VALUE_RANGE = [(0.2625,0.6875), (0.0725,0.1875)]
 
 numpy.set_printoptions(precision=4, suppress=True, floatmode='fixed', linewidth=120)
 
-def main():
+def main(benchmark_domain: str):
 
-    comb_obj = GridArchive(
-        solution_dim=SOL_DIMENSION,
-        dims=BHV_NUMBER_BINS,
-        ranges=BHV_VALUE_RANGE,
-        qd_score_offset=-600,
-        threshold_min = -1
-    )
+    objective_archive, pred_error_archive, unverified_predictions, verified_predictions = define_archives()
 
-    comb_pred_error = GridArchive(
-        solution_dim=SOL_DIMENSION,
-        dims=BHV_NUMBER_BINS,
-        ranges=BHV_VALUE_RANGE,
-        qd_score_offset=-600,
-        threshold_min = -1
-    )
+    objective_archive = convert_csv_to_archive(f'combined_obj_{benchmark_domain}.csv', objective_archive)
+    pred_error_archive = convert_csv_to_archive(f'combined_pred_error_{benchmark_domain}.csv', pred_error_archive)
+    verified_predictions = convert_csv_to_archive(f'combined_verified_obj_{benchmark_domain}.csv', verified_predictions)
+    unverified_predictions = convert_csv_to_archive(f'combined_unverified_obj_{benchmark_domain}.csv', unverified_predictions)
 
-    comb_unverified_obj = GridArchive(
-        solution_dim=SOL_DIMENSION,
-        dims=BHV_NUMBER_BINS,
-        ranges=BHV_VALUE_RANGE,
-        qd_score_offset=-600,
-        threshold_min = -1
-    )
-    
-    comb_verified_obj = GridArchive(
-        solution_dim=SOL_DIMENSION,
-        dims=BHV_NUMBER_BINS,
-        ranges=BHV_VALUE_RANGE,
-        qd_score_offset=-600,
-        threshold_min = -1
-    )
+    max_obj, max_pred_error, max_verified_obj, max_unverified_obj = determine_elite_argmax("custom", "vanilla", "random")
 
-    comb_obj = convert_csv_to_archive('combined_obj.csv', comb_obj)
-    comb_pred_error = convert_csv_to_archive('combined_pred_error.csv', comb_pred_error)
-    comb_verified_obj = convert_csv_to_archive('combined_verified_obj.csv', comb_verified_obj)
-    comb_unverified_obj = convert_csv_to_archive('combined_unverified_obj.csv', comb_unverified_obj)
+    visualize_archive(objective_archive, benchmark_domain, max_obj)
+    visualize_archive(pred_error_archive, benchmark_domain, max_pred_error)
+    visualize_archive(verified_predictions, benchmark_domain, max_verified_obj)
+    visualize_archive(unverified_predictions, benchmark_domain, max_unverified_obj)   
 
 
+def determine_elite_argmax(benchmark_domain_1: str, benchmark_domain_2: str, benchmark_domain_3: str):
+    """Determine maximum objectives for all archives in all domains to ensure comparable colorscaling"""
 
-    visualize_archive(comb_obj)
-    visualize_archive(comb_pred_error)
-    visualize_archive(comb_unverified_obj)
-    visualize_archive(comb_verified_obj)   
+    benchmark_domains = [benchmark_domain_1, benchmark_domain_2, benchmark_domain_3]
+    archives = ["objective_archive", "pred_error_archive", "verified_predictions", "unverified_predictions"]
+    max_obj = 0
+    max_pred_error = 0
+    max_verified_obj = 0
+    max_unverified_obj = 0
+
+    for domain in benchmark_domains:
+        objective_archive, pred_error_archive, unverified_predictions, verified_predictions = define_archives()
+        objective_archive = convert_csv_to_archive(f'combined_obj_{domain}.csv', objective_archive)
+        pred_error_archive = convert_csv_to_archive(f'combined_pred_error_{domain}.csv', pred_error_archive)
+        verified_predictions = convert_csv_to_archive(f'combined_verified_obj_{domain}.csv', verified_predictions)
+        unverified_predictions = convert_csv_to_archive(f'combined_unverified_obj_{domain}.csv', unverified_predictions)
 
 
-def visualize_archive(archive):
+        archive_max_obj = objective_archive.best_elite[1]
+        max_obj = max(max_obj, archive_max_obj)
+
+        archive_max_pred_error = pred_error_archive.best_elite[1]
+        # very high prediction errors result in bad plots
+        if archive_max_pred_error < 1:
+            max_pred_error = max(max_pred_error, archive_max_pred_error)
+        else:
+            max_pred_error = max(max_pred_error, 1)
+            print(f"### Max Prediction Error in {domain}: {archive_max_pred_error}")
+
+        archive_max_verified_obj = verified_predictions.best_elite[1]
+        max_verified_obj = max(max_verified_obj, archive_max_verified_obj)
+
+        archive_max_unverified_obj = unverified_predictions.best_elite[1]
+        max_unverified_obj = max(max_unverified_obj, archive_max_unverified_obj)
+
+    return max_obj, max_pred_error, max_verified_obj, max_unverified_obj
+
+
+def visualize_archive(archive, benckmark_domain: str, max_obj: float):
 
 
     frame = inspect.currentframe().f_back
@@ -72,11 +80,11 @@ def visualize_archive(archive):
     print(f"Elites in {archive_name}:  " + str(archive.stats.num_elites))
 
     fig, ax = plt.subplots(figsize=(8, 8))
-    grid_archive_heatmap(archive, ax=ax)
-    plt.xlabel("Dimension 1")
-    plt.ylabel("Dimension 2")
-    plt.title(f"Grid Archive Heatmap ({archive_name})")
-    fig.savefig(f"{archive_name}_heatmap.png")
+    grid_archive_heatmap(archive, ax=ax, vmin=0, vmax=max_obj)
+    plt.xlabel("X Up")
+    plt.ylabel("Z Up")
+    plt.title(f"Heatmap: ({benckmark_domain} ,{archive_name})")
+    fig.savefig(f"{benckmark_domain}_{archive_name}_heatmap.png")
 
 
 def convert_csv_to_archive(filename, archive):
@@ -118,5 +126,43 @@ def pprint(variable):
     return
 
 
+def define_archives():
+    objective_archive = GridArchive(
+        solution_dim=SOL_DIMENSION,
+        dims=BHV_NUMBER_BINS,
+        ranges=BHV_VALUE_RANGE,
+        qd_score_offset=-600,
+        threshold_min = -1
+    )
+
+    pred_error_archive = GridArchive(
+        solution_dim=SOL_DIMENSION,
+        dims=BHV_NUMBER_BINS,
+        ranges=BHV_VALUE_RANGE,
+        qd_score_offset=-600,
+        threshold_min = -1
+    )
+
+    unverified_predictions = GridArchive(
+        solution_dim=SOL_DIMENSION,
+        dims=BHV_NUMBER_BINS,
+        ranges=BHV_VALUE_RANGE,
+        qd_score_offset=-600,
+        threshold_min = -1
+    )
+            
+    verified_predictions = GridArchive(
+        solution_dim=SOL_DIMENSION,
+        dims=BHV_NUMBER_BINS,
+        ranges=BHV_VALUE_RANGE,
+        qd_score_offset=-600,
+        threshold_min = -1
+    )
+
+    return objective_archive, pred_error_archive, unverified_predictions, verified_predictions
+
+
 if __name__ == '__main__':
-    main()
+    main("custom")
+    main("vanilla")
+    main("random")
