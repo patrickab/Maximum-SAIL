@@ -146,7 +146,7 @@ def calculate_obj_seed(drag, lift, surface_area):
 def calculate_obj(drag, lift):
 
     # for some reason the authors calculate logarithm of drag
-    obj = -numpy.log(drag/lift)
+    obj = -numpy.log(drag) * lift
     return obj
 
 
