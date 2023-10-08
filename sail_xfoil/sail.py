@@ -4,16 +4,11 @@ import subprocess
 import time
 import gc
 from ribs.emitters import GaussianEmitter
-from ribs.archives import GridArchive
-
-from memory_profiler import profile
-
 
 ###### Import Custom Scripts ######
 from utils.while_loops import sail_vanilla, sail_custom, sail_random
-from utils.benchmark_utils import store_benchmark_data
-from utils.utils import define_archives
-from acq_functions.acq_ucb import acq_ucb
+from utils.benchmark_utils import benchmark_sail
+from utils.utils import define_archives, define_emitter
 from gp.initialize_archive import initialize_archive
 from gp.fit_gp_model import fit_gp_model
 from gp.predict_objective import predict_objective
@@ -57,9 +52,9 @@ def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_ran
     sol_array = np.array(init_solutions)
     obj_array = np.array(init_obj_evals)
 
+
     print("\n ## Exit Initialization ##")
     print(" ## Enter Acquisition Loop ##\n\n")
-
     if sail_vanilla_flag:
         obj_archive, gp_model = sail_vanilla(acq_archive, obj_archive, gp_model, sol_array, obj_array)
         gc.collect()
@@ -70,21 +65,12 @@ def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_ran
         obj_archive, gp_model = sail_random(acq_archive, obj_archive, gp_model, sol_array, obj_array)
         gc.collect()
 
+
     print("\n\n ## Exit Acquisition Loop ##")
     print(" ## Enter Prediction Loop ##\n\n")
-
-
-    pred_emitter = [
-        GaussianEmitter(
-        archive=obj_archive,
-        sigma=0.5,
-        bounds=SOL_VALUE_RANGE,
-        batch_size=BATCH_SIZE,
-        initial_solutions=[elite.solution for elite in obj_archive],
-        seed=seed
-    )]
-
+    pred_emitter = define_emitter(init_solutions=[elite.solution for elite in obj_archive], pred_archive=pred_archive, seed=seed)
     pred_archive, new_elites = map_elites(pred_archive, pred_emitter, gp_model, PRED_N_EVALS, predict_objective)
+
 
     print("[...] Terminate sail()")
     gc.collect()
@@ -96,53 +82,17 @@ if __name__ == "__main__":
 
     exec_start = time.time()
 
-    mse_vanilla_array = np.empty(0, dtype=dtype)
-    qd_vanilla_array = np.empty(0, dtype=dtype) # referring to verified_obj_archive
-    percent_invalid_vanilla = np.empty(0, dtype=dtype) # predicted elites, that did not converge in xfoil
-
-    mse_custom_array = np.empty(0, dtype=dtype)
-    qd_custom_array = np.empty(0, dtype=dtype) # referring to verified_obj_archive
-    percent_invalid_custom = np.empty(0, dtype=dtype) # predicted elites, that did not converge in xfoil
-
-    mse_random_array = np.empty(0, dtype=dtype)
-    qd_random_array = np.empty(0, dtype=dtype) # referring to verified_obj_archive
-    percent_invalid_random = np.empty(0, dtype=dtype) # predicted elites, that did not converge in xfoil
+    mse_custom_array, qd_custom_array, percent_invalid_custom = np.empty(0, dtype=dtype), np.empty(0, dtype=dtype), np.empty(0, dtype=dtype)
+    mse_vanilla_array, qd_vanilla_array, percent_invalid_vanilla = np.empty(0, dtype=dtype), np.empty(0, dtype=dtype), np.empty(0, dtype=dtype)
+    mse_random_array, qd_random_array, percent_invalid_random = np.empty(0, dtype=dtype), np.empty(0, dtype=dtype), np.empty(0, dtype=dtype)
 
     for i in range(TEST_RUNS):
 
         gc.collect()
-
-        data = {}
-
-        obj_archive, pred_archive = sail(i, sail_custom_flag=True)
-        mse_custom, qd_custom, perc_invalid = store_benchmark_data(i, obj_archive, pred_archive, sail_custom_flag=True)
-        mse_custom_array = np.append(mse_custom_array, mse_custom)
-        qd_custom_array = np.append(qd_custom_array, qd_custom)
-        percent_invalid_custom = np.append(percent_invalid_custom, perc_invalid)
-        obj_archive.clear()
-        pred_archive.clear()
-
-        gc.collect()
-
-        obj_archive, pred_archive = sail(i, sail_vanilla_flag=True)
-        mse_vanilla, qd_vanilla, perc_invalid = store_benchmark_data(i, obj_archive, pred_archive, sail_vanilla_flag=True)
-        mse_vanilla_array = np.append(mse_vanilla_array, mse_vanilla)
-        qd_vanilla_array = np.append(qd_vanilla_array, qd_vanilla)
-        percent_invalid_vanilla = np.append(percent_invalid_vanilla, perc_invalid)
-        obj_archive.clear()
-        pred_archive.clear()
-
-        gc.collect()
-
-        obj_archive, pred_archive = sail(i, sail_random_flag=True)
-        mse_random, qd_random, perc_invalid = store_benchmark_data(i, obj_archive, pred_archive, sail_random_flag=True)
-        mse_random_array = np.append(mse_random_array, mse_random)
-        qd_random_array = np.append(qd_random_array, qd_random)
-        percent_invalid_random = np.append(percent_invalid_random, perc_invalid)
-        obj_archive.clear()
-        pred_archive.clear()
-
-        gc.collect()
+        
+        mse_custom_array, qd_custom_array, percent_invalid_custom = benchmark_sail(i, sail_custom_flag=True, mse_array=mse_custom_array, qd_array=qd_custom_array, percent_invalid_array=percent_invalid_custom)
+        mse_vanilla_array, qd_vanilla_array, percent_invalid_vanilla = benchmark_sail(i, sail_vanilla_flag=True, mse_array=mse_vanilla_array, qd_array=qd_vanilla_array, percent_invalid_array=percent_invalid_vanilla)
+        mse_random_array, qd_random_array, percent_invalid_random = benchmark_sail(i, sail_random_flag=True, mse_array=mse_random_array, qd_array=qd_random_array, percent_invalid_array=percent_invalid_random)
 
         pprint_fstring(mse_custom_array, mse_vanilla_array, mse_random_array)
         pprint_fstring(qd_custom_array, qd_vanilla_array, qd_random_array)

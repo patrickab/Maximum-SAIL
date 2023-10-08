@@ -1,5 +1,7 @@
 import os
+import numpy as np
 from ribs.archives import GridArchive
+from ribs.emitters import GaussianEmitter
 
 ### Global Parameters ###
 from config.config import Config
@@ -8,6 +10,8 @@ SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 SOL_DIMENSION = config.SOL_DIMENSION
 BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 BHV_NUMBER_BINS = config.BHV_NUMBER_BINS
+BATCH_SIZE = config.BATCH_SIZE
+SIGMA_EMITTER = config.SIGMA_EMITTER
 
 
 # elite_status_vector = archive.add(acq_elites, obj_evals, bhv_evals)
@@ -68,3 +72,21 @@ def define_archives(initial_seed):
         )
     
     return obj_archive, acq_archive, pred_archive
+
+
+def define_emitter(init_solutions, archive, seed, sol_value_range=None):
+
+    if sol_value_range is None:
+        sol_value_range = SOL_VALUE_RANGE
+
+    emitter = [
+        GaussianEmitter(
+        archive=archive,
+        sigma=SIGMA_EMITTER,
+        bounds= np.array(sol_value_range),
+        batch_size=BATCH_SIZE,
+        initial_solutions=init_solutions,
+        seed=seed
+    )]
+
+    return emitter

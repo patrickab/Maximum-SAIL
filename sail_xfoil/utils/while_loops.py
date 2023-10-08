@@ -44,7 +44,7 @@ def store_n_best_elites(archive, n, update_acq=True, gp_model=None):
 
 def sail_custom(acq_archive, obj_archive, gp_model, sol_array, obj_array):
 
-    acq_emitter = define_emitter(obj_archive, acq_archive, gp_model, seed=0)
+    acq_emitter = define_acq_emitter(obj_archive, acq_archive, gp_model, seed=0)
 
     eval_budget = ACQ_N_OBJ_EVALS
     while(eval_budget >= BATCH_SIZE):
@@ -95,7 +95,7 @@ def sail_custom(acq_archive, obj_archive, gp_model, sol_array, obj_array):
 
 def sail_vanilla(acq_archive, obj_archive, gp_model, sol_array, obj_array):
 
-    acq_emitter = define_emitter(obj_archive, acq_archive, gp_model, seed=0)
+    acq_emitter = define_acq_emitter(obj_archive, acq_archive, gp_model, seed=0)
 
     eval_budget = ACQ_N_OBJ_EVALS
     while(eval_budget >= BATCH_SIZE):
@@ -163,7 +163,7 @@ def sail_random(acq_archive, obj_archive, gp_model, acq_emitter, sol_array, obj_
     return obj_archive, gp_model
 
 
-def define_emitter(obj_archive, acq_archive, gp_model, seed):
+def define_acq_emitter(obj_archive, acq_archive, gp_model, seed):
 
     obj_elites = np.array([elite.solution for elite in obj_archive])
     obj_elites_acq = acq_ucb(obj_elites, gp_model)
