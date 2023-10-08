@@ -94,9 +94,6 @@ def sail_custom(acq_archive: GridArchive, obj_archive: GridArchive, gp_model, so
         acq_archive = store_n_best_elites(acq_archive, obj_archive.stats.num_elites, update_acq=True, gp_model=gp_model, obj_archive=obj_archive)
 
         old_elites = np.array([(elite.solution, elite.index, elite.objective, elite.measures) for elite in acq_archive], dtype=[('solution', object), ('index', int), ('acquisition', float), ('behavior', object)])
-        print(acq_archive)
-
-        # q: how can i access solutions inside old_elitesss by using stringsearch, eg "old_elitesss['solution']"?
 
         acq_archive, new_elite_archive = map_elites(acq_archive, acq_emitter, gp_model, ACQ_N_MAP_EVALS, acq_ucb)
         max_acq_improvement_elites, new_elites = maximize_acq_improvement(new_elite_archive, old_elites)
@@ -128,7 +125,8 @@ def sail_custom(acq_archive: GridArchive, obj_archive: GridArchive, gp_model, so
                 max_acq_improvement_elites = np.concatenate((max_acq_improvement_elites, max_acq_improvement_elites_2, new_elites_2), axis=0) # code doesnt ensure that behaviorally different elites are selected - same bin can be selected multiple times
 
         # select BATCH_SIZE acqisition elites, sorted by acquisition improvement
-        max_acq_improvement_elites = np.flip(np.sort(max_acq_improvement_elites, order='acquisition_improvement'))
+        max_acq_improvement_elites = max_acq_improvement_elites[np.argsort(max_acq_improvement_elites['acquisition_improvement'])]
+        max_acq_improvement_elites = np.flip(max_acq_improvement_elites)
         max_acq_improvement_elites = max_acq_improvement_elites[:BATCH_SIZE]
 
         new_elite_solutions = np.vstack(max_acq_improvement_elites['solution'])
@@ -149,9 +147,9 @@ def sail_custom(acq_archive: GridArchive, obj_archive: GridArchive, gp_model, so
         print("Obj Elites: " + str(obj_archive.stats.num_elites))
         # investigate why obj archive grows too fast
         status_vector, value_vector = obj_archive.add(new_elite_solutions[success_indices], new_elites_objectives, new_elite_measures[success_indices])
-        total_improvements += np.sum(status_vector)
+        total_improvements += np.sum(status_vector > 0)
         print("Total Improvements: " + str(total_improvements))
-        print("Percentage Improvements: " + str((total_improvements/BATCH_SIZE)*100) + "%")
+        print("Percentage Improvements: " + str((total_improvements/(ACQ_N_OBJ_EVALS-eval_budget))*100) + "%")
         print("Status Vector: " + str(status_vector))
         pprint_fstring(acquisition_improvement, new_elites_objectives)
         print("New Acq Elites: " + str(new_elite_archive.stats.num_elites))
