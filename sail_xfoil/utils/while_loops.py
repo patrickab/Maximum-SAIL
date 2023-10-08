@@ -1,5 +1,6 @@
 ###### Archive packages #####
 from ribs.archives import GridArchive
+from ribs.emitters import GaussianEmitter
 from numpy import float64
 import numpy as np
 import subprocess
@@ -20,15 +21,10 @@ from config.config import Config
 config = Config('config/config.ini')
 ACQ_N_OBJ_EVALS = config.ACQ_N_OBJ_EVALS
 ACQ_N_MAP_EVALS = config.ACQ_N_MAP_EVALS
-PRED_N_EVALS = config.PRED_N_EVALS
 BATCH_SIZE = config.BATCH_SIZE
 SOL_DIMENSION = config.SOL_DIMENSION
-BHV_ARCHIVE_DIMENSION = config.BHV_ARCHIVE_DIMENSION
-BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
-BHV_NUMBER_BINS = config.BHV_NUMBER_BINS
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
-TEST_RUNS = config.TEST_RUNS
-BHV_DIMENSION = config.BHV_DIMENSION
+SIGMA_EMITTER = config.SIGMA_EMITTER
 
 
 def store_n_best_elites(archive, n, update_acq=True, gp_model=None):
@@ -46,7 +42,10 @@ def store_n_best_elites(archive, n, update_acq=True, gp_model=None):
     return archive
 
 
-def sail_custom(acq_archive, obj_archive, gp_model, acq_emitter, sol_array, obj_array):
+def sail_custom(acq_archive, obj_archive, gp_model, sol_array, obj_array):
+
+    acq_emitter = define_emitter(obj_archive, acq_archive, gp_model, seed=0)
+
     eval_budget = ACQ_N_OBJ_EVALS
     while(eval_budget >= BATCH_SIZE):
 
@@ -94,7 +93,10 @@ def sail_custom(acq_archive, obj_archive, gp_model, acq_emitter, sol_array, obj_
     return obj_archive, gp_model
     
 
-def sail_vanilla(acq_archive, obj_archive, gp_model, acq_emitter, sol_array, obj_array):
+def sail_vanilla(acq_archive, obj_archive, gp_model, sol_array, obj_array):
+
+    acq_emitter = define_emitter(obj_archive, acq_archive, gp_model, seed=0)
+
     eval_budget = ACQ_N_OBJ_EVALS
     while(eval_budget >= BATCH_SIZE):
         eval_budget -= BATCH_SIZE
@@ -159,3 +161,24 @@ def sail_random(acq_archive, obj_archive, gp_model, acq_emitter, sol_array, obj_
         print("Remaining Random Search Obj Evals: " + str(eval_budget) + "\n\n")
 
     return obj_archive, gp_model
+
+
+def define_emitter(obj_archive, acq_archive, gp_model, seed):
+
+    obj_elites = np.array([elite.solution for elite in obj_archive])
+    obj_elites_acq = acq_ucb(obj_elites, gp_model)
+    obj_elites_measures = np.array([elite.measures for elite in obj_archive])
+
+    acq_archive.add(obj_elites, obj_elites_acq, obj_elites_measures)
+
+    emitter = [
+        GaussianEmitter(
+        archive=acq_archive,
+        sigma=SIGMA_EMITTER,
+        bounds= np.array(SOL_VALUE_RANGE),
+        batch_size=BATCH_SIZE,
+        initial_solutions=obj_elites, # these solutions are never used, as the archive is never empty - however, specification is required for initializing the GaussianEmitter class
+        seed=seed
+    )]
+
+    return emitter

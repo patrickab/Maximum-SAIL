@@ -48,7 +48,7 @@ def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_ran
     print("Initialize sail() [...]")
 
     seed = initial_seed+10
-    
+
     obj_archive, acq_archive, pred_archive = define_archives(seed)
     obj_archive, init_solutions, init_obj_evals = initialize_archive(obj_archive, seed)
 
@@ -57,33 +57,17 @@ def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_ran
     sol_array = np.array(init_solutions)
     obj_array = np.array(init_obj_evals)
 
-    obj_elites = np.array([elite.solution for elite in obj_archive])
-    obj_elites_acq = acq_ucb(obj_elites, gp_model)
-    obj_elites_measures = np.array([elite.measures for elite in obj_archive])
-
-    acq_archive.add(obj_elites, obj_elites_acq, obj_elites_measures)
-
-    acq_emitter = [
-        GaussianEmitter(
-        archive=acq_archive,
-        sigma=SIGMA_EMITTER,
-        bounds= np.array(SOL_VALUE_RANGE),
-        batch_size=BATCH_SIZE,
-        initial_solutions=init_solutions, # these solutions are never used, as the archive is never empty - however, specification is required for initializing the GaussianEmitter class
-        seed=seed
-    )]
-
     print("\n ## Exit Initialization ##")
     print(" ## Enter Acquisition Loop ##\n\n")
 
     if sail_vanilla_flag:
-        obj_archive, gp_model = sail_vanilla(acq_archive, obj_archive, gp_model, acq_emitter, sol_array, obj_array)
+        obj_archive, gp_model = sail_vanilla(acq_archive, obj_archive, gp_model, sol_array, obj_array)
         gc.collect()
     if sail_custom_flag:
-        obj_archive, gp_model = sail_custom(acq_archive, obj_archive, gp_model, acq_emitter, sol_array, obj_array)
+        obj_archive, gp_model = sail_custom(acq_archive, obj_archive, gp_model, sol_array, obj_array)
         gc.collect()
     if sail_random_flag:
-        obj_archive, gp_model = sail_random(acq_archive, obj_archive, gp_model, acq_emitter, sol_array, obj_array)
+        obj_archive, gp_model = sail_random(acq_archive, obj_archive, gp_model, sol_array, obj_array)
         gc.collect()
 
     print("\n\n ## Exit Acquisition Loop ##")
