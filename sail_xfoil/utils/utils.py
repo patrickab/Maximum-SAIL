@@ -3,6 +3,10 @@ import numpy as np
 from ribs.archives import GridArchive
 from ribs.emitters import GaussianEmitter
 
+### Custom Scripts ###
+from xfoil.simulate_airfoils import xfoil
+from xfoil.generate_airfoils import generate_parsec_coordinates
+
 ### Global Parameters ###
 from config.config import Config
 config = Config(os.path.join(os.path.dirname(__file__), '../config', 'config.ini'))
@@ -74,7 +78,7 @@ def define_archives(initial_seed):
     return obj_archive, acq_archive, pred_archive
 
 
-def define_emitter(init_solutions, archive, seed, sol_value_range=None):
+def generate_emitter(init_solutions, archive, seed, sol_value_range=None):
 
     if sol_value_range is None:
         sol_value_range = SOL_VALUE_RANGE
@@ -90,3 +94,27 @@ def define_emitter(init_solutions, archive, seed, sol_value_range=None):
     )]
 
     return emitter
+
+
+def eval_xfoil_loop(samples):
+    """
+    XFOIL evaluation is performed in Batches of BATCH_SIZE
+        Therefore, if n_samples != BATCH_SIZE, 
+        samples need to be evaluated in a loop
+
+    input:
+        samples     Type: ndarrayn_samples      Shape: (n_samples, SOL_DIMENSION)
+    """
+        
+    for index in range(0 ,samples.shape[0], BATCH_SIZE):
+        generate_parsec_coordinates(samples[index:BATCH_SIZE])
+
+        n_solutions = len(samples[index:BATCH_SIZE])
+        _, success_indices, new_elite_objectives = xfoil(n_solutions)
+
+        converged_sol = samples[index:BATCH_SIZE][success_indices]
+        converged_bhv = samples[index:BATCH_SIZE][success_indices]
+
+        conv_sol = np.concatenate(conv_sol, converged_sol) if conv_sol.size else converged_sol # if conv_sol is empty, initialize it with converged_sol
+        conv_obj = np.concatenate(conv_obj, new_elite_objectives) if conv_obj.size else new_elite_objectives
+        conv_bhv = np.concatenate(conv_bhv, converged_bhv) if conv_bhv.size else converged_bhv
