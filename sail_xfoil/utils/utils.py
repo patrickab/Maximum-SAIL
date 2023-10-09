@@ -78,7 +78,7 @@ def define_archives(initial_seed):
     return obj_archive, acq_archive, pred_archive
 
 
-def generate_emitter(init_solutions, archive, seed, sol_value_range=None):
+def generate_emitter(init_solutions, archive, seed, sigma_emitter=SIGMA_EMITTER, sol_value_range=None):
 
     if sol_value_range is None:
         sol_value_range = SOL_VALUE_RANGE
@@ -86,7 +86,7 @@ def generate_emitter(init_solutions, archive, seed, sol_value_range=None):
     emitter = [
         GaussianEmitter(
         archive=archive,
-        sigma=SIGMA_EMITTER,
+        sigma=sigma_emitter,
         bounds= np.array(sol_value_range),
         batch_size=BATCH_SIZE,
         initial_solutions=init_solutions,
@@ -110,7 +110,7 @@ def eval_xfoil_loop(samples, behavior):
     conv_bhv = np.empty(0)
         
     for index in range(0 ,samples.shape[0], BATCH_SIZE):
-        generate_parsec_coordinates(samples[index:BATCH_SIZE])
+        generate_parsec_coordinates(samples[index:index+BATCH_SIZE])
 
         n_solutions = len(samples[index:BATCH_SIZE])
         _, success_indices, new_elite_objectives = xfoil(n_solutions)
@@ -118,8 +118,9 @@ def eval_xfoil_loop(samples, behavior):
         converged_sol = samples[index:BATCH_SIZE][success_indices]
         converged_bhv = behavior[index:BATCH_SIZE][success_indices]
 
-        conv_sol = np.concatenate(conv_sol, converged_sol) if conv_sol.size else converged_sol # if conv_sol is empty, initialize it with converged_sol
-        conv_obj = np.concatenate(conv_obj, new_elite_objectives) if conv_obj.size else new_elite_objectives
-        conv_bhv = np.concatenate(conv_bhv, converged_bhv) if conv_bhv.size else converged_bhv
+        if converged_sol.shape[0] != 0: # if converged_sol is not empty
+            conv_sol = np.concatenate(conv_sol, converged_sol) if conv_sol.size else converged_sol # if conv_sol is empty, initialize with converged_sol
+            conv_obj = np.concatenate(conv_obj, new_elite_objectives) if conv_obj.size else new_elite_objectives
+            conv_bhv = np.concatenate(conv_bhv, converged_bhv) if conv_bhv.size else converged_bhv
 
     return conv_sol, conv_obj, conv_bhv

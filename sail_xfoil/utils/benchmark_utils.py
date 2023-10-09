@@ -29,7 +29,7 @@ TEST_RUNS = config.TEST_RUNS
 BHV_DIMENSION = config.BHV_DIMENSION
 
 
-def store_benchmark_data(i, obj_archive, pred_archive, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, eval_pred_flag=False):
+def store_benchmark_data(i, obj_archive, pred_archive, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, eval_pred_flag=False, pred_verific_flag=False):
         
         data = {}
 
@@ -40,7 +40,7 @@ def store_benchmark_data(i, obj_archive, pred_archive, sail_vanilla_flag=False, 
         if sail_random_flag:
             domain = "random"
         if eval_pred_flag:
-            domain = domain + "_eval_pred"
+            domain = domain + "_prediction_verification"
 
         obj_dataframe = obj_archive.as_pandas(include_solutions=True)
         obj_dataframe.to_csv(f"obj_archive_{domain}_{i}.csv", index=False)
@@ -142,7 +142,7 @@ def verify_prediction_archive(pred_dataframe):
             except:
                 elite_batch = elites[i:]
 
-            valid_indices, _ = generate_parsec_coordinates(elite_batch)
+            valid_indices, surface_batch = generate_parsec_coordinates(elite_batch)
 
             if valid_indices.size != elite_batch.shape[0]:
                 print("\n\nwtf? intersecting polynomials during verification? this shouldnt happen\n\n")
