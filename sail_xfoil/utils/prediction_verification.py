@@ -14,7 +14,7 @@ config = Config('config/config.ini')
 BATCH_SIZE = config.BATCH_SIZE
 
 
-def evaluate_new_elite_predictions(new_elite_archive, pred_archive, obj_archive, sol_array, obj_array):
+def prediction_verification(new_elite_archive, pred_archive, obj_archive, sol_array, obj_array):
     """
     - Evaluates the new elites in the prediction archive.
     - Adds converged new elites if they present elite objectives
