@@ -28,7 +28,7 @@ REYNOLDS = config.REYNOLDS
 
 def initialize_archive(archive: GridArchive, seed: int):
 
-    print("Initialize init_archive() [...]\n")
+    print("\nInitialize init_archive() [...]")
 
     init_solutions = np.empty((0, SOL_DIMENSION), dtype=float64)
     init_obj_evals = np.empty((0, OBJ_DIMENSION), dtype=float64)
@@ -52,8 +52,6 @@ def initialize_archive(archive: GridArchive, seed: int):
 
         valid_indices, surface_area_batch = generate_parsec_coordinates(samples)
         convergence_errors, success_indices, obj_batch = xfoil(iterations=BATCH_SIZE)
-        print("\n\nAirfoil Convergence Errors: " + str(convergence_errors))
-        print('Success Indices:  '+str(success_indices))
 
         if convergence_errors == BATCH_SIZE:
             continue
@@ -70,10 +68,9 @@ def initialize_archive(archive: GridArchive, seed: int):
 
         init_obj_evals = np.vstack((init_obj_evals, obj_batch.reshape(-1,1)))         # Store init objective for GP
 
-        print("\nAdding samples to Archive")
         print("Current Elites in Archive (before): " + str(archive.stats.num_elites))
         archive.add(solutions, obj_batch, bhv_evals)
         print("Current Elites in Archive (after): " + str(archive.stats.num_elites))
     
-    print("\n[...] Terminate init_archive()\n")
+    print("[...] Terminate init_archive()\n")
     return archive, init_solutions, init_obj_evals

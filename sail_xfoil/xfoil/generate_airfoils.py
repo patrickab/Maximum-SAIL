@@ -1,11 +1,10 @@
+#### Import Foreign Packages ###
 import os
 import numpy as np
 from numpy import tan, sqrt
 
-### Custom Scripts ###
+### Import Custom Scripts ###
 from utils.pprint_nd import pprint, pprint_nd, pprint_fstring
-
-from memory_profiler import profile
 
 ### Global Variables ###
 from config.config import Config
@@ -30,7 +29,7 @@ def export_parsec_coordinates(upper_xy, lower_xy):
         if os.path.exists("airfoil_{index}.log"):
             os.remove("airfoil_{index}.log")
 
-    surface_area_batch = np.empty(0)
+    surface_batch = np.empty(0)
     for index in range(upper_xy.shape[0]):
 
         # Check if polynomials intersect
@@ -50,15 +49,15 @@ def export_parsec_coordinates(upper_xy, lower_xy):
             # Calculate the surface area using the trapezoidal rule in a vectorized manner
             dx = 1/N_XY_COORDINATES
             y_avg = (np.abs(stacked_xy[1:,1]) + np.abs(stacked_xy[:-1,1])) / 2.0
-            surface_area = np.sum(dx * y_avg)
-            surface_area_batch = np.append(surface_area_batch, surface_area)
+            surface = np.sum(dx * y_avg)
+            surface_batch = np.append(surface_batch, surface)
 
         else:
             with open(f'airfoil_{index}.dat', 'w') as f:
                 f.write(f'airfoil_{index}\n\n')
                 f.write("Invalid Airfoil\n")
 
-    return np.array(valid_indices), surface_area_batch
+    return np.array(valid_indices), surface_batch
 
 def generate_parsec_coordinates(samples, xte=1.0): # 'x trailing edge'
     """
@@ -66,13 +65,19 @@ def generate_parsec_coordinates(samples, xte=1.0): # 'x trailing edge'
     
     input:      samples (scaled to solution space boundaries)
     output:     .txt file with (x,y) coordinates
+
+    returns:   valid_indices (indices of valid airfoils)
     """
     
     n_samples = samples.shape[0]
+    valid_indices = np.empty(0)
+    surface_batch = np.empty(0)
     
     if n_samples != BATCH_SIZE:
-        print("### GENERATE PARSEC: n_samples != BATCH_SIZE ###")
+        Warning(f'GENERATE PARSEC: n_samples != BATCH_SIZE')
         print(f"    n_samples: {n_samples}")
+        if n_samples == 0:
+            return valid_indices, surface_batch
 
     upper_polynomial_coefficients, lower_polynomial_coefficients = generate_polynomial_coefficients(samples)
 
@@ -82,9 +87,9 @@ def generate_parsec_coordinates(samples, xte=1.0): # 'x trailing edge'
     upper_xy = vec_upper_y_solutions(upper_polynomial_coefficients)
     lower_xy = vec_lower_y_solutions(lower_polynomial_coefficients)
 
-    valid_indices = export_parsec_coordinates(upper_xy, lower_xy)
+    valid_indices, surface_batch = export_parsec_coordinates(upper_xy, lower_xy)
 
-    return valid_indices
+    return valid_indices, surface_batch
 
 
 def generate_polynomial_coefficients(samples):    # PARSEC API: https://github.com/dqsis/parsec-airfoils/blob/master/parsecexport.py

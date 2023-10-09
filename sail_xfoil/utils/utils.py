@@ -16,6 +16,7 @@ BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 BHV_NUMBER_BINS = config.BHV_NUMBER_BINS
 BATCH_SIZE = config.BATCH_SIZE
 SIGMA_EMITTER = config.SIGMA_EMITTER
+SIGMA_PRED_EMITTER = config.SIGMA_PRED_EMITTER
 
 
 # elite_status_vector = archive.add(acq_elites, obj_evals, bhv_evals)
@@ -124,3 +125,9 @@ def eval_xfoil_loop(samples, behavior):
             conv_bhv = np.concatenate(conv_bhv, converged_bhv) if conv_bhv.size else converged_bhv
 
     return conv_sol, conv_obj, conv_bhv
+
+
+def init_pred_archive(pred_archive, obj_archive, seed, sigma_emitter=SIGMA_PRED_EMITTER):
+    pred_archive.add([elite.solution for elite in obj_archive], [elite.objective for elite in obj_archive], [elite.measures for elite in obj_archive])
+    pred_emitter = generate_emitter(init_solutions=[elite.solution for elite in obj_archive], archive=pred_archive, seed=seed, sigma_emitter=sigma_emitter)
+    return pred_archive, pred_emitter

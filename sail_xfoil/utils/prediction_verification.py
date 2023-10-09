@@ -22,6 +22,7 @@ MAX_PREDICTION_VERIFICATION = config.MAX_PREDICTION_VERIFICATION
 
 def prediction_verification_loop(pred_archive, obj_archive, pred_emitter, gp_model, sol_array, obj_array, extra_evals=0):
 
+    print("\n\n ## Enter Prediction Verification Loop##")
     extra_evals = 0
     pred_n_evals = PRED_N_EVALS//PRED_ELITE_REEVALS
 
@@ -35,7 +36,7 @@ def prediction_verification_loop(pred_archive, obj_archive, pred_emitter, gp_mod
 
         pred_archive, sol_array, obj_array = prediction_verification(new_elite_archive, pred_archive, obj_archive, sol_array, obj_array)    # verify predictions
         gp_model = fit_gp_model(sol_array, obj_array)                                                                                       # update GP model
-        extra_evals += new_elite_archive.stats.num_elites                                                                                       # count extra evaluations
+        extra_evals += new_elite_archive.stats.num_elites                                                                                   # count extra evaluations
     print(f"\n\nExtra evaluations (output): {extra_evals}\n\n")
 
     new_elite_archive.clear()
@@ -55,25 +56,27 @@ def prediction_verification(new_elite_archive, pred_archive, obj_archive, sol_ar
         [(elite.solution, elite.index, elite.objective, elite.measures) for elite in new_elite_archive], 
         dtype=[('solution', object), ('index', int), ('prediction', float), ('behavior', object)])
 
+    print("New Elites: " + str(new_elite_archive.stats.num_elites))
+    print(new_elites)
+
     new_elite_sol = np.vstack(new_elites['solution'])
     new_elite_bhv = np.vstack(new_elites['behavior'])
 
-    if new_elite_sol.shape[0] != 0: 
-        conv_sol, conv_obj, conv_bhv = eval_xfoil_loop(new_elite_sol, new_elite_bhv)     # evaluate in for loop to ensure BATCH_SIZE is not exceeded
+    conv_sol, conv_obj, conv_bhv = eval_xfoil_loop(new_elite_sol, new_elite_bhv)     # evaluate in for loop to ensure BATCH_SIZE is not exceeded
 
-        obj_elite_sol = np.array([elite.solution for elite in obj_archive])
-        obj_elite_obj = np.array([elite.objective for elite in obj_archive])
-        obj_elite_bhv = np.array([elite.measures for elite in obj_archive])
+    obj_elite_sol = np.array([elite.solution for elite in obj_archive])
+    obj_elite_obj = np.array([elite.objective for elite in obj_archive])
+    obj_elite_bhv = np.array([elite.measures for elite in obj_archive])
 
-        condidate_elite_sol = np.concatenate((obj_elite_sol, conv_sol))
-        condidate_elite_obj = np.concatenate((obj_elite_obj, conv_obj))
-        condidate_elite_bhv = np.concatenate((obj_elite_bhv, conv_bhv))
+    condidate_elite_sol = np.concatenate((obj_elite_sol, conv_sol))
+    condidate_elite_obj = np.concatenate((obj_elite_obj, conv_obj))
+    condidate_elite_bhv = np.concatenate((obj_elite_bhv, conv_bhv))
 
-        pred_archive.clear()
-        pred_archive.add(condidate_elite_sol, condidate_elite_obj, condidate_elite_bhv)
+    pred_archive.clear()
+    pred_archive.add(condidate_elite_sol, condidate_elite_obj, condidate_elite_bhv)
 
-        # store evaluations for GP model
-        sol_array = np.vstack((sol_array, conv_sol))
-        obj_array = np.vstack((obj_array, conv_obj.reshape(-1,1)))
+    # store evaluations for GP model
+    sol_array = np.vstack((sol_array, conv_sol))
+    obj_array = np.vstack((obj_array, conv_obj.reshape(-1,1)))
 
     return pred_archive, sol_array, obj_array
