@@ -42,18 +42,22 @@ def store_n_best_elites(acq_archive, n, update_acq=True, gp_model=None, obj_arch
     n_obj_elites = sorted(obj_archive, key=lambda x: x.objective, reverse=True)[:n]
     n_acq_elites = sorted(acq_archive, key=lambda x: x.objective, reverse=True)[:n]
 
-    if update_acq:
-        n_obj_elite_acq = acq_ucb(np.array([elite.solution for elite in n_obj_elites]), gp_model)
-        n_acq_elite_acq = acq_ucb(np.array([elite.solution for elite in n_acq_elites]), gp_model)
-    else:
-        n_obj_elite_acq = [elite.objective for elite in n_obj_elites]
-        n_acq_elite_acq = [elite.objective for elite in n_acq_elites]
+    n_obj_sol = np.array([elite.solution for elite in n_obj_elites])
+    n_acq_sol = np.array([elite.solution for elite in n_acq_elites])
 
-    n_elite_sol = np.concatenate((n_obj_elites, n_acq_elites), axis=0)
-    n_elite_acq = np.concatenate((n_obj_elite_acq, n_acq_elite_acq), axis=0)
+    if update_acq:
+        n_obj_elite_acq = acq_ucb(n_obj_sol, gp_model)
+        n_acq_elite_acq = acq_ucb(n_acq_sol, gp_model)
+    else:
+        n_obj_elite_acq = np.array([elite.objective for elite in n_obj_elites])
+        n_acq_elite_acq = np.array([elite.objective for elite in n_acq_elites])
+
+    n_sol = np.concatenate((n_obj_sol, n_acq_sol), axis=0)
+    n_acq = np.concatenate((n_obj_elite_acq, n_acq_elite_acq), axis=0)
+    n_bhv = np.concatenate(([elite.measures for elite in n_obj_elites], [elite.measures for elite in n_acq_elites]), axis=0)
 
     acq_archive.clear()
-    acq_archive.add(n_elite_sol, n_elite_acq, n_elite_acq)
+    acq_archive.add(n_sol, n_acq, n_bhv)
 
     return acq_archive
 
