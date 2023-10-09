@@ -17,7 +17,7 @@ config = Config('config/config.ini')
 BATCH_SIZE = config.BATCH_SIZE
 PRED_N_EVALS = config.PRED_N_EVALS
 PRED_ELITE_REEVALS = config.PRED_ELITE_REEVALS
-MAX_PREDICTION_VERIFICATION = config.MAX_PREDICTION_VERIFICATION
+MAX_PRED_VERIFICATION = config.MAX_PRED_VERIFICATION
 
 
 def prediction_verification_loop(pred_archive, obj_archive, pred_emitter, gp_model, sol_array, obj_array, extra_evals=0):
@@ -30,8 +30,8 @@ def prediction_verification_loop(pred_archive, obj_archive, pred_emitter, gp_mod
     for i in range(PRED_ELITE_REEVALS):
 
         pred_archive, new_elite_archive = map_elites(pred_archive, pred_emitter, gp_model, pred_n_evals, predict_objective)                 # predict new elites
-        if MAX_PREDICTION_VERIFICATION > extra_evals+new_elite_archive.stats.num_elites:
-            Warning(f"MAX_PREDICTION_VERIFICATION ({MAX_PREDICTION_VERIFICATION}) exceeded. Exiting prediction verification loop.")
+        if MAX_PRED_VERIFICATION > extra_evals+new_elite_archive.stats.num_elites:
+            Warning(f"MAX_PRED_VERIFICATION ({MAX_PRED_VERIFICATION}) exceeded. Exiting prediction verification loop.")
             break
 
         pred_archive, sol_array, obj_array = prediction_verification(new_elite_archive, pred_archive, obj_archive, sol_array, obj_array)    # verify predictions
