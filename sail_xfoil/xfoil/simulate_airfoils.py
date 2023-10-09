@@ -50,7 +50,8 @@ def xfoil(iterations):
     success_indices = []
     for i in range(len(results)):
         if results[i]:
-            success_indices.append(i)
+            if i not in success_indices:
+                success_indices.append(i)
 
     obj_batch = []
     success_indices_copy = success_indices.copy()

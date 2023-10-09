@@ -13,16 +13,18 @@ numpy.set_printoptions(precision=4, suppress=True, floatmode='fixed', linewidth=
 
 def main(benchmark_domain: str):
 
-    objective_archive, pred_error_archive, unverified_predictions, verified_predictions = define_archives()
+    objective_archive, pred_error_archive, unverified_predictions, verified_predictions, pred_archive = define_archives()
 
     objective_archive = convert_csv_to_archive(f'combined_obj_{benchmark_domain}.csv', objective_archive)
+    pred_archive = convert_csv_to_archive(f'combined_pred_{benchmark_domain}.csv', pred_archive)
     pred_error_archive = convert_csv_to_archive(f'combined_pred_error_{benchmark_domain}.csv', pred_error_archive)
     verified_predictions = convert_csv_to_archive(f'combined_verified_obj_{benchmark_domain}.csv', verified_predictions)
     unverified_predictions = convert_csv_to_archive(f'combined_unverified_obj_{benchmark_domain}.csv', unverified_predictions)
 
-    max_obj, max_pred_error, max_verified_obj, max_unverified_obj = determine_elite_argmax("custom")#, "vanilla", "random")
+    max_obj, max_pred_error, max_verified_obj, max_unverified_obj, max_pred = determine_elite_argmax("custom", "vanilla")
 
     visualize_archive(objective_archive, benchmark_domain, max_obj)
+    visualize_archive(pred_archive, benchmark_domain, max_pred)
     visualize_archive(pred_error_archive, benchmark_domain, max_pred_error)
     visualize_archive(verified_predictions, benchmark_domain, max_verified_obj)
     visualize_archive(unverified_predictions, benchmark_domain, max_unverified_obj)   
@@ -39,12 +41,14 @@ def determine_elite_argmax(benchmark_domain_1: str, benchmark_domain_2: str = No
     benchmark_domains = [benchmark_domain_1, benchmark_domain_2, benchmark_domain_3]
     archives = ["objective_archive", "pred_error_archive", "verified_predictions", "unverified_predictions"]
     max_obj = 0
+    max_pred = 0
     max_pred_error = 0
     max_verified_obj = 0
     max_unverified_obj = 0
 
     for domain in benchmark_domains:
-        objective_archive, pred_error_archive, unverified_predictions, verified_predictions = define_archives()
+        objective_archive, pred_error_archive, unverified_predictions, verified_predictions, pred_archive  = define_archives()
+        pred_archive = convert_csv_to_archive(f'combined_pred_{domain}.csv', pred_archive)
         objective_archive = convert_csv_to_archive(f'combined_obj_{domain}.csv', objective_archive)
         pred_error_archive = convert_csv_to_archive(f'combined_pred_error_{domain}.csv', pred_error_archive)
         verified_predictions = convert_csv_to_archive(f'combined_verified_obj_{domain}.csv', verified_predictions)
@@ -54,13 +58,8 @@ def determine_elite_argmax(benchmark_domain_1: str, benchmark_domain_2: str = No
         archive_max_obj = objective_archive.best_elite[1]
         max_obj = max(max_obj, archive_max_obj)
 
-        archive_max_pred_error = pred_error_archive.best_elite[1]
-        # very high prediction errors result in bad plots
-        if archive_max_pred_error < 1:
-            max_pred_error = max(max_pred_error, archive_max_pred_error)
-        else:
-            max_pred_error = max(max_pred_error, 1)
-            print(f"### Max Prediction Error in {domain}: {archive_max_pred_error}")
+        archive_max_pred = pred_archive.best_elite[1]
+        max_pred = max(max_pred, archive_max_pred)
 
         archive_max_verified_obj = verified_predictions.best_elite[1]
         max_verified_obj = max(max_verified_obj, archive_max_verified_obj)
@@ -68,7 +67,16 @@ def determine_elite_argmax(benchmark_domain_1: str, benchmark_domain_2: str = No
         archive_max_unverified_obj = unverified_predictions.best_elite[1]
         max_unverified_obj = max(max_unverified_obj, archive_max_unverified_obj)
 
-    return max_obj, max_pred_error, max_verified_obj, max_unverified_obj
+        archive_max_pred_error = pred_error_archive.best_elite[1]
+        # very high prediction errors result in bad plots, set maximum to 1 for better visualization
+        if archive_max_pred_error < 1:
+            max_pred_error = max(max_pred_error, archive_max_pred_error)
+        else:
+            max_pred_error = max(max_pred_error, 1)
+            print(f"### Max Prediction Error in {domain}: {archive_max_pred_error}")
+
+
+    return max_obj, max_pred_error, max_verified_obj, max_unverified_obj, max_pred
 
 
 def visualize_archive(archive, benckmark_domain: str, max_obj: float):
@@ -95,6 +103,8 @@ def visualize_archive(archive, benckmark_domain: str, max_obj: float):
 def convert_csv_to_archive(filename, archive):
 
     data = numpy.genfromtxt(filename, delimiter=',', skip_header=1)
+
+    pprint(data)
 
     sol = data[:, 4:]
     obj = data[:, 3]
@@ -140,6 +150,14 @@ def define_archives():
         threshold_min = -1
     )
 
+    pred_archive = GridArchive(
+        solution_dim=SOL_DIMENSION,
+        dims=BHV_NUMBER_BINS,
+        ranges=BHV_VALUE_RANGE,
+        qd_score_offset=-600,
+        threshold_min = -1
+    )
+
     pred_error_archive = GridArchive(
         solution_dim=SOL_DIMENSION,
         dims=BHV_NUMBER_BINS,
@@ -164,10 +182,10 @@ def define_archives():
         threshold_min = -1
     )
 
-    return objective_archive, pred_error_archive, unverified_predictions, verified_predictions
+    return objective_archive, pred_error_archive, unverified_predictions, verified_predictions, pred_archive
 
 
 if __name__ == '__main__':
     main("custom")
-    #main("vanilla")
+    main("vanilla")
     #main("random")

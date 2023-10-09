@@ -94,14 +94,18 @@ def maximize_acq_improvement(new_elite_archive, old_elites):
     return max_acq_improvement_elites, new_elites
 
 
-def sail_custom(acq_archive: GridArchive, obj_archive: GridArchive, gp_model, sol_array, obj_array):
+def sail_custom(acq_archive: GridArchive, obj_archive: GridArchive, gp_model, sol_array, obj_array, extra_evals):
+    """
+    Extra evaluations are given if eval_pred_flag is True (see sail.py)
+        if not eval_pred_flag, extra_evals = 0
+    """
 
     acq_emitter = define_acq_emitter(obj_archive, acq_archive, gp_model, seed=0)
 
     total_improvements = 0
     total_convergence_errors = 0
     mean_acq_improvement = 0
-    eval_budget = ACQ_N_OBJ_EVALS
+    eval_budget = ACQ_N_OBJ_EVALS + extra_evals
     while(eval_budget >= BATCH_SIZE):
 
         # store best elites from obj_archive in acq_archive & update acquisition values
@@ -193,14 +197,21 @@ def sail_custom(acq_archive: GridArchive, obj_archive: GridArchive, gp_model, so
     return obj_archive, gp_model
     
 
-def sail_vanilla(acq_archive, obj_archive, gp_model, sol_array, obj_array):
+def sail_vanilla(acq_archive, obj_archive, gp_model, sol_array, obj_array, extra_evals):
+    """
+    Extra evaluations are given if eval_pred_flag is True (see sail.py)
+        if not eval_pred_flag, extra_evals = 0
+    """
+
+    print(f"\n\nExtra evaluations (input): {extra_evals}\n\n")
+
 
     acq_emitter = define_acq_emitter(obj_archive, acq_archive, gp_model, seed=0)
 
     total_improvements = 0
     total_convergence_errors = 0
     mean_acq_improvement = 0
-    eval_budget = ACQ_N_OBJ_EVALS
+    eval_budget = ACQ_N_OBJ_EVALS + extra_evals
     while(eval_budget >= BATCH_SIZE):
         eval_budget -= BATCH_SIZE
 
@@ -245,8 +256,14 @@ def sail_vanilla(acq_archive, obj_archive, gp_model, sol_array, obj_array):
 
     return obj_archive, gp_model
 
-def sail_random(acq_archive, obj_archive, gp_model, sol_array, obj_array):
-    eval_budget = ACQ_N_OBJ_EVALS
+def sail_random(acq_archive, obj_archive, gp_model, sol_array, obj_array, extra_evals):
+    """
+    Extra evaluations are given if eval_pred_flag is True (see sail.py)
+        if not eval_pred_flag, extra_evals = 0
+    """
+
+
+    eval_budget = ACQ_N_OBJ_EVALS + extra_evals
     while(eval_budget >= BATCH_SIZE):
 
         ranges = np.array(SOL_VALUE_RANGE)

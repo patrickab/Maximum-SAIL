@@ -72,6 +72,7 @@ def generate_parsec_coordinates(samples, xte=1.0): # 'x trailing edge'
     
     if n_samples != BATCH_SIZE:
         print("### GENERATE PARSEC: n_samples != BATCH_SIZE ###")
+        print(f"    n_samples: {n_samples}")
 
     upper_polynomial_coefficients, lower_polynomial_coefficients = generate_polynomial_coefficients(samples)
 

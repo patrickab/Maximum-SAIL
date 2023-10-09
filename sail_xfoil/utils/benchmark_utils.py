@@ -5,6 +5,7 @@ import numpy as np
 import subprocess
 import json
 import gc
+import pandas
 
 ###### Import Custom Scripts ######
 from xfoil.simulate_airfoils import xfoil
@@ -28,7 +29,7 @@ TEST_RUNS = config.TEST_RUNS
 BHV_DIMENSION = config.BHV_DIMENSION
 
 
-def store_benchmark_data(i, obj_archive, pred_archive, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False):
+def store_benchmark_data(i, obj_archive, pred_archive, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, eval_pred_flag=False):
         
         data = {}
 
@@ -38,6 +39,8 @@ def store_benchmark_data(i, obj_archive, pred_archive, sail_vanilla_flag=False, 
             domain = "custom"
         if sail_random_flag:
             domain = "random"
+        if eval_pred_flag:
+            domain = domain + "_eval_pred"
 
         obj_dataframe = obj_archive.as_pandas(include_solutions=True)
         obj_dataframe.to_csv(f"obj_archive_{domain}_{i}.csv", index=False)
@@ -45,7 +48,9 @@ def store_benchmark_data(i, obj_archive, pred_archive, sail_vanilla_flag=False, 
         pred_dataframe = pred_archive.as_pandas(include_solutions=True)
         pred_dataframe.to_csv(f"pred_archive_{domain}_{i}.csv", index=False)
 
-        verified_obj_archive, unverified_obj_archive, pred_error_archive, perc_invalid_elites = verify_prediction_archive(pred_dataframe)
+        verified_obj_archive, unverified_obj_archive, pred_error_archive, perc_invalid_elites, df_obj_vs_pred_vs_error = verify_prediction_archive(pred_dataframe)
+        
+        df_obj_vs_pred_vs_error.to_csv(f"obj_vs_pred_vs_error_{domain}_{i}.csv", index=False)
 
         verified_obj_dataframe = verified_obj_archive.as_pandas(include_solutions=True)
         verified_obj_dataframe.to_csv(f"verified_obj_archive_{domain}_{i}.csv", index=False)
@@ -155,10 +160,11 @@ def verify_prediction_archive(pred_dataframe):
         pred_error = (converged_obj - converged_pred_obj) ** 2
         
         pprint(converged_elites)
-        pprint(converged_obj)
-        pprint(converged_pred_obj)
-        pprint(pred_error)
+        pprint_fstring(converged_obj, converged_pred_obj, pred_error)
 
+        df_obj_vs_pred_vs_error = pandas.DataFrame({"converged_obj": converged_obj, "converged_pred_obj": converged_pred_obj, "pred_error": pred_error})
+        # ToDo: paste solution columns to df above     "solution": converged_elites
+        
         perc_invalid_elites = (n_invalid_elites / elites.shape[0]) * 100
         print("\nNumber of invalid elites: " + str(n_invalid_elites))
         print("Percentage of invalid elites: " + str(round(perc_invalid_elites, 2)) + "\n\n")
@@ -170,4 +176,4 @@ def verify_prediction_archive(pred_dataframe):
 
         gc.collect()
 
-        return verified_obj_archive, unverified_obj_archive, pred_error_archive, perc_invalid_elites
+        return verified_obj_archive, unverified_obj_archive, pred_error_archive, perc_invalid_elites, df_obj_vs_pred_vs_error
