@@ -31,23 +31,29 @@ def store_n_best_elites(acq_archive, n, update_acq=True, gp_model=None, obj_arch
     """
     Store best elites from an archive
 
-        options:   - store elites from obj_archive in acq_archive
-                   - store elites from acq_archive in acq_archive
+        options:   - store elites from acq_archive in acq_archive
+                   - store elites from both archives in acq_archive
                    - update acquisition values of acq_archive
     """
 
     if obj_archive is None:
         obj_archive = acq_archive
 
-    n_elites = sorted(obj_archive, key=lambda x: x.objective, reverse=True)[:n]
+    n_obj_elites = sorted(obj_archive, key=lambda x: x.objective, reverse=True)[:n]
+    n_acq_elites = sorted(acq_archive, key=lambda x: x.objective, reverse=True)[:n]
 
     if update_acq:
-        n_elite_acq = acq_ucb(np.array([elite.solution for elite in n_elites]), gp_model)
+        n_obj_elite_acq = acq_ucb(np.array([elite.solution for elite in n_obj_elites]), gp_model)
+        n_acq_elite_acq = acq_ucb(np.array([elite.solution for elite in n_acq_elites]), gp_model)
     else:
-        n_elite_acq = [elite.objective for elite in n_elites]
+        n_obj_elite_acq = [elite.objective for elite in n_obj_elites]
+        n_acq_elite_acq = [elite.objective for elite in n_acq_elites]
+
+    n_elite_sol = np.concatenate((n_obj_elites, n_acq_elites), axis=0)
+    n_elite_acq = np.concatenate((n_obj_elite_acq, n_acq_elite_acq), axis=0)
 
     acq_archive.clear()
-    acq_archive.add([elite.solution for elite in n_elites], n_elite_acq, [elite.measures for elite in n_elites])
+    acq_archive.add(n_elite_sol, n_elite_acq, n_elite_acq)
 
     return acq_archive
 
@@ -92,7 +98,7 @@ def sail_custom(acq_archive: GridArchive, obj_archive: GridArchive, gp_model, so
     eval_budget = ACQ_N_OBJ_EVALS
     while(eval_budget >= BATCH_SIZE):
 
-        # update acquisition values
+        # store best elites from obj_archive in acq_archive & update acquisition values
         acq_archive = store_n_best_elites(acq_archive, obj_archive.stats.num_elites, update_acq=True, gp_model=gp_model, obj_archive=obj_archive)
 
         old_elites = np.array([(elite.solution, elite.index, elite.objective, elite.measures) for elite in acq_archive], dtype=[('solution', object), ('index', int), ('acquisition', float), ('behavior', object)])
@@ -146,7 +152,6 @@ def sail_custom(acq_archive: GridArchive, obj_archive: GridArchive, gp_model, so
         eval_budget -= BATCH_SIZE
 
         acquisition_improvement = acquisition_improvement[success_indices]
-        print("Obj Elites: " + str(obj_archive.stats.num_elites))
         # investigate why obj archive grows too fast
         status_vector, value_vector = obj_archive.add(new_elite_solutions[success_indices], new_elites_objectives, new_elite_measures[success_indices])
         total_improvements += np.sum(status_vector > 0)
@@ -160,8 +165,8 @@ def sail_custom(acq_archive: GridArchive, obj_archive: GridArchive, gp_model, so
         print("Status Vector: " + str(status_vector))
         pprint_fstring(acquisition_improvement, new_elites_objectives)
         print("New Acq Elites: " + str(new_elite_archive.stats.num_elites))
-        print("Acq/Obj Archive Size: " + str(acq_archive.stats.num_elites))
-        print("Acq QD (Custom): " +  str(int(acq_archive.stats.qd_score)))
+        print("Acq Archive Size: " + str(acq_archive.stats.num_elites))
+        print("Obj Archive Size: " + str(obj_archive.stats.num_elites))
         print("Airfoil Convergence Errors: " + str(convergence_errors))
         print("Remaining ACQ Precise Evals: " + str(eval_budget) + "\n\n")
 
@@ -174,11 +179,15 @@ def sail_vanilla(acq_archive, obj_archive, gp_model, sol_array, obj_array):
 
     acq_emitter = define_acq_emitter(obj_archive, acq_archive, gp_model, seed=0)
 
+    total_improvements = 0
+    total_convergence_errors = 0
+    mean_acq_improvement = 0
     eval_budget = ACQ_N_OBJ_EVALS
     while(eval_budget >= BATCH_SIZE):
         eval_budget -= BATCH_SIZE
 
-        acq_archive = store_n_best_elites(obj_archive, obj_archive.stats.num_elites, update_acq=True, gp_model=gp_model)    # update acquisition values
+        # store best elites from obj_archive in acq_archive & update acquisition values
+        acq_archive = store_n_best_elites(acq_archive, obj_archive.stats.num_elites, update_acq=True, gp_model=gp_model, obj_archive=obj_archive)
         acq_archive, _ = map_elites(acq_archive, acq_emitter, gp_model, ACQ_N_MAP_EVALS, acq_ucb)                           # evolve acquisition archive
 
         acq_elite_batch = acq_archive.sample_elites(BATCH_SIZE)        
@@ -195,12 +204,18 @@ def sail_vanilla(acq_archive, obj_archive, gp_model, sol_array, obj_array):
         obj_array = np.vstack((obj_array, obj_batch.reshape(-1,1))) # dtype=float64
 
         acq_batch = acq_elite_acquisitions[success_indices]
-        print("Obj Elites (before): " + str(obj_archive.stats.num_elites))
         status_vector, value_vector = obj_archive.add(acq_elite_solutions[success_indices], obj_batch, acq_elite_measures[success_indices])
-        print("Obj Elites (after): " + str(obj_archive.stats.num_elites))
-        pprint_fstring(acq_batch, status_vector, obj_batch)
+        total_improvements += np.sum(status_vector > 0)
+        total_convergence_errors += np.sum(convergence_errors)
+        print("Total Improvements: " + str(total_improvements))
+        print("Total Convergence Errors: " + str(total_convergence_errors))
+        print("Percentage Improvements: " + str((total_improvements/(ACQ_N_OBJ_EVALS-eval_budget))*100) + "%")
+        print("Percentage Convergence Errors: " + str((total_convergence_errors/(ACQ_N_OBJ_EVALS-eval_budget))*100) + "%")
+        print("Mean Acq Improvement: " + str(mean_acq_improvement))
+        print("Status Vector: " + str(status_vector))
+        pprint_fstring(acq_batch, obj_batch)
         print("Acq Archive Size: " + str(acq_archive.stats.num_elites))
-        print("Acq QD (Vanilla): " +  str(int(acq_archive.stats.qd_score)))
+        print("Obj Archive Size: " + str(obj_archive.stats.num_elites))
         print("Airfoil Convergence Errors: " + str(convergence_errors))
         print("Remaining ACQ Precise Evals: " + str(eval_budget) + "\n\n")
 
