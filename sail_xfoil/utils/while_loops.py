@@ -87,6 +87,7 @@ def sail_custom(acq_archive: GridArchive, obj_archive: GridArchive, gp_model, so
     acq_emitter = define_acq_emitter(obj_archive, acq_archive, gp_model, seed=0)
 
     total_improvements = 0
+    total_convergence_errors = 0
     eval_budget = ACQ_N_OBJ_EVALS
     while(eval_budget >= BATCH_SIZE):
 
@@ -149,7 +150,9 @@ def sail_custom(acq_archive: GridArchive, obj_archive: GridArchive, gp_model, so
         status_vector, value_vector = obj_archive.add(new_elite_solutions[success_indices], new_elites_objectives, new_elite_measures[success_indices])
         total_improvements += np.sum(status_vector > 0)
         print("Total Improvements: " + str(total_improvements))
+        print("Total Convergence Errors: " + str(total_convergence_errors))
         print("Percentage Improvements: " + str((total_improvements/(ACQ_N_OBJ_EVALS-eval_budget))*100) + "%")
+        print("Percentage Convergence Errors: " + str((total_convergence_errors/(ACQ_N_OBJ_EVALS-eval_budget))*100) + "%")
         print("Status Vector: " + str(status_vector))
         pprint_fstring(acquisition_improvement, new_elites_objectives)
         print("New Acq Elites: " + str(new_elite_archive.stats.num_elites))
