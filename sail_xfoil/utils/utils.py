@@ -96,7 +96,7 @@ def generate_emitter(init_solutions, archive, seed, sol_value_range=None):
     return emitter
 
 
-def eval_xfoil_loop(samples):
+def eval_xfoil_loop(samples, behavior):
     """
     XFOIL evaluation is performed in Batches of BATCH_SIZE
         Therefore, if n_samples != BATCH_SIZE, 
@@ -116,8 +116,10 @@ def eval_xfoil_loop(samples):
         _, success_indices, new_elite_objectives = xfoil(n_solutions)
 
         converged_sol = samples[index:BATCH_SIZE][success_indices]
-        converged_bhv = samples[index:BATCH_SIZE][success_indices]
+        converged_bhv = behavior[index:BATCH_SIZE][success_indices]
 
         conv_sol = np.concatenate(conv_sol, converged_sol) if conv_sol.size else converged_sol # if conv_sol is empty, initialize it with converged_sol
         conv_obj = np.concatenate(conv_obj, new_elite_objectives) if conv_obj.size else new_elite_objectives
         conv_bhv = np.concatenate(conv_bhv, converged_bhv) if conv_bhv.size else converged_bhv
+
+    return conv_sol, conv_obj, conv_bhv
