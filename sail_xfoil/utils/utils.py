@@ -105,6 +105,9 @@ def eval_xfoil_loop(samples):
     input:
         samples     Type: ndarrayn_samples      Shape: (n_samples, SOL_DIMENSION)
     """
+    conv_sol = np.empty(0)
+    conv_obj = np.empty(0)
+    conv_bhv = np.empty(0)
         
     for index in range(0 ,samples.shape[0], BATCH_SIZE):
         generate_parsec_coordinates(samples[index:BATCH_SIZE])
