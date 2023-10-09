@@ -41,7 +41,6 @@ def evaluate_new_elite_predictions(new_elite_archive, pred_archive, obj_archive,
 
     pred_archive.clear()
     pred_archive.add(condidate_elite_sol, condidate_elite_obj, condidate_elite_bhv)
-    # obj_archive.add(new_elite_solutions, new_elite_objectives, new_elite_measures) remove comment in future, for now keep it to improve comparability
 
     # store evaluations for GP model
     sol_array = np.vstack((sol_array, conv_sol))
