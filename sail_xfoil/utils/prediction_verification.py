@@ -59,6 +59,9 @@ def prediction_verification(max_obj_improvement_elites, pred_archive, obj_archiv
     print("n max obj improvment elites: " + str(len(max_obj_improvement_elites)))
     print(max_obj_improvement_elites)
 
+    if len(max_obj_improvement_elites) == 0:
+        return pred_archive, extra_evals, gp_model
+    
     max_improvement_sol = np.vstack(max_obj_improvement_elites['solution'])
     max_improvement_bhv = np.vstack(max_obj_improvement_elites['behavior'])
 

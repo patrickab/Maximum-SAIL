@@ -113,8 +113,10 @@ def benchmark_sail(i, mse_array, qd_array, percent_invalid_array, sail_custom_fl
 if __name__ == "__main__":
 
     exec_start = time.time()
+    mse_random_array, qd_random_array, percent_random_invalid = np.empty(0, dtype=dtype), np.empty(0, dtype=dtype), np.empty(0, dtype=dtype)
     mse_custom_array, qd_custom_array, percent_custom_invalid = np.empty(0, dtype=dtype), np.empty(0, dtype=dtype), np.empty(0, dtype=dtype)
     mse_custom_reeval_array, qd_custom_reeval_array, percent_custom_reeval_invalid = np.empty(0, dtype=dtype), np.empty(0, dtype=dtype), np.empty(0, dtype=dtype)
+    extra_evals_array = np.empty(0, dtype=dtype)
 
     for i in range(TEST_RUNS):
 
@@ -123,11 +125,14 @@ if __name__ == "__main__":
         mse_custom_reeval_array, qd_custom_reeval_array, percent_custom_reeval_invalid, extra_evals = benchmark_sail(i, mse_array=mse_custom_reeval_array, qd_array=qd_custom_reeval_array, percent_invalid_array=percent_custom_reeval_invalid, sail_custom_flag=True, pred_verific_flag=True)
         pprint_fstring(mse_custom_reeval_array, qd_custom_reeval_array, percent_custom_reeval_invalid)
         mse_custom_array, qd_custom_array, percent_custom_invalid, extra_evals = benchmark_sail(i, mse_array=mse_custom_array, qd_array=qd_custom_array, percent_invalid_array=percent_custom_invalid, sail_custom_flag=True, extra_evals=extra_evals)
+        mse_random_array, qd_random_array, percent_random_invalid, extra_evals = benchmark_sail(i, mse_array=mse_random_array, qd_array=qd_random_array, percent_invalid_array=percent_random_invalid, sail_random_flag=True, extra_evals=extra_evals)
 
-        pprint_fstring(mse_custom_array, mse_custom_reeval_array)
-        pprint_fstring(qd_custom_array, qd_custom_reeval_array)
-        pprint_fstring(percent_custom_invalid, percent_custom_reeval_invalid)
+        pprint_fstring(mse_random_array,mse_custom_array, mse_custom_reeval_array)
+        pprint_fstring(qd_random_array,qd_custom_array, qd_custom_reeval_array)
+        pprint_fstring(percent_random_invalid, percent_custom_invalid, percent_custom_reeval_invalid)
+        print("Extra evaluations: " + str(extra_evals_array))
 
+        extra_evals_array = np.append(extra_evals_array, extra_evals)
         extra_evals = 0 # not sure if necessary, but better safe then sorry
         gc.collect()
 
