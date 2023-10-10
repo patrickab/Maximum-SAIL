@@ -43,7 +43,7 @@ def store_benchmark_data(i, obj_archive, pred_archive, sail_vanilla_flag=False, 
             domain = domain + "_prediction_verification"
 
         print("Storing Benchmark Data [...]")
-        print(f"Run: {i}    Domain: {domain}")
+        print(f"Run: {i+1}    Domain: {domain}")
 
         obj_dataframe = obj_archive.as_pandas(include_solutions=True)
         obj_dataframe.to_csv(f"obj_archive_{domain}_{i}.csv", index=False)

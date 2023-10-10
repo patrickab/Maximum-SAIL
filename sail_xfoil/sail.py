@@ -41,7 +41,18 @@ def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_ran
     Note: Extra Evals are only used if pred_verific_flag is set to True resulting in more than ACQ_N_OBJ_EVALS. In this case the extra evaluations are counted, returned & also given to subsequent sail runs
     """
 
+    if sail_vanilla_flag:
+        domain = "vanilla"
+    if sail_custom_flag:
+        domain = "custom"
+    if sail_random_flag:
+        domain = "random"
+    if pred_verific_flag:
+        domain = domain + "_prediction_verification"
+
     print("Initialize sail() [...]")
+    print(f"Run: {initial_seed+1}    Domain: {domain}")
+
     seed = initial_seed+10
 
     obj_archive, acq_archive, pred_archive = define_archives(initial_seed=seed)

@@ -111,7 +111,6 @@ def sail_custom(acq_archive: GridArchive, obj_archive: GridArchive, gp_model, so
         percentage_improvements = (total_improvements/(ACQ_N_OBJ_EVALS-eval_budget))*100
         percentage_convergence_errors = (total_convergence_errors/(ACQ_N_OBJ_EVALS-eval_budget))*100
 
-
         print("Total Improvements: " + str(total_improvements))
         print("Total Convergence Errors: " + str(total_convergence_errors))
         print("Percentage Improvements: {:.1f}".format(percentage_improvements) + "%")
