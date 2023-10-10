@@ -29,7 +29,7 @@ TEST_RUNS = config.TEST_RUNS
 BHV_DIMENSION = config.BHV_DIMENSION
 
 
-def store_benchmark_data(i, obj_archive, pred_archive, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, eval_pred_flag=False, pred_verific_flag=False):
+def store_benchmark_data(i, obj_archive, pred_archive, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, pred_verific_flag=False):
         
         data = {}
 
@@ -39,8 +39,10 @@ def store_benchmark_data(i, obj_archive, pred_archive, sail_vanilla_flag=False, 
             domain = "custom"
         if sail_random_flag:
             domain = "random"
-        if eval_pred_flag:
+        if pred_verific_flag:
             domain = domain + "_prediction_verification"
+
+        print(domain)
 
         obj_dataframe = obj_archive.as_pandas(include_solutions=True)
         obj_dataframe.to_csv(f"obj_archive_{domain}_{i}.csv", index=False)

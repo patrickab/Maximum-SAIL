@@ -14,6 +14,7 @@ from acq_functions.acq_ucb import acq_ucb
 from gp.fit_gp_model import fit_gp_model
 from map_elites import map_elites
 from utils.pprint_nd import pprint, pprint_fstring
+from utils.utils import maximize_obj_improvement, store_n_best_elites
 
 
 ###### Configurable Variables ######
@@ -25,73 +26,6 @@ BATCH_SIZE = config.BATCH_SIZE
 SOL_DIMENSION = config.SOL_DIMENSION
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 SIGMA_EMITTER = config.SIGMA_EMITTER
-
-
-def store_n_best_elites(acq_archive, n, update_acq=True, gp_model=None, obj_archive=None):
-    """
-    Store best elites from an archive
-
-        options:   - store elites from acq_archive in acq_archive
-                   - store elites from both archives in acq_archive
-                   - update acquisition values of acq_archive
-    """
-
-    if obj_archive is None:
-        obj_archive = acq_archive
-
-    n_obj_elites = sorted(obj_archive, key=lambda x: x.objective, reverse=True)[:n]
-    n_acq_elites = sorted(acq_archive, key=lambda x: x.objective, reverse=True)[:n]
-
-    n_obj_sol = np.array([elite.solution for elite in n_obj_elites])
-    n_acq_sol = np.array([elite.solution for elite in n_acq_elites])
-
-    if update_acq:
-        n_obj_elite_acq = acq_ucb(n_obj_sol, gp_model)
-        n_acq_elite_acq = acq_ucb(n_acq_sol, gp_model)
-    else:
-        n_obj_elite_acq = np.array([elite.objective for elite in n_obj_elites])
-        n_acq_elite_acq = np.array([elite.objective for elite in n_acq_elites])
-
-    n_sol = np.concatenate((n_obj_sol, n_acq_sol), axis=0)
-    n_acq = np.concatenate((n_obj_elite_acq, n_acq_elite_acq), axis=0)
-    n_bhv = np.concatenate(([elite.measures for elite in n_obj_elites], [elite.measures for elite in n_acq_elites]), axis=0)
-
-    acq_archive.clear()
-    acq_archive.add(n_sol, n_acq, n_bhv)
-
-    return acq_archive
-
-
-def maximize_acq_improvement(new_elite_archive, old_elites):
-    
-    new_elites = np.array(
-        [(elite.solution, elite.index, elite.objective, elite.measures) for elite in new_elite_archive], 
-        dtype=[('solution', object), ('index', int), ('acquisition', float), ('behavior', object)])
-    
-    is_improved_mask = np.isin(new_elites['index'], old_elites['index'])
-
-    # seperate improved elites (niche compete) from new elites (new niches)
-    improved_elites = new_elites[is_improved_mask]
-    improved_elites = improved_elites[np.argsort(improved_elites['index'])]
-    new_elites = new_elites[~is_improved_mask]
-
-    # select old elites that are in improved elites
-    is_old_in_improved_mask = np.isin(old_elites['index'], improved_elites['index'])
-    old_elites_improved = old_elites[is_old_in_improved_mask]
-
-    max_acq_improvement_elites = np.array(list(zip(
-        improved_elites['solution'], 
-        improved_elites['acquisition'],
-        (improved_elites['acquisition'] - old_elites_improved['acquisition']), 
-        improved_elites['behavior'])), 
-        dtype=[('solution', object), ('acquisition', float), ('acquisition_improvement', float), ('behavior', object)])
-    
-    max_acq_improvement_elites = max_acq_improvement_elites[np.argsort(max_acq_improvement_elites['acquisition_improvement'])]
-    max_acq_improvement_elites = np.flip(max_acq_improvement_elites)
-    new_elites = np.array(list(zip(new_elites['solution'], new_elites['acquisition'], new_elites['acquisition'], new_elites['behavior'])), 
-                                      dtype=[('solution', object), ('acquisition', float),('acquisition_improvement', float), ('behavior', object)])
-
-    return max_acq_improvement_elites, new_elites
 
 
 def sail_custom(acq_archive: GridArchive, obj_archive: GridArchive, gp_model, sol_array, obj_array, extra_evals):
@@ -111,10 +45,10 @@ def sail_custom(acq_archive: GridArchive, obj_archive: GridArchive, gp_model, so
         # store best elites from obj_archive in acq_archive & update acquisition values
         acq_archive = store_n_best_elites(acq_archive, obj_archive.stats.num_elites, update_acq=True, gp_model=gp_model, obj_archive=obj_archive)
 
-        old_elites = np.array([(elite.solution, elite.index, elite.objective, elite.measures) for elite in acq_archive], dtype=[('solution', object), ('index', int), ('acquisition', float), ('behavior', object)])
+        old_elites = np.array([(elite.solution, elite.index, elite.objective, elite.measures) for elite in acq_archive], dtype=[('solution', object), ('index', int), ('objective', float), ('behavior', object)])
 
         acq_archive, new_elite_archive = map_elites(acq_archive, acq_emitter, gp_model, ACQ_N_MAP_EVALS, acq_ucb)
-        max_acq_improvement_elites, new_elites = maximize_acq_improvement(new_elite_archive, old_elites)
+        max_acq_improvement_elites, new_elites = maximize_obj_improvement(new_elite_archive, old_elites)
 
         # if there are not suffcient (BATCH_SIZE) acqisition improvements, re-enter acquisition loop
         condition_reached = False
@@ -139,16 +73,16 @@ def sail_custom(acq_archive: GridArchive, obj_archive: GridArchive, gp_model, so
                     break
                 iter += 1
                 acq_archive, new_elite_archive = map_elites(acq_archive, acq_emitter, gp_model, ACQ_N_MAP_EVALS, acq_ucb, new_elite_archive=new_elite_archive)
-                max_acq_improvement_elites_2, new_elites_2 = maximize_acq_improvement(new_elite_archive, old_elites)
+                max_acq_improvement_elites_2, new_elites_2 = maximize_obj_improvement(new_elite_archive, old_elites)
                 max_acq_improvement_elites = np.concatenate((max_acq_improvement_elites, max_acq_improvement_elites_2, new_elites_2), axis=0) # code doesnt ensure that behaviorally different elites are selected - same bin can be selected multiple times
 
         # select BATCH_SIZE acqisition elites, sorted by acquisition improvement
-        max_acq_improvement_elites = max_acq_improvement_elites[np.argsort(max_acq_improvement_elites['acquisition_improvement'])]
+        max_acq_improvement_elites = max_acq_improvement_elites[np.argsort(max_acq_improvement_elites['objective_improvement'])]
         max_acq_improvement_elites = np.flip(max_acq_improvement_elites)
         max_acq_improvement_batch = max_acq_improvement_elites[:BATCH_SIZE]
 
         new_elite_solutions = np.vstack(max_acq_improvement_batch['solution'])
-        acquisition_improvement = np.vstack(max_acq_improvement_batch['acquisition_improvement'])
+        acquisition_improvement = np.vstack(max_acq_improvement_batch['objective_improvement'])
         new_elite_measures = np.vstack(max_acq_improvement_batch['behavior'])
 
         # acq_archive only contains valid solutions (= non-intersecting polynomials), therefore no need to check for validity using valid_indices
@@ -295,6 +229,7 @@ def sail_random(acq_archive, obj_archive, gp_model, sol_array, obj_array, extra_
 
 
 def define_acq_emitter(obj_archive, acq_archive, gp_model, seed):
+    """Reduces Overhead"""
 
     obj_elites = np.array([elite.solution for elite in obj_archive])
     obj_elites_acq = acq_ucb(obj_elites, gp_model)

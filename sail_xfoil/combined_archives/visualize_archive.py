@@ -21,7 +21,7 @@ def main(benchmark_domain: str):
     verified_predictions = convert_csv_to_archive(f'combined_verified_obj_{benchmark_domain}.csv', verified_predictions)
     unverified_predictions = convert_csv_to_archive(f'combined_unverified_obj_{benchmark_domain}.csv', unverified_predictions)
 
-    max_obj, max_pred_error, max_verified_obj, max_unverified_obj, max_pred = determine_elite_argmax("custom", "vanilla")
+    max_obj, max_pred_error, max_verified_obj, max_unverified_obj, max_pred = determine_elite_argmax("custom", "custom_prediction_verification")
 
     visualize_archive(objective_archive, benchmark_domain, max_obj)
     visualize_archive(pred_archive, benchmark_domain, max_pred)
@@ -187,5 +187,5 @@ def define_archives():
 
 if __name__ == '__main__':
     main("custom")
-    main("vanilla")
+    main("custom_prediction_verification")
     #main("random")
