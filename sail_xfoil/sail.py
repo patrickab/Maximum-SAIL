@@ -1,8 +1,11 @@
 ###### Import Foreign Packages #####
 import numpy as np
 import subprocess
+import datetime
+import pandas
 import time
 import gc
+import os
 
 ###### Import Custom Scripts ######
 from utils.sail_loops import sail_vanilla, sail_custom, sail_random
@@ -36,6 +39,8 @@ if pred_n_evals % BATCH_SIZE != 0:
 
 dtype = float16
 
+##### ToDo: Add Type Declarations in function headers #####
+
 def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, pred_verific_flag=False, extra_evals=0):
     """
     Note: Extra Evals are only used if pred_verific_flag is set to True resulting in more than ACQ_N_OBJ_EVALS. In this case the extra evaluations are counted, returned & also given to subsequent sail runs
@@ -51,7 +56,7 @@ def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_ran
         domain = domain + "_prediction_verification"
 
     print("Initialize sail() [...]")
-    print(f"Run: {initial_seed+1}    Domain: {domain}")
+    print(f"\n    Run: {initial_seed+1}    Domain: {domain}")
 
     seed = initial_seed+10
 
@@ -67,13 +72,13 @@ def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_ran
     print("\n ## Exit Initialization ##")
     print(" ## Enter Acquisition Loop ##\n\n")
     if sail_vanilla_flag:
-        obj_archive, gp_model = sail_vanilla(acq_archive=acq_archive, obj_archive=obj_archive, gp_model=gp_model, sol_array=sol_array, obj_array=obj_array, extra_evals=extra_evals)
+        obj_archive, gp_model = sail_vanilla(acq_archive=acq_archive, obj_archive=obj_archive, gp_model=gp_model, sol_array=sol_array, obj_array=obj_array, extra_evals=extra_evals, initial_seed=initial_seed, benchmark_domain=domain)
         gc.collect()
-    if sail_custom_flag:
-        obj_archive, gp_model = sail_custom(acq_archive=acq_archive, obj_archive=obj_archive, gp_model=gp_model, sol_array=sol_array, obj_array=obj_array, extra_evals=extra_evals)
+    if sail_custom_flag: # give domain for proper naming convention inside anytime_archive_visualizer.py (if pred_verific_flag is set)
+        obj_archive, gp_model = sail_custom(acq_archive=acq_archive, obj_archive=obj_archive, gp_model=gp_model, sol_array=sol_array, obj_array=obj_array, extra_evals=extra_evals, initial_seed=initial_seed, benchmark_domain=domain)
         gc.collect()
     if sail_random_flag:
-        obj_archive, gp_model = sail_random(acq_archive=acq_archive, obj_archive=obj_archive, gp_model=gp_model, sol_array=sol_array, obj_array=obj_array, extra_evals=extra_evals)
+        obj_archive, gp_model = sail_random(acq_archive=acq_archive, obj_archive=obj_archive, gp_model=gp_model, sol_array=sol_array, obj_array=obj_array, extra_evals=extra_evals, initial_seed=initial_seed, benchmark_domain=domain) 
         gc.collect()
 
 
@@ -83,7 +88,7 @@ def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_ran
     pred_archive, pred_emitter = init_pred_archive(pred_archive, obj_archive, seed)
 
     if pred_verific_flag:
-        pred_archive, extra_evals = prediction_verification_loop(pred_archive, obj_archive, pred_emitter, gp_model, sol_array, obj_array, extra_evals=extra_evals)
+        pred_archive, extra_evals = prediction_verification_loop(pred_archive, obj_archive, pred_emitter, gp_model, sol_array, obj_array, initial_seed=initial_seed, benchmark_domain=domain)
     else:
         pred_archive, new_elite_archive = map_elites(pred_archive, pred_emitter, gp_model, PRED_N_EVALS, predict_objective)
     gc.collect()
@@ -104,7 +109,7 @@ def benchmark_sail(i, mse_array, qd_array, percent_invalid_array, sail_custom_fl
 
     if pred_verific_flag:
         obj_archive, pred_archive, extra_evals = sail(i, sail_custom_flag=sail_custom_flag, sail_vanilla_flag=sail_vanilla_flag, sail_random_flag=sail_random_flag, pred_verific_flag=pred_verific_flag, extra_evals=extra_evals)
-        print(f"Extra evaluations: {extra_evals}")
+        print(f"Extra evaluations: {extra_evals}")  
     else:
         obj_archive, pred_archive = sail(i, sail_custom_flag=sail_custom_flag, sail_vanilla_flag=sail_vanilla_flag, sail_random_flag=sail_random_flag, pred_verific_flag=pred_verific_flag, extra_evals=extra_evals)
 
@@ -124,8 +129,9 @@ def benchmark_sail(i, mse_array, qd_array, percent_invalid_array, sail_custom_fl
 if __name__ == "__main__":
 
     exec_start = time.time()
-    mse_random_array, qd_random_array, percent_random_invalid = np.empty(0, dtype=dtype), np.empty(0, dtype=dtype), np.empty(0, dtype=dtype)
-    mse_custom_array, qd_custom_array, percent_custom_invalid = np.empty(0, dtype=dtype), np.empty(0, dtype=dtype), np.empty(0, dtype=dtype)
+    #mse_random_array, qd_random_array, percent_random_invalid = np.empty(0, dtype=dtype), np.empty(0, dtype=dtype), np.empty(0, dtype=dtype)
+    mse_vanilla_array, qd_vanilla_array, percent_vanilla_invalid = np.empty(0, dtype=dtype), np.empty(0, dtype=dtype), np.empty(0, dtype=dtype)
+    mse_custom_array, qd_custom_array, percent_custom_invalid = np.empty(0, dtype=dtype), np.empty(0, dtype=dtype), np.empty(0, dtype=dtype)    
     mse_custom_reeval_array, qd_custom_reeval_array, percent_custom_reeval_invalid = np.empty(0, dtype=dtype), np.empty(0, dtype=dtype), np.empty(0, dtype=dtype)
     extra_evals_array = np.empty(0, dtype=dtype)
 
@@ -133,22 +139,63 @@ if __name__ == "__main__":
 
         gc.collect()
         
+        benchmark_domains = ["custom", "vanilla", "prediction_verification"]
+
+        extra_evals = 0
+
         mse_custom_reeval_array, qd_custom_reeval_array, percent_custom_reeval_invalid, extra_evals = benchmark_sail(i, mse_array=mse_custom_reeval_array, qd_array=qd_custom_reeval_array, percent_invalid_array=percent_custom_reeval_invalid, sail_custom_flag=True, pred_verific_flag=True)
-        pprint_fstring(mse_custom_reeval_array, qd_custom_reeval_array, percent_custom_reeval_invalid)
         mse_custom_array, qd_custom_array, percent_custom_invalid, extra_evals = benchmark_sail(i, mse_array=mse_custom_array, qd_array=qd_custom_array, percent_invalid_array=percent_custom_invalid, sail_custom_flag=True, extra_evals=extra_evals)
-        mse_random_array, qd_random_array, percent_random_invalid, extra_evals = benchmark_sail(i, mse_array=mse_random_array, qd_array=qd_random_array, percent_invalid_array=percent_random_invalid, sail_random_flag=True, extra_evals=extra_evals)
+        mse_vanilla_array, qd_vanilla_array, percent_vanilla_invalid, extra_evals = benchmark_sail(i, mse_array=mse_vanilla_array, qd_array=qd_vanilla_array, percent_invalid_array=percent_vanilla_invalid, sail_vanilla_flag=True, extra_evals=extra_evals)
+        # mse_random_array, qd_random_array, percent_random_invalid, extra_evals = benchmark_sail(i, mse_array=mse_random_array, qd_array=qd_random_array, percent_invalid_array=percent_random_invalid, sail_random_flag=True, extra_evals=extra_evals)
 
-        pprint_fstring(mse_random_array,mse_custom_array, mse_custom_reeval_array)
-        pprint_fstring(qd_random_array,qd_custom_array, qd_custom_reeval_array)
-        pprint_fstring(percent_random_invalid, percent_custom_invalid, percent_custom_reeval_invalid)
-        print("Extra evaluations: " + str(extra_evals_array))
+        mse_df = pandas.DataFrame({
+        #    'MSE Random': mse_random_array,
+            'MSE Vanilla': mse_vanilla_array,
+            'MSE Custom': mse_custom_array,
+            'MSE Custom Pred Verify': mse_custom_reeval_array
+            })
+        
+        qd_df = pandas.DataFrame({
+        #    'QD Random': qd_random_array,
+            'QD Vanilla': qd_vanilla_array,
+            'QD Custom': qd_custom_array,
+            'QD Custom Pred Verify': qd_custom_reeval_array
+            })
+        
+        percent_invalid_df = pandas.DataFrame({
+        #    'Percent Invalid Random': percent_random_invalid,
+            'Percent Invalid Vanilla': percent_vanilla_invalid,
+            'Percent Invalid Custom': percent_custom_invalid,
+            'Percent Invalid Custom Pred Verify': percent_custom_reeval_invalid
+            })
 
-        extra_evals_array = np.append(extra_evals_array, extra_evals)
+        extra_evals_array  = np.append(extra_evals_array, extra_evals)
+
+        # Print the DataFrame with aligned variable names
+        print(mse_df.to_string(index=False, justify='right'))
+        print(qd_df.to_string(index=False, justify='right'))
+        print(percent_invalid_df.to_string(index=False, justify='right'))
+
         extra_evals = 0 # not sure if necessary, but better safe then sorry
         gc.collect()
 
+
+    benchmark_filepaths = " ".join(["imgs/" + benchmark_domain for benchmark_domain in benchmark_domains])
+    current_time = datetime.datetime.now()
+    timestamp = current_time.strftime("%Y%m%d%H%M")
+    os.makedirs(timestamp)
+
+    os.makedirs("json") 
+    subprocess.run("mv *.json json", shell=True)
+    os.makedirs("csv")
+    subprocess.run("mv *.csv csv", shell=True)
+    subprocess.run(f"cp config/config.ini {timestamp}/reproduction_info.txt", shell=True)
+    subprocess.run(f'mv json csv {benchmark_filepaths} {timestamp}', shell=True)
+    if not os.path.exists("benchmarks"): os.makedirs("benchmarks")
+    subprocess.run(f"mv {timestamp} benchmarks", shell=True)
+
     subprocess.run(f"rm *.log *.dat", shell=True)
-    subprocess.run(f"mv *.csv csv", shell=True)
+
     exec_end = time.time()
     exec_time = exec_end - exec_start
     print("\nExecution time (minutes): " + str(exec_time/60))

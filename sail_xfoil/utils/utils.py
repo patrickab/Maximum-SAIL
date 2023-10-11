@@ -4,8 +4,9 @@ from ribs.archives import GridArchive
 from ribs.emitters import GaussianEmitter
 
 ### Custom Scripts ###
-from xfoil.simulate_airfoils import xfoil
+from utils.anytime_archive_visualizer import anytime_archive_visualizer
 from xfoil.generate_airfoils import generate_parsec_coordinates
+from xfoil.simulate_airfoils import xfoil
 from acq_functions.acq_ucb import acq_ucb
 
 ### Global Parameters ###
@@ -18,39 +19,72 @@ BHV_NUMBER_BINS = config.BHV_NUMBER_BINS
 BATCH_SIZE = config.BATCH_SIZE
 SIGMA_EMITTER = config.SIGMA_EMITTER
 SIGMA_PRED_EMITTER = config.SIGMA_PRED_EMITTER
+MAX_PRED_VERIFICATION = config.MAX_PRED_VERIFICATION
+PRED_ELITE_REEVALS = config.PRED_ELITE_REEVALS
 
 
-def eval_xfoil_loop(samples, behavior):
+def eval_xfoil_loop(samples, behavior, # arguments below used for anytime archive visualizer
+                    extra_evals, archive=None, benchmark_domain=None, initial_seed=None, index_anytime_visualizer=None):
     """
     XFOIL evaluation is performed in Batches of BATCH_SIZE
         Therefore, if n_samples != BATCH_SIZE, 
         samples need to be evaluated in a loop
 
+    - ensures that batches of EXACTLY BATCH_SIZE are evaluated
+
     input:
         samples     Type: ndarrayn_samples      Shape: (n_samples, SOL_DIMENSION)
+    returns:
+        conv_sol, conv_obj, conv_bhv, archive, extra_evals
+
     """
     conv_sol = np.empty(0)
     conv_obj = np.empty(0)
     conv_bhv = np.empty(0)
-        
-    for index in range(0 ,samples.shape[0], BATCH_SIZE):
-        generate_parsec_coordinates(samples[index:index+BATCH_SIZE])
 
-        n_solutions = len(samples[index:BATCH_SIZE])
-        _, success_indices, new_elite_objectives = xfoil(n_solutions)
+    index_visualizer=index_anytime_visualizer
+    total_samples=samples.shape[0]
+    remaining_samples = total_samples
 
-        converged_sol = samples[index:BATCH_SIZE][success_indices]
-        converged_bhv = behavior[index:BATCH_SIZE][success_indices]
+    for index in range(0, total_samples, 10): # allows indices [0:10], [10:20], [20:22]
+
+        sample_index = index*BATCH_SIZE
+        iteration_sols = samples[sample_index:sample_index+BATCH_SIZE] # alows indices eg [20:22] to be sampled, if 2 samples are left
+        iteration_bhvs = behavior[sample_index:sample_index+BATCH_SIZE] 
+        n_samples = iteration_sols.shape[0]
+        remaining_samples -= n_samples
+
+        generate_parsec_coordinates(iteration_sols)
+
+        _, success_indices, new_elite_objectives = xfoil(n_samples) # ToDo: modify xfoil to take in sample sizes below BATCH_SIZE
+        success_indices = success_indices[:n_samples]
+        extra_evals += n_samples
+
+        converged_sol = iteration_sols[success_indices]
+        converged_bhv = iteration_bhvs[success_indices]
+
+        print("Eval Xfoil Loop Elites (before):  " + str(archive.stats.num_elites))
+        archive.add(converged_sol, new_elite_objectives, converged_bhv)
+        print("Eval Xfoil Loop Elites (after): " + str(archive.stats.num_elites))
+
+        anytime_archive_visualizer(archive, benchmark_domain, initial_seed, index_visualizer)
+        index_visualizer += 1
+        print(index_visualizer)
 
         if converged_sol.shape[0] != 0: # if converged_sol is not empty
-            conv_sol = np.concatenate(conv_sol, converged_sol) if conv_sol.size else converged_sol # if conv_sol is empty, initialize with converged_sol
-            conv_obj = np.concatenate(conv_obj, new_elite_objectives) if conv_obj.size else new_elite_objectives
-            conv_bhv = np.concatenate(conv_bhv, converged_bhv) if conv_bhv.size else converged_bhv
+            if conv_sol.size > 0:
+                conv_sol = np.vstack((conv_sol, converged_sol))
+                conv_obj = np.append(conv_obj, new_elite_objectives)
+                conv_bhv = np.vstack((conv_bhv, converged_bhv))
+            else:
+                conv_sol = converged_sol
+                conv_obj = new_elite_objectives
+                conv_bhv = converged_bhv
 
-    return conv_sol, conv_obj, conv_bhv
+    return conv_sol, conv_obj, conv_bhv, archive, extra_evals
 
 
-def maximize_obj_improvement(new_elite_archive, old_elites):
+def maximize_obj_improvement(new_elite_archive: GridArchive, old_elites: np.ndarray):
     """
     - extracts all elites from new_elite_archive
     - orders them by objective improvement
@@ -92,7 +126,7 @@ def maximize_obj_improvement(new_elite_archive, old_elites):
     return max_acq_improvement_elites, new_elites
 
 
-def store_n_best_elites(archive, n, update_acq=True, gp_model=None, obj_archive=None):
+def store_n_best_elites(archive: GridArchive, n: int, update_acq=True, gp_model=None, obj_archive=None):
     """
     Store best elites from an archive
 

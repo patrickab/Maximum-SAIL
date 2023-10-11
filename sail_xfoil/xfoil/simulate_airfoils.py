@@ -168,7 +168,7 @@ def capture_errors(process, queue, i):
 
     while True:
         try:
-            line = queue.get(timeout=1)
+            line = queue.get(timeout=0.75)
             #print(line.strip())
 
             if not line: # empty line
@@ -226,11 +226,6 @@ def populate_queue(stdout, queue):
 def terminate_subprocess(process, i):
 
     process.terminate()
-    process.stdout.close()
-
-def kill_subprocess(process, i):
-
-    os.kill(process.pid, 9) # 9 = SIGKILL. SIGKILL forcefully terminates the process & cannot be ignored, compared to SIGTERM process.terminate(). XFOIL is implemented in a way that it ignores SIGTERM, whenever VISCAL ERRORS occur, thus, SIGKILL is used to terminate the process.
     process.stdout.close()
 
 

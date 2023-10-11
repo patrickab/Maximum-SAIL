@@ -51,35 +51,36 @@ def store_benchmark_data(i, obj_archive, pred_archive, sail_vanilla_flag=False, 
         pred_dataframe = pred_archive.as_pandas(include_solutions=True)
         pred_dataframe.to_csv(f"pred_archive_{domain}_{i}.csv", index=False)
 
-        verified_obj_archive, unverified_obj_archive, pred_error_archive, perc_invalid_elites, df_obj_vs_pred_vs_error = verify_prediction_archive(pred_dataframe)
+        #verified_obj_archive, unverified_obj_archive, pred_error_archive, perc_invalid_elites, df_obj_vs_pred_vs_error = verify_prediction_archive(pred_dataframe)
         
-        df_obj_vs_pred_vs_error.to_csv(f"obj_vs_pred_vs_error_{domain}_{i}.csv", index=False)
+        #df_obj_vs_pred_vs_error.to_csv(f"obj_vs_pred_vs_error_{domain}_{i}.csv", index=False)
 
-        verified_obj_dataframe = verified_obj_archive.as_pandas(include_solutions=True)
-        verified_obj_dataframe.to_csv(f"verified_obj_archive_{domain}_{i}.csv", index=False)
+        #verified_obj_dataframe = verified_obj_archive.as_pandas(include_solutions=True)
+        #verified_obj_dataframe.to_csv(f"verified_obj_archive_{domain}_{i}.csv", index=False)
 
-        unverified_obj_dataframe = verified_obj_archive.as_pandas(include_solutions=True)
-        unverified_obj_dataframe.to_csv(f"unverified_obj_archive_{domain}_{i}.csv", index=False)
+        #unverified_obj_dataframe = verified_obj_archive.as_pandas(include_solutions=True)
+        #unverified_obj_dataframe.to_csv(f"unverified_obj_archive_{domain}_{i}.csv", index=False)
 
-        pred_error_dataframe = pred_error_archive.as_pandas(include_solutions=True)
-        pred_error_dataframe.to_csv(f"pred_error_archive_{domain}_{i}.csv", index=False)
+        #pred_error_dataframe = pred_error_archive.as_pandas(include_solutions=True)
+        #pred_error_dataframe.to_csv(f"pred_error_archive_{domain}_{i}.csv", index=False)
 
-        mse = np.mean(pred_error_dataframe["objective"])
+        #mse = np.mean(pred_error_dataframe["objective"])
 
-        qd_score = np.sum(verified_obj_dataframe.loc[:, "objective"])
+        #qd_score = np.sum(verified_obj_dataframe.loc[:, "objective"])
 
         # copy files to windows directory for usage in Rstudio
-        subprocess.run(f"cp obj_archive_{domain}_{i}.csv pred_archive_{domain}_{i}.csv verified_obj_archive_{domain}_{i}.csv pred_error_archive_{domain}_{i}.csv unverified_obj_archive_{domain}_{i}.csv /mnt/c/Users/patri/Desktop/Thesis/archives_xfoil", shell=True, check=True)
+        #subprocess.run(f"cp obj_archive_{domain}_{i}.csv pred_archive_{domain}_{i}.csv verified_obj_archive_{domain}_{i}.csv pred_error_archive_{domain}_{i}.csv unverified_obj_archive_{domain}_{i}.csv /mnt/c/Users/patri/Desktop/Thesis/archives_xfoil", shell=True, check=True)
 
         # pack all data from the current iteration into one dictionary
         run_data = {
             "pred_dataframe": pred_dataframe.to_json(orient="split"),
-            "verified_obj_dataframe": verified_obj_dataframe.to_json(orient="split"),
-            "unverified_obj_dataframe": unverified_obj_dataframe.to_json(orient="split"),
-            "pred_error_dataframe": pred_error_dataframe.to_json(orient="split"),
-            "mse": mse,
-            "perc_invalid_elites": perc_invalid_elites,
-            "qd_score": qd_score
+            "obj_dataframe": obj_dataframe.to_json(orient="split"),
+        #    "verified_obj_dataframe": verified_obj_dataframe.to_json(orient="split"),
+        #    "unverified_obj_dataframe": unverified_obj_dataframe.to_json(orient="split"),
+        #    "pred_error_dataframe": pred_error_dataframe.to_json(orient="split"),
+        #    "mse": mse,
+        #    "perc_invalid_elites": perc_invalid_elites,
+        #    "qd_score": qd_score
         }
 
         data[f"run_{domain}_{i}"] = run_data
@@ -91,13 +92,13 @@ def store_benchmark_data(i, obj_archive, pred_archive, sail_vanilla_flag=False, 
         data = {}
         obj_archive.clear()
         pred_archive.clear()
-        verified_obj_archive.clear()
-        unverified_obj_archive.clear()
-        pred_error_archive.clear()
+        #verified_obj_archive.clear()
+        #unverified_obj_archive.clear()
+        #pred_error_archive.clear()
 
         gc.collect()
 
-        return mse, qd_score, perc_invalid_elites
+        return 0, 0, 0
 
 
 def verify_prediction_archive(pred_dataframe):

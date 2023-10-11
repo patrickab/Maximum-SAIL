@@ -53,6 +53,8 @@ def pprint_fstring(ndarray1, ndarray2 = None, ndarray3 = None):
         fstring_names = f"{name_ndarray1}:"
         format_string = "\n".join(["\t".join(map(str, row)) for row in ndarray1])
         format_string = "\n".join(["\t".join([f"{value:.4f}" for value in row]) for row in ndarray1])
+        print("\n" + fstring_names + "\n" + format_string + "\n")
+        return
     if ndarray3 is None:
         fstring_names = f"{name_ndarray1}:\t{name_ndarray2}:"
         stacked_arrays = np.column_stack((ndarray1, ndarray2))
@@ -65,7 +67,6 @@ def pprint_fstring(ndarray1, ndarray2 = None, ndarray3 = None):
         format_string = "\n".join(["\t\t\t".join([f"{value:.4f}" for value in row]) for row in stacked_arrays])
 
 
-    print("\n" + fstring_names + "\n" + format_string + "\n")
 
 
 

@@ -13,6 +13,7 @@ from xfoil.generate_airfoils import generate_parsec_coordinates
 from acq_functions.acq_ucb import acq_ucb
 from gp.fit_gp_model import fit_gp_model
 from map_elites import map_elites
+from utils.anytime_archive_visualizer import anytime_archive_visualizer
 from utils.pprint_nd import pprint, pprint_fstring
 from utils.utils import maximize_obj_improvement, store_n_best_elites
 
@@ -28,7 +29,7 @@ SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 SIGMA_EMITTER = config.SIGMA_EMITTER
 
 
-def sail_custom(acq_archive: GridArchive, obj_archive: GridArchive, gp_model, sol_array, obj_array, extra_evals):
+def sail_custom(acq_archive: GridArchive, obj_archive: GridArchive, gp_model, sol_array, obj_array, extra_evals, initial_seed, benchmark_domain):
     """
     Extra evaluations are given if eval_pred_flag is True (see sail.py)
         if not eval_pred_flag, extra_evals = 0
@@ -36,6 +37,7 @@ def sail_custom(acq_archive: GridArchive, obj_archive: GridArchive, gp_model, so
 
     acq_emitter = define_acq_emitter(obj_archive, acq_archive, gp_model, seed=0)
 
+    iteration = 0
     total_improvements = 0
     total_convergence_errors = 0
     mean_acq_improvement = 0
@@ -125,12 +127,14 @@ def sail_custom(acq_archive: GridArchive, obj_archive: GridArchive, gp_model, so
         print("Airfoil Convergence Errors: " + str(convergence_errors))
         print("Remaining ACQ Precise Evals: " + str(eval_budget) + "\n\n")
 
+        anytime_archive_visualizer(archive=obj_archive, benchmark_domain=benchmark_domain, initial_seed=initial_seed, iteration=(ACQ_N_OBJ_EVALS+extra_evals-eval_budget)//BATCH_SIZE)
+
         gp_model = fit_gp_model(sol_array, obj_array)
 
     return obj_archive, gp_model
     
 
-def sail_vanilla(acq_archive, obj_archive, gp_model, sol_array, obj_array, extra_evals):
+def sail_vanilla(acq_archive, obj_archive, gp_model, sol_array, obj_array, extra_evals, initial_seed, benchmark_domain):
     """
     Extra evaluations are given if eval_pred_flag is True (see sail.py)
         if not eval_pred_flag, extra_evals = 0
@@ -185,11 +189,13 @@ def sail_vanilla(acq_archive, obj_archive, gp_model, sol_array, obj_array, extra
         print("Airfoil Convergence Errors: " + str(convergence_errors))
         print("Remaining ACQ Precise Evals: " + str(eval_budget) + "\n\n")
 
+        anytime_archive_visualizer(archive=obj_archive, benchmark_domain=benchmark_domain, initial_seed=initial_seed, iteration=(ACQ_N_OBJ_EVALS+extra_evals-eval_budget)//BATCH_SIZE)
+
         gp_model = fit_gp_model(sol_array, obj_array)
 
     return obj_archive, gp_model
 
-def sail_random(acq_archive, obj_archive, gp_model, sol_array, obj_array, extra_evals):
+def sail_random(acq_archive, obj_archive, gp_model, sol_array, obj_array, extra_evals, initial_seed, benchmark_domain):
     """
     Extra evaluations are given if eval_pred_flag is True (see sail.py)
         if not eval_pred_flag, extra_evals = 0
@@ -219,6 +225,7 @@ def sail_random(acq_archive, obj_archive, gp_model, sol_array, obj_array, extra_
         obj_array = np.vstack((obj_array, obj_batch.reshape(-1,1))) # dtype=float64
 
         eval_budget -= BATCH_SIZE
+        anytime_archive_visualizer(archive=obj_archive, benchmark_domain=benchmark_domain, initial_seed=initial_seed, iteration=(ACQ_N_OBJ_EVALS+extra_evals-eval_budget)//BATCH_SIZE)
 
         pprint(obj_batch)
         print("\n\nAirfoil Convergence Errors: " + str(convergence_errors))

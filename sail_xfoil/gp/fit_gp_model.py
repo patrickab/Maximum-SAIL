@@ -19,8 +19,11 @@ SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 SOL_DIMENSION = config.SOL_DIMENSION
 
 def fit_gp_model(x_solutions, y_obj_evals):
+    n_data_points = len(x_solutions)
 
-    print("\nfit_gp_model()...\n\n")
+    print("\nfit_gp_model()...")
+    print(f"n_data_points: {n_data_points}\n")
+    print("\nMALFUNCTIONING GP MODEL FITTING IN PREDICTION VERIFICATION LOPP\n")
 
     # Use a GPU if available
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
