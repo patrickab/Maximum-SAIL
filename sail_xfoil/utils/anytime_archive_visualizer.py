@@ -1,14 +1,10 @@
 from ribs.visualize import grid_archive_heatmap
 import matplotlib.pyplot as plt
 import subprocess
-import inspect
-import numpy
 import os
 import gc
 
 PNG_BUFFERSIZE = 20
-
-numpy.set_printoptions(precision=4, suppress=True, floatmode='fixed', linewidth=120)
 
 
 def anytime_archive_visualizer(self, archive):
@@ -42,8 +38,6 @@ def anytime_archive_visualizer(self, archive):
 
     print("Anytime Visualizer: currently bufferd videos:")
     print(((iteration) % PNG_BUFFERSIZE))
-    print((iteration) % PNG_BUFFERSIZE == 0)
-    print(iteration != 1)
 
     if (iteration) % PNG_BUFFERSIZE == 0 and iteration != 0:
 

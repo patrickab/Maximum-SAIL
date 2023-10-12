@@ -52,10 +52,6 @@ def map_elites(self, target_archive, emitter, n_evals, fuct_obj, obj_flag=False,
             candidate_obj = fuct_obj(candidate_sol, self.gp_model)
             candidate_bhv = scheduler_bhv[valid_indices]
 
-
-            if obj_flag:
-                self.update_gp_model(candidate_sol, candidate_obj)
-
             self.update_archive(candidate_sol, candidate_obj, candidate_bhv, obj_flag, acq_flag, pred_flag)
             status_vector, _ = target_archive.add(candidate_sol, candidate_obj, candidate_bhv)
                 
@@ -75,5 +71,7 @@ def map_elites(self, target_archive, emitter, n_evals, fuct_obj, obj_flag=False,
 
             scheduler.tell(candidate_obj, scheduler_bhv)
             remaining_evals -= BATCH_SIZE
-    
+
+    if obj_flag:
+        self.update_gp_model(candidate_sol, candidate_obj)
     return target_archive, new_elite_archive

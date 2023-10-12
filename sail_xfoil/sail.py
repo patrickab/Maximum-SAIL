@@ -1,6 +1,5 @@
 ###### Import Foreign Packages #####
 from ribs.emitters import GaussianEmitter
-from ribs.archives import GridArchive
 import numpy as np
 import subprocess
 import datetime
@@ -9,7 +8,7 @@ import gc
 import os
 
 ###### Import Custom Scripts ######
-from sail_runner import SailRun, run_custom_sail, run_vanilla_sail, run_random_sail, maximize_obj_improvement, eval_max_obj_improvement
+from sail_runner import SailRun, run_custom_sail, run_vanilla_sail, run_random_sail, prediction_verification_loop
 from gp.predict_objective import predict_objective
 from map_elites import map_elites
 from utils.pprint_nd import pprint, pprint_fstring
@@ -32,13 +31,15 @@ import warnings
 warnings.filterwarnings("ignore", message="CUDA initialization: The NVIDIA driver on your system is too old")
 np.set_printoptions(precision=4, suppress=True, floatmode='fixed', linewidth=120)
 
+# global variable used for building dynamic folder structure for benchmarks
+benchmark_domains = []
 
-def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, pred_verific_flag=False, extra_evals=None):
+def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, pred_verific_flag=False, greedy_flag=False, explore_flag=False, extra_evals=None):
     """
     Note: Extra Evals are only used if pred_verific_flag is set to True resulting in more than ACQ_N_OBJ_EVALS. In this case the extra evaluations are counted, returned & also given to subsequent sail runs
     """
 
-    current_run = SailRun(initial_seed, sail_vanilla_flag=sail_vanilla_flag, sail_custom_flag=sail_custom_flag, sail_random_flag=sail_random_flag, pred_verific_flag=pred_verific_flag) 
+    current_run = SailRun(initial_seed, sail_vanilla_flag=sail_vanilla_flag, sail_custom_flag=sail_custom_flag, sail_random_flag=sail_random_flag, pred_verific_flag=pred_verific_flag, greedy_flag=greedy_flag, explore_flag=explore_flag) 
 
     print("\n ## Exit Initialization ##")
     print(" ## Enter Acquisition Loop ##\n\n")
@@ -55,10 +56,14 @@ def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_ran
         run_random_sail(current_run)
         gc.collect()
 
+    global benchmark_domains
+    benchmark_domains.append(current_run.benchmark_domain)
+
+
     print("\n\n ## Exit Acquisition Loop ##")
     print(" ## Enter Prediction Loop ##\n\n")
 
-    pred_archive, pred_emitter = init_pred_archive(current_run.pred_archive, current_run.obj_archive, current_run.current_seed)
+    pred_archive, pred_emitter = init_prediction_loop(current_run.pred_archive, current_run.obj_archive, current_run.current_seed)
 
     if current_run.pred_verific_flag:
         pred_archive, extra_evals = prediction_verification_loop(current_run, pred_archive, pred_emitter)
@@ -72,97 +77,29 @@ def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_ran
     return current_run.extra_evals
 
 
-def prediction_verification_loop(self: SailRun, pred_archive: GridArchive, pred_emitter: GaussianEmitter):
-
-    print("\n\n ## Enter Prediction Verification Loop##")
-    extra_evals = self.extra_evals
-    pred_n_evals = PRED_N_EVALS//(PRED_ELITE_REEVALS) # +1 because after the loop predictions with map_elites is called once more
-    obj_n_evals = MAX_PRED_VERIFICATION//PRED_ELITE_REEVALS
-    dummy_elites = [elite.solution for elite in self.obj_archive][:BATCH_SIZE]
-    total_pred_evals = PRED_N_EVALS
-    flag = True
-
-    while total_pred_evals > pred_n_evals:
-
-        total_pred_evals -= pred_n_evals
-        emitter = update_emitter(self, pred_archive, dummy_elites)
-        old_elites = np.array([(elite.solution, elite.index, elite.objective, elite.measures) for elite in self.obj_archive], 
-                        dtype=[('solution', object), ('index', int), ('objective', float), ('behavior', object)])
-
-        if flag: new_elite_archive = None 
-        else: new_elite_archive 
-        flag=False
-
-        pred_archive, new_elite_archive = map_elites(self, target_archive=pred_archive, emitter=emitter, 
-                                                     n_evals=pred_n_evals, fuct_obj=predict_objective, 
-                                                     new_elite_archive=new_elite_archive, pred_flag=True)
-            
-        # maximize_obj_improvement returns elites sorted in descending order (acq is obj within acq loop)
-        improved_elites, new_elites, n_improvements = maximize_obj_improvement(new_elite_archive, old_elites) 
-
-        # evaluate improved_elites & new_elites
-        # update obj_archive and gp_model inside eval_max_obj_improvement()
-        new_elite_sol, new_elite_obj, new_elite_bhv, pred_archive, gp_model = eval_max_obj_improvement(self, improved_elites, new_elites, old_elites, n_obj_evals=obj_n_evals, 
-                                                                            emitter=emitter, target_archive=pred_archive, n_map_evals=pred_n_evals, 
-                                                                            fuct_obj=predict_objective, new_elite_archive=new_elite_archive,
-                                                                            explore_flag=True, greedy_flag=False)
-
-    new_elite_archive.clear()
-    gc.collect()
-
-    # ToDo: ensure that exactly MAX_PRED_VERIFICATIONs are always evaluated
-    if extra_evals < MAX_PRED_VERIFICATION:
-        print("\n\n\nMaximum Pred Verifications not reached\n\n\n")
-    if extra_evals > MAX_PRED_VERIFICATION:
-        print("\n\n\nMaximum Pred Verifications exceeded\n\n\n")
-
-    return pred_archive, extra_evals                                                                                                        # communicate extra evaluations
-
-
-def update_emitter(self: SailRun, archive, dummy_elites):
-    """
-    Input: Updated Archive
-    Output: Gaussian Emitter
-    """
-    emitter = [
-        GaussianEmitter(
-        archive=archive,
-        sigma=SIGMA_PRED_EMITTER,
-        bounds= np.array(SOL_VALUE_RANGE),
-        batch_size=BATCH_SIZE,
-        initial_solutions=dummy_elites, # these solutions are never used, as the archive is never empty - however, specification is required for initializing the GaussianEmitter class
-        seed=self.update_seed()
-    )]
-    return emitter
-
-
-def init_pred_archive(pred_archive, obj_archive, seed, sigma_emitter=SIGMA_PRED_EMITTER):
+def init_prediction_loop(pred_archive, obj_archive, seed, sigma_emitter=SIGMA_PRED_EMITTER):
     """
     - Stores Obj Elites in Pred Archive
     - Generates Emitter for Pred Archive
     """
+
+    dummy_solutions = [elite.solution for elite in obj_archive]
     pred_archive.add([elite.solution for elite in obj_archive], [elite.objective for elite in obj_archive], [elite.measures for elite in obj_archive])
-    pred_emitter = generate_emitter(init_solutions=[elite.solution for elite in obj_archive], archive=pred_archive, seed=seed, sigma_emitter=sigma_emitter)
-    return pred_archive, pred_emitter
-
-
-def generate_emitter(init_solutions, archive, seed, sigma_emitter=SIGMA_EMITTER, sol_value_range=None):
-    """Reduces Overhead"""
 
     if sol_value_range is None:
         sol_value_range = SOL_VALUE_RANGE
 
-    emitter = [
+    pred_emitter = [
         GaussianEmitter(
-        archive=archive,
+        archive=pred_archive,
         sigma=sigma_emitter,
         bounds= np.array(sol_value_range),
         batch_size=BATCH_SIZE,
-        initial_solutions=init_solutions,
+        initial_solutions=dummy_solutions, # these solutions are used, if the emitter samples from an empty archive, which does not happen, as the pred archive is initialized with obj elites
         seed=seed
     )]
 
-    return emitter
+    return pred_archive, pred_emitter
 
 
 if __name__ == "__main__":
@@ -174,7 +111,9 @@ if __name__ == "__main__":
         gc.collect()
         
         benchmark_domains = ["custom", "vanilla", "prediction_verification", "random"]
-        extra_evals = sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True)
+        extra_evals_1 = sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, greedy_flag=True)
+        extra_evals_2 = sail(initial_seed=i, sail_vanilla_flag=True, pred_verific_flag=True, explore_flag=True)
+        extra_evals = max(extra_evals_1, extra_evals_2)
         sail(initial_seed=i, sail_vanilla_flag=True, extra_evals=extra_evals)
         sail(initial_seed=i, sail_custom_flag=True, extra_evals=extra_evals)
         sail(initial_seed=i, sail_random_flag=True, extra_evals=extra_evals)
