@@ -29,8 +29,8 @@ TEST_RUNS = config.TEST_RUNS
 MAX_PRED_VERIFICATION = config.MAX_PRED_VERIFICATION
 SIGMA_PRED_EMITTER = config.SIGMA_PRED_EMITTER
 
-
 ###### Import Custom Scripts ######
+
 from utils.anytime_archive_visualizer import anytime_archive_visualizer
 from utils.pprint_nd import pprint, pprint_fstring
 from utils.utils import maximize_obj_improvement, eval_xfoil_loop, scale_samples
@@ -41,9 +41,6 @@ from xfoil.simulate_airfoils import xfoil
 from acq_functions.acq_ucb import acq_ucb
 from gp.fit_gp_model import fit_gp_model
 from map_elites import map_elites
-
-
-
 
 class SailRun:
 
@@ -88,22 +85,43 @@ class SailRun:
 
         print("\nInitialize SAIL Run")
         print(f"Domain: {self.domain}")
-        print(f"Initial Seed: {self.initial_seed}")
+        print(f"Initial Seed: {self.initial_seed}")    
+        print(f"Initialize Archive [...]")
+        for i in range(0, INIT_N_EVALS, BATCH_SIZE):
+            solutions = np.empty((0, SOL_DIMENSION))
+            bhv_evals = np.empty((0, BHV_DIMENSION))
+            samples = create_sobol_samples(order=BATCH_SIZE, dim=len(SOL_VALUE_RANGE), seed=self.current_seed)
+            samples = samples.T
+            scale_samples(samples) # sobol samples are between [0;1]
+            _, surface_batch = generate_parsec_coordinates(samples)
+            conv_erros, succ_indices, obj_batch = xfoil(iterations=BATCH_SIZE)
+    
+            sol_batch = samples[succ_indices]
+            bhv_batch = np.array([samples[succ_indices,1:3]])
+            bhv_batch = bhv_batch.reshape(10, 2)
 
-        self.obj_archive, self.acq_archive, self.pred_archive = define_archives(initial_seed=initial_seed)
-        obj_archive, init_solutions, init_obj_evals = initialize_archive(self, archive=self.obj_archive, seed=initial_seed)
-        self.update_gp_model(init_solutions, init_obj_evals)
+            self.update_seed()
+            self.update_archive(candidate_sol=sol_batch,candidate_obj=obj_batch, candidate_bhv=bhv_batch, obj_flag=True)
+            print(conv_erros)
+        print("[...] Terminate init_archive()\n")
+        self.update_gp_model(sol_batch, obj_batch)
 
     def update_gp_model(self, new_solutions, new_objectives):
+
+        # np.vstack x and y for bulletproof functionality
+        new_solutions = np.vstack(new_solutions) if new_solutions.ndim == 1 else new_solutions
+        new_objectives = np.vstack(new_objectives) if new_objectives.ndim == 1 else new_objectives
+
         self.sol_array = np.vstack((self.sol_array, new_solutions))
-        self.obj_array = np.append(self.obj_array, new_objectives)
-        self.obj_array = np.ravel(self.obj_array)
+        self.obj_array = np.vstack((self.obj_array, new_objectives))
+
         self.gp_model = fit_gp_model(self.sol_array, self.obj_array)
 
     def update_iteration(self):
         self.current_iteration += 1
 
     def update_seed(self):
+
         self.current_seed += TEST_RUNS
         return self.current_seed
 
@@ -112,61 +130,196 @@ class SailRun:
         self.update_iteration()
 
     def update_archive(self, candidate_sol=None, candidate_obj=None, candidate_bhv=None, obj_flag=False, acq_flag=False, pred_flag=False, archive=None):
+        """"
+        Input:
+            Option 1: Call with archive & archive flag
+            Option 2: Call with candidate_sol, candidate_obj, candidate_bhv & archive flag
+        """
 
-        if archive is not None:
-            self.archive = archive
-            self.visualize_archive(self.archive)
-            return
+        if np.sum([obj_flag, acq_flag, pred_flag] == True) > 1:
+            raise ValueError("More than one flag is True, use update_acq_archive")
 
         if obj_flag:
+
+            if archive is not None:
+                self.archive = archive
+                self.visualize_archive(self.archive)
+                return
+            
             print("Elites in obj_archive (before): " + str(self.obj_archive.stats.num_elites))
             status_vector, _ = self.obj_archive.add(candidate_sol, candidate_obj, candidate_bhv)
             print("Elites in obj_archive  (after): " + str(self.obj_archive.stats.num_elites))
             self.visualize_archive(self.obj_archive)
             return status_vector, self.obj_archive
+
         if acq_flag:
+
+            if archive is not None:
+                self.archive = archive
+                self.visualize_archive(self.archive)
+                return
+
             print("Elites in acq_archive (before): " + str(self.acq_archive.stats.num_elites))
             status_vector, _ = self.acq_archive.add(candidate_sol, candidate_obj, candidate_bhv)
             print("Elites in acq_archive  (after): " + str(self.acq_archive.stats.num_elites))
             self.visualize_archive(self.acq_archive)
             return status_vector, self.acq_archive
+
         if pred_flag:
+
+            if archive is not None:
+                self.archive = archive
+                self.visualize_archive(self.archive)
+                return
+
             print("Elites in pred_archive (before): " + str(self.pred_archive.stats.num_elites))
             status_vector, _ = self.pred_archive.add(candidate_sol, candidate_obj, candidate_bhv)
             print("Elites in pred_archive  (after): " + str(self.pred_archive.stats.num_elites))
             self.visualize_archive(self.pred_archive)
             return status_vector, self.pred_archive
-        
+
+    def update_acq_archive(self, acq_archive, obj_archive, gp_model):
 
 
+        """
+        Seperate function compared to Class Method update_archive()
+        Combines obj_archive and acq_archive into one archive (used for benchmarking differences between approaches)
+        Also, calling functions within the module is faster
+    
+            Input: Updated Archive, GP Model
+            Output: Updated Archive
+        """
+    
+        n_obj_elites = sorted(obj_archive, key=lambda x: x.objective, reverse=True)[:obj_archive.stats.num_elites]
+        n_acq_elites = sorted(acq_archive, key=lambda x: x.objective, reverse=True)[:acq_archive.stats.num_elites]
+    
+        n_obj_sol = np.array([elite.solution for elite in n_obj_elites])
+        n_acq_sol = np.array([elite.solution for elite in n_acq_elites])
+    
+        n_obj_acq = np.array([elite.objective for elite in n_obj_elites])
+        n_acq_acq = acq_ucb(n_acq_sol, gp_model) if n_acq_sol.shape[0] > 0 else np.array([])
+    
+        n_obj_bhv = np.array([elite.measures for elite in n_obj_elites])
+        n_acq_bhv = np.array([elite.measures for elite in n_acq_elites])
+    
+        n_sol = np.concatenate((n_obj_sol, n_acq_sol), axis=0) if n_acq_sol.shape[0] > 0 else n_obj_sol
+        n_acq = np.concatenate((n_obj_acq, n_acq_acq), axis=0) if n_acq_acq.shape[0] > 0 else n_obj_acq
+        n_bhv = np.concatenate((n_obj_bhv, n_acq_bhv), axis=0) if n_acq_bhv.shape[0] > 0 else n_obj_bhv
+    
+        acq_archive.clear()
+        acq_archive.add(n_sol, n_acq, n_bhv)
+    
+        return acq_archive
 
 
+def eval_max_improvement(self: SailRun, improved_elites, new_elites, old_elites, n_samples, emitter, target_archive,  n_map_evals, fuct_obj, new_elite_archive=None, greedy_flag=False, explore_flag=False, acq_flag=False, pred_flag=False):
+
+    """
+    Evaluates elites, that present the maximum improvement regarding their respective objective
+                                                             (acquisition or prediction values)
+
+    IMPORTANT: improved_elites, new elites are to be exected in a specific np.ndarray datastructure (see)
+
+    Input:
+        "improved_elites": Elites sorted in descending order (niche competition winners)
+        "old_elites"   :   Elites sorted in descending order (niche competition losers)
+
+        "new_elites"   :   Elites sorted in descending order (new bin discoveries)
+        "n_obj_evals"  :   Number of evaluations - allows n_evals != BATCH_SIZE
+
+        "emitter"      :   Used for map_elites if n_elites < n_evals (sampling)
+        "target_archive":  Used for map_elites if n_elites < n_evals  (storing)
+        "n_map_evals"  :   N evaluations for map_elites
+        "fuct_obj"     :   Obj function for map_elites
+
+        "new_elite_archive": (((check if necessary)))
+
+        "greedy_flag"  :   Flag for greedy evaluation (evaluate improved bins first)        # counterintuitively, greedy evaluations can leed to better QD Score
+        "explore_flag" :   Flag for explore evaluation     (evaluate new bins first)        # since explore flag leads to more evaluations of unconverged solutions
+    """
+
+    def ensure_n_samples(n_samples, improved_elites, new_elites, new_elite_archive=None):
+
+        """
+        Ensures that specified number of samples is evaluated, by reevaluating Map Elites (if necessary)
+        After 4 extra evaluations, the function returns the best elites found so far to avoid infinite loops
+        """
+
+        n_improvements = improved_elites.shape[0] + new_elites.shape[0]
+        # Evaluate until minimum BATCH_SIZE improvements are found
+        if n_improvements < n_samples:
+            iter = 0
+            while n_improvements < n_samples and iter <= 5:
+
+                print("\n\n### Not enough Acq Improvements: Re-entering acquisition loop###\n\n")
+                self.acq_archive, new_elite_archive = map_elites(self, emitter=emitter, target_archive=target_archive, n_evals=n_map_evals, fuct_obj=fuct_obj, new_elite_archive=new_elite_archive)
+                iter += 1
+
+                i_improved_elites, i_new_elites, i_improvements = maximize_obj_improvement(new_elite_archive, old_elites)
+                n_improvements += i_improvements
+
+        improved_elites = np.vstack((improved_elites, i_improved_elites)) if improved_elites.shape[0] > 0 else i_improved_elites
+        new_elites = np.vstack((new_elites, i_new_elites)) if new_elites.shape[0] > 0 else i_new_elites
+
+        return improved_elites, new_elites
+    
+    def select_samples(improved_elites, new_elites, n_samples, greedy_flag, explore_flag):
+
+        if explore_flag:
+            # Evaluate new_elites first
+            if new_elites.shape[0] >= n_samples:
+                candidate_elites = new_elites[:n_samples]
+            else:
+                candidate_elites = np.concatenate((new_elites, improved_elites), axis=0)
+                candidate_elites = candidate_elites[:n_samples]
+
+        if greedy_flag:
+            # Evaluate max_improvement_elites first
+            if improved_elites.shape[0] >= n_samples:
+                candidate_elites = new_elites[:n_samples]
+            else:
+                candidate_elites = np.concatenate((improved_elites, new_elites), axis=0)
+                candidate_elites = candidate_elites[:n_samples]
 
 
-def initialize_archive(self: SailRun, archive: GridArchive, seed: int):
+    # Select samples & extract data
+    improved_elites, new_elites = ensure_n_samples(n_samples, improved_elites, new_elites)
+    candidate_elites = select_samples(improved_elites, new_elites, n_samples, greedy_flag, explore_flag)
+    candidate_sol = candidate_elites['solution']
+    candidate_obj = candidate_elites['objective_improvement']
+    candidate_bhv = np.array(np.vstack(candidate_elites['behavior']))
 
-    print("\nInitialize init_archive() [...]")
-    n_evals = INIT_N_EVALS
-    while n_evals >= BATCH_SIZE:
-        n_evals -= BATCH_SIZE
-        solutions = np.empty((0, SOL_DIMENSION))
-        bhv_evals = np.empty((0, BHV_DIMENSION))
-        samples = create_sobol_samples(order=BATCH_SIZE, dim=len(SOL_VALUE_RANGE), seed=seed)
-        samples = samples.T
 
-        self.update_seed()
+    # acq_archive only contains valid solutions (= non-intersecting polynomials), therefore no need to check for validity using valid_indices
+    conv_sol_batch, conv_obj_batch, conv_bhv_batch, _, archive = eval_xfoil_loop(self, candidate_sol, candidate_bhv, self.extra_evals, acq_flag=True) # set acq loop to remove non converged solutions
 
-        scale_samples(samples)                  # sobol samples produce values between [0;1]
-        valid_indices, surface_area_batch = generate_parsec_coordinates(samples)
-        convergence_errors, success_indices, obj_batch = xfoil(iterations=BATCH_SIZE)
+    # add converged solutions & render .pngs - if specified update & render other archive(s)
+    self.update_archive(archive, obj_flag=True)
+    if pred_flag:
+        self.update_archive(conv_sol_batch, conv_obj_batch, conv_bhv_batch, pred_flag=True)
+    if acq_flag:
+        self.update_archive(conv_sol_batch, conv_obj_batch, conv_bhv_batch, acq_flag=True)
 
-        sol_batch = samples[success_indices]
-        bhv_batch = np.array([samples[success_indices,1:3]])
-        bhv_batch = bhv_batch.reshape(10, 2)
-        self.update_archive(candidate_sol=sol_batch,candidate_obj=obj_batch, candidate_bhv=bhv_batch, obj_flag=True)
+    self.update_gp_model(candidate_sol, conv_obj_batch)
 
-    print("[...] Terminate init_archive()\n")
-    return archive, sol_batch, obj_batch
+    # if solutions didnt converge, archive is cleared, and only refilled with obj_elites & conv_elites
+    target_archive.clear()
+    obj_elites = [(elite.solution, elite.objective, elite.measures) for elite in self.obj_archive]
+    target_archive.add(obj_elites[0], obj_elites[1], obj_elites[2])
+    target_archive.add(conv_sol_batch, conv_obj_batch, conv_bhv_batch)
+    if pred_flag:
+        self.update_archive(target_archive, pred_flag=True)
+    if acq_flag:
+        self.update_archive(target_archive, acq_flag=True)
+
+
+    # Ensure proper shapes, before returning, if not raise error
+    if candidate_sol.shape[0] != candidate_obj.shape[0] != candidate_bhv.shape[0]:
+        raise ValueError("New elite shapes not equal")
+    n_candidate_elites = candidate_sol.shape[0]
+    if n_candidate_elites > n_samples:
+        raise ValueError("Candidate elites should be less than or equal to BATCH_SIZE")
+    return candidate_sol, candidate_obj, candidate_bhv, archive      
 
 
 
@@ -185,6 +338,8 @@ def run_custom_sail(self: SailRun):
     anytime_metrics = pandas.DataFrame(columns=['Iteration', 'Mean Obj', 'Mean Acq', 'Mean Obj Improvement', 'Mean Acq Improvement', 'Percentage Improvements', 'Total Improvements', 'Percentage Convergence Errors', 'Convergence Errors', 'Total Convergence Errors', 'New Acq Elites', 'New Obj Elites'])
     eval_budget = ACQ_N_OBJ_EVALS + self.extra_evals
 
+    acq_archive = self.acq_archive
+
     # dummy value for update_emitter function, to not extract using list comprehension in every while loop
     dummy_elites = [elite.solution for elite in self.obj_archive][:BATCH_SIZE] 
 
@@ -195,11 +350,8 @@ def run_custom_sail(self: SailRun):
 
         # Seperate function compared to Class Method update_archive()
         # Combines obj_archive and acq_archive into one archive (used for benchmarking differences)
-        acq_archive = update_acq_archive(self.acq_archive, self.obj_archive, self.gp_model)
         acq_emitter = update_emitter(self, self.acq_archive, dummy_elites)
-
-        # only used for rendering imgs
-        self.update_archive(archive=acq_archive, acq_flag=True)
+        self.update_archive(archive=acq_archive, obj_flag=True, acq_flag=True)
         
         seed_t0 = self.current_seed
         self.update_seed()
@@ -209,7 +361,7 @@ def run_custom_sail(self: SailRun):
             raise ValueError("Seed not updated")
 
         t0_acq_archive = self.acq_archive.stats.num_elites
-        target_archive, new_elite_archive = map_elites(self, target_archive=self.acq_archive, emitter=acq_emitter, n_evals=ACQ_N_MAP_EVALS, fuct_obj=acq_ucb)
+        target_archive, new_elite_archive = map_elites(self, target_archive=acq_archive, emitter=acq_emitter, n_evals=ACQ_N_MAP_EVALS, fuct_obj=acq_ucb)
         t1_acq_archive = self.acq_archive.stats.num_elites
 
         # maximize_obj_improvement returns elites sorted in descending order (acq is obj within acq loop)
@@ -217,9 +369,12 @@ def run_custom_sail(self: SailRun):
 
         # evaluate improved_elites & new_elites
         # update obj_archive and gp_model inside eval_max_obj_improvement()
-        new_elite_sol, new_elite_obj, new_elite_bhv, acq_archive, gp_model = eval_max_obj_improvement(self, improved_elites, new_elites, old_elites, n_obj_evals=BATCH_SIZE, 
-                                                                               emitter=acq_emitter, target_archive=acq_archive, n_map_evals=BATCH_SIZE, 
-                                                                               fuct_obj=acq_ucb, explore_flag=True, greedy_flag=False, new_elite_archive=new_elite_archive)
+        new_elite_sol, new_elite_obj, new_elite_bhv, acq_archive = eval_max_improvement(self, improved_elites, new_elites, old_elites, n_obj_evals=BATCH_SIZE, 
+                                                                               emitter=acq_emitter, target_archive=acq_archive, n_map_evals=BATCH_SIZE, fuct_obj=acq_ucb, 
+                                                                               explore_flag=True, greedy_flag=False, new_elite_archive=new_elite_archive)
+
+        if new_elite_sol.shape[0] != new_elite_obj.shape[0] != new_elite_bhv.shape[0]:
+            raise ValueError("New elite shapes not equal")
 
         eval_budget -= BATCH_SIZE
         iteration += 1
@@ -374,76 +529,10 @@ def run_random_sail(acq_archive, obj_archive, gp_model, sol_array, obj_array, ex
         eval_budget -= BATCH_SIZE
         anytime_archive_visualizer(archive=obj_archive, benchmark_domain=benchmark_domain, initial_seed=initial_seed, iteration=(ACQ_N_OBJ_EVALS+extra_evals-eval_budget)//BATCH_SIZE)
 
-        pprint(obj_batch)
         print("\n\nAirfoil Convergence Errors: " + str(convergence_errors))
         print("Remaining Random Search Obj Evals: " + str(eval_budget) + "\n\n")
 
     return obj_archive, gp_model
-
-
-def eval_max_obj_improvement(self: SailRun, improved_elites, new_elites, old_elites, n_obj_evals, emitter, target_archive,  n_map_evals, fuct_obj, new_elite_archive, greedy_flag=False, explore_flag=False, acq_flag=False):
-    
-    n_obj_improvements = improved_elites.shape[0] + new_elites.shape[0]
-    # Evaluate until minimum BATCH_SIZE improvements are found
-    if n_obj_improvements < n_obj_evals:
-        iter = 0
-        while n_obj_improvements < n_obj_evals and iter <= 4:
-
-            print("\n\n### Not enough Acq Improvements: Re-entering acquisition loop###\n\n")
-            self.acq_archive, new_elite_archive = map_elites(self, emitter=emitter, target_archive=target_archive, n_evals=n_map_evals, fuct_obj=fuct_obj, new_elite_archive=new_elite_archive)
-            iter += 1
-
-            max_improvement_elites, new_elites, n_improvements = maximize_obj_improvement(new_elite_archive, old_elites)
-
-    if explore_flag:
-        # Evaluate new_elites first
-        if new_elites.shape[0] >= n_obj_evals:
-            candidate_elites = new_elites[:n_obj_evals]
-        else:
-            candidate_elites = np.concatenate((new_elites, max_improvement_elites), axis=0)
-            candidate_elites = candidate_elites[:n_obj_evals]
-
-    if greedy_flag:
-        # Evaluate max_improvement_elites first
-        if max_improvement_elites.shape[0] >= n_obj_evals:
-            candidate_elites = new_elites[:n_obj_evals]
-        else:
-            candidate_elites = np.concatenate((new_elites, max_improvement_elites), axis=0)
-            candidate_elites = candidate_elites[:n_obj_evals]
-
-    candidate_sol = candidate_elites['solution']
-    candidate_obj = candidate_elites['objective_improvement'] # obj = acq in acq loop
-    candidate_bhv = candidate_elites['behavior']
-
-    n_candidate_elites = candidate_sol.shape[0]
-    if n_candidate_elites > n_obj_evals:
-        raise ValueError("Candidate elites should be less than or equal to BATCH_SIZE")
-
-    # acq_archive only contains valid solutions (= non-intersecting polynomials), therefore no need to check for validity using valid_indices
-    conv_sol_batch, conv_obj_batch, conv_bhv_batch, succes_indices_batch, archive, extra_evals = eval_xfoil_loop(self, candidate_sol, candidate_bhv, self.extra_evals, archive=None)
-    self.update_gp_model(conv_sol_batch, conv_obj_batch)
-
-    # if elite didnt converge, remove from acq_archive
-    if acq_flag:
-        
-        acq_archive = GridArchive(
-            solution_dim=SOL_DIMENSION,
-            dims=BHV_NUMBER_BINS,
-            ranges=BHV_VALUE_RANGE,
-            qd_score_offset=-600,
-            threshold_min = -1,
-            seed=self.current_seed
-        )
-
-        acq_archive.clear()
-        obj_elites = [(elite.solution, elite.objective, elite.measures) for elite in self.obj_archive]
-        acq_archive.add(obj_elites[0], obj_elites[1], obj_elites[2])
-        acq_archive.add(conv_sol_batch, conv_obj_batch, conv_bhv_batch)
-
-    archive = self.update_archive(conv_sol_batch, conv_obj_batch, conv_bhv_batch, obj_flag=True)
-    gp_model = self.update_gp_model(candidate_sol, conv_obj_batch)
-
-    return candidate_sol, candidate_obj, candidate_bhv, archive, gp_model
 
 
 def update_emitter(self: SailRun, archive, dummy_elites):
@@ -463,68 +552,3 @@ def update_emitter(self: SailRun, archive, dummy_elites):
     )]
 
     return emitter
-
-
-def update_acq_archive(acq_archive, obj_archive, gp_model):
-    """
-    Seperate function compared to Class Method update_archive()
-    Combines obj_archive and acq_archive into one archive (used for benchmarking differences)
-    Also, calling functions within the module is faster
-
-        Input: Updated Archive, GP Model
-        Output: Updated Archive
-    """
-
-    n_obj_elites = sorted(obj_archive, key=lambda x: x.objective, reverse=True)[:obj_archive.stats.num_elites]
-    n_acq_elites = sorted(acq_archive, key=lambda x: x.objective, reverse=True)[:acq_archive.stats.num_elites]
-
-    n_obj_sol = np.array([elite.solution for elite in n_obj_elites])
-    n_acq_sol = np.array([elite.solution for elite in n_acq_elites])
-
-    n_obj_acq = np.array([elite.objective for elite in n_obj_elites])
-    n_acq_acq = acq_ucb(n_acq_sol, gp_model) if n_acq_sol.shape[0] > 0 else np.array([])
-
-    n_obj_bhv = np.array([elite.measures for elite in n_obj_elites])
-    n_acq_bhv = np.array([elite.measures for elite in n_acq_elites])
-
-    n_sol = np.concatenate((n_obj_sol, n_acq_sol), axis=0) if n_acq_sol.shape[0] > 0 else n_obj_sol
-    n_acq = np.concatenate((n_obj_acq, n_acq_acq), axis=0) if n_acq_acq.shape[0] > 0 else n_obj_acq
-    n_bhv = np.concatenate((n_obj_bhv, n_acq_bhv), axis=0) if n_acq_bhv.shape[0] > 0 else n_obj_bhv
-
-    acq_archive.clear()
-    acq_archive.add(n_sol, n_acq, n_bhv)
-
-    return acq_archive
-
-
-def define_archives(initial_seed):
-    """Reduces Overhead"""
-
-    obj_archive = GridArchive(
-        solution_dim=SOL_DIMENSION,         # Dimension of solution vector
-        dims=BHV_NUMBER_BINS,               # Discretization of behavioral bins
-        ranges=BHV_VALUE_RANGE,             # Possible values for behavior vector
-        qd_score_offset=-600,
-        threshold_min = -1,
-        seed=initial_seed
-        )
-    
-    acq_archive = GridArchive(
-        solution_dim=SOL_DIMENSION,
-        dims=BHV_NUMBER_BINS,
-        ranges=BHV_VALUE_RANGE,
-        qd_score_offset=-600,
-        threshold_min = -1,
-        seed=initial_seed
-        )
-    
-    pred_archive = GridArchive(
-        solution_dim=SOL_DIMENSION,
-        dims=BHV_NUMBER_BINS,
-        ranges=BHV_VALUE_RANGE,
-        qd_score_offset=-600,
-        threshold_min = -1,
-        seed=initial_seed,
-        )
-    
-    return obj_archive, acq_archive, pred_archive

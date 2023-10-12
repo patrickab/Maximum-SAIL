@@ -23,7 +23,7 @@ MAX_PRED_VERIFICATION = config.MAX_PRED_VERIFICATION
 PRED_ELITE_REEVALS = config.PRED_ELITE_REEVALS
 
 
-def eval_xfoil_loop(self, samples, behavior, extra_evals, obj_flag=False, pred_flag=False, acq_flag=False, archive=None):
+def eval_xfoil_loop(self, candidate_sol, candidate_bhv, archive):
     """
     XFOIL evaluation is performed in Batches of BATCH_SIZE
         Therefore, if n_samples != BATCH_SIZE, 
@@ -47,42 +47,35 @@ def eval_xfoil_loop(self, samples, behavior, extra_evals, obj_flag=False, pred_f
 
 
     iteration = 0
-    extra_evals = 0
-    total_samples=samples.shape[0]
-    remaining_samples = total_samples
+    n_candidates=candidate_sol.shape[0]
+    remaining_samples = n_candidates
 
     while remaining_samples>0: # allows indices [0:10], [10:20], [20:22]
 
         sample_index = iteration*BATCH_SIZE
-        iteration_sols = samples[sample_index:sample_index+BATCH_SIZE] # alows indices eg [20:22] to be sampled, if 2 samples are left
-        iteration_bhvs = behavior[sample_index:sample_index+BATCH_SIZE]
+        i_solutions = candidate_sol[sample_index:sample_index+BATCH_SIZE] # alows indices eg [20:22] to be sampled, if 2 samples are left
+        i_behaviors = candidate_bhv[sample_index:sample_index+BATCH_SIZE]
         iteration += 1
         
-        n_samples = iteration_sols.shape[0]
-        remaining_samples -= n_samples
-        
-        if pred_flag:
-            extra_evals += n_samples
+        i_candidates = i_solutions.shape[0]
+        remaining_samples -= i_candidates
 
-        iteration_sols = np.vstack(iteration_sols)
-        generate_parsec_coordinates(iteration_sols)
+        # generate .dat files
+        i_solutions = np.vstack(i_solutions)
+        generate_parsec_coordinates(i_solutions)
 
-        _, success_indices, converged_obj = xfoil(n_samples) # ToDo: modify xfoil to take in sample sizes below BATCH_SIZE
-        success_indices = success_indices[:n_samples]
-
-        converged_sol = iteration_sols[success_indices]
-        converged_bhv = iteration_bhvs[success_indices]
-
+        # evaluate samples batch & extract converged solutions
+        _, success_indices, converged_obj = xfoil(i_candidates)
+        success_indices = success_indices[:i_candidates]
+        converged_sol = i_solutions[success_indices]
+        converged_bhv = i_behaviors[success_indices]
         success_indices = np.hstack(np.vstack(success_indices) + sample_index)
         succes_indices_batch = np.vstack((succes_indices_batch, success_indices*iteration*BATCH_SIZE)) if succes_indices_batch.size > 0 else success_indices
 
-        self.update_archive(converged_sol, converged_obj, converged_bhv, obj_flag=True)
-        if pred_flag:
-            self.update_archive(converged_sol, converged_obj, converged_bhv, pred_flag=True)
-        if acq_flag:
-            self.update_archive(converged_sol, converged_obj, converged_bhv, acq_flag=True)
+        archive.add(converged_sol, converged_obj, converged_bhv)
 
-        if converged_sol.shape[0] != 0: # if converged_sol is not empty
+        # prepare data for calling function
+        if converged_sol.shape[0] != 0:
             if conv_sol_batch.size > 0:
                 conv_sol_batch = np.vstack((conv_sol_batch, converged_sol))
                 conv_obj_batch = np.append(conv_obj_batch, converged_obj)
@@ -91,8 +84,7 @@ def eval_xfoil_loop(self, samples, behavior, extra_evals, obj_flag=False, pred_f
                 conv_sol_batch = converged_sol
                 conv_obj_batch = converged_obj
                 conv_bhv_batch = converged_bhv
-
-    return conv_sol_batch, conv_obj_batch, conv_bhv_batch, succes_indices_batch, archive, extra_evals
+    return conv_sol_batch, conv_obj_batch, conv_bhv_batch, succes_indices_batch, archive
 
 
 def maximize_obj_improvement(new_elite_archive: GridArchive, old_elites: np.ndarray):

@@ -32,6 +32,7 @@ import warnings
 warnings.filterwarnings("ignore", message="CUDA initialization: The NVIDIA driver on your system is too old")
 np.set_printoptions(precision=4, suppress=True, floatmode='fixed', linewidth=120)
 
+
 def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, pred_verific_flag=False, extra_evals=None):
     """
     Note: Extra Evals are only used if pred_verific_flag is set to True resulting in more than ACQ_N_OBJ_EVALS. In this case the extra evaluations are counted, returned & also given to subsequent sail runs
