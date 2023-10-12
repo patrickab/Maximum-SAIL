@@ -4,10 +4,10 @@ from ribs.archives import GridArchive
 from ribs.emitters import GaussianEmitter
 
 ### Custom Scripts ###
-from utils.anytime_archive_visualizer import anytime_archive_visualizer
 from xfoil.generate_airfoils import generate_parsec_coordinates
 from xfoil.simulate_airfoils import xfoil
 from acq_functions.acq_ucb import acq_ucb
+from utils.pprint_nd import pprint_nd, pprint, pprint_fstring
 
 ### Global Parameters ###
 from config.config import Config
@@ -23,65 +23,76 @@ MAX_PRED_VERIFICATION = config.MAX_PRED_VERIFICATION
 PRED_ELITE_REEVALS = config.PRED_ELITE_REEVALS
 
 
-def eval_xfoil_loop(samples, behavior, # arguments below used for anytime archive visualizer
-                    extra_evals, archive=None, benchmark_domain=None, initial_seed=None, index_anytime_visualizer=None):
+def eval_xfoil_loop(self, samples, behavior, extra_evals, obj_flag=False, pred_flag=False, acq_flag=False, archive=None):
     """
     XFOIL evaluation is performed in Batches of BATCH_SIZE
         Therefore, if n_samples != BATCH_SIZE, 
         samples need to be evaluated in a loop
 
-    - ensures that batches of EXACTLY BATCH_SIZE are evaluated
+    Always ensure to call self.update_gp_model() after calling this function
+        This feature is not integrated, in order to allow for more flexibility
+
+    - ensures that iter_samples <= BATCH_SIZE are evaluated
 
     input:
         samples     Type: ndarrayn_samples      Shape: (n_samples, SOL_DIMENSION)
     returns:
-        conv_sol, conv_obj, conv_bhv, archive, extra_evals
+        conv_sol_batch, conv_obj_batch, conv_bhv_batch, archive, extra_evals
 
     """
-    conv_sol = np.empty(0)
-    conv_obj = np.empty(0)
-    conv_bhv = np.empty(0)
+    conv_sol_batch = np.empty(0)
+    conv_obj_batch = np.empty(0)
+    conv_bhv_batch = np.empty(0)
+    succes_indices_batch = np.empty(0)
 
-    index_visualizer=index_anytime_visualizer
+
+    iteration = 0
+    extra_evals = 0
     total_samples=samples.shape[0]
     remaining_samples = total_samples
 
-    for index in range(0, total_samples, 10): # allows indices [0:10], [10:20], [20:22]
+    while remaining_samples>0: # allows indices [0:10], [10:20], [20:22]
 
-        sample_index = index*BATCH_SIZE
+        sample_index = iteration*BATCH_SIZE
         iteration_sols = samples[sample_index:sample_index+BATCH_SIZE] # alows indices eg [20:22] to be sampled, if 2 samples are left
-        iteration_bhvs = behavior[sample_index:sample_index+BATCH_SIZE] 
+        iteration_bhvs = behavior[sample_index:sample_index+BATCH_SIZE]
+        iteration += 1
+        
         n_samples = iteration_sols.shape[0]
         remaining_samples -= n_samples
+        
+        if pred_flag:
+            extra_evals += n_samples
 
+        iteration_sols = np.vstack(iteration_sols)
         generate_parsec_coordinates(iteration_sols)
 
-        _, success_indices, new_elite_objectives = xfoil(n_samples) # ToDo: modify xfoil to take in sample sizes below BATCH_SIZE
+        _, success_indices, converged_obj = xfoil(n_samples) # ToDo: modify xfoil to take in sample sizes below BATCH_SIZE
         success_indices = success_indices[:n_samples]
-        extra_evals += n_samples
 
         converged_sol = iteration_sols[success_indices]
         converged_bhv = iteration_bhvs[success_indices]
 
-        print("Eval Xfoil Loop Elites (before):  " + str(archive.stats.num_elites))
-        archive.add(converged_sol, new_elite_objectives, converged_bhv)
-        print("Eval Xfoil Loop Elites (after): " + str(archive.stats.num_elites))
+        success_indices = np.hstack(np.vstack(success_indices) + sample_index)
+        succes_indices_batch = np.vstack((succes_indices_batch, success_indices*iteration*BATCH_SIZE)) if succes_indices_batch.size > 0 else success_indices
 
-        anytime_archive_visualizer(archive, benchmark_domain, initial_seed, index_visualizer)
-        index_visualizer += 1
-        print(index_visualizer)
+        self.update_archive(converged_sol, converged_obj, converged_bhv, obj_flag=True)
+        if pred_flag:
+            self.update_archive(converged_sol, converged_obj, converged_bhv, pred_flag=True)
+        if acq_flag:
+            self.update_archive(converged_sol, converged_obj, converged_bhv, acq_flag=True)
 
         if converged_sol.shape[0] != 0: # if converged_sol is not empty
-            if conv_sol.size > 0:
-                conv_sol = np.vstack((conv_sol, converged_sol))
-                conv_obj = np.append(conv_obj, new_elite_objectives)
-                conv_bhv = np.vstack((conv_bhv, converged_bhv))
+            if conv_sol_batch.size > 0:
+                conv_sol_batch = np.vstack((conv_sol_batch, converged_sol))
+                conv_obj_batch = np.append(conv_obj_batch, converged_obj)
+                conv_bhv_batch = np.vstack((conv_bhv_batch, converged_bhv))
             else:
-                conv_sol = converged_sol
-                conv_obj = new_elite_objectives
-                conv_bhv = converged_bhv
+                conv_sol_batch = converged_sol
+                conv_obj_batch = converged_obj
+                conv_bhv_batch = converged_bhv
 
-    return conv_sol, conv_obj, conv_bhv, archive, extra_evals
+    return conv_sol_batch, conv_obj_batch, conv_bhv_batch, succes_indices_batch, archive, extra_evals
 
 
 def maximize_obj_improvement(new_elite_archive: GridArchive, old_elites: np.ndarray):
@@ -94,36 +105,46 @@ def maximize_obj_improvement(new_elite_archive: GridArchive, old_elites: np.ndar
         (np_ndarray): old elites         
             -> old_elites = np.array([(elite.solution, elite.index, elite.objective, elite.measures) for elite in obj_archive], dtype=[('solution', object), ('index', int), ('objective', float), ('behavior', object)]))
     """
+    # ToDo: Verify
 
+    elites = np.array([(elite.solution, elite.index, elite.objective, elite.measures) for elite in new_elite_archive], dtype=[('solution', object), ('index', int), ('objective', float), ('behavior', object)])
+    elites = elites[np.argsort(elites['index'])]
+    print(elites)
     
-    new_elites = np.array(
-        [(elite.solution, elite.index, elite.objective, elite.measures) for elite in new_elite_archive], 
-        dtype=[('solution', object), ('index', int), ('objective', float), ('behavior', object)])
-    
-    is_improved_mask = np.isin(new_elites['index'], old_elites['index'])
+    # Seperate improved elites (niche compete) from new elites (new niches)
+    is_improved_new_elite = np.isin(elites['index'], old_elites['index'])
+    improved_elites = elites[is_improved_new_elite]
+    new_elites      = elites[~is_improved_new_elite]
 
-    # seperate improved elites (niche compete) from new elites (new niches)
-    improved_elites = new_elites[is_improved_mask]
+    # Sort by index
     improved_elites = improved_elites[np.argsort(improved_elites['index'])]
-    new_elites = new_elites[~is_improved_mask]
+    new_elites      = new_elites[np.argsort(new_elites['index'])]
 
-    # select old elites that are in improved elites
-    is_old_in_improved_mask = np.isin(old_elites['index'], improved_elites['index'])
-    old_elites_improved = old_elites[is_old_in_improved_mask]
+    # Select old elites that have been improved
+    is_improved_old_elite = np.isin(old_elites['index'], improved_elites['index'])
+    old_elites_improved   = old_elites[is_improved_old_elite]
+    print(old_elites_improved)
 
-    max_acq_improvement_elites = np.array(list(zip(
-        improved_elites['solution'], 
-        improved_elites['objective'],
-        (improved_elites['objective'] - old_elites_improved['objective']), 
-        improved_elites['behavior'])), 
-        dtype=[('solution', object), ('objective', float), ('objective_improvement', float), ('behavior', object)])
+    objective_improvement = improved_elites['objective'] - old_elites_improved['objective']
+
+    # Pack into one data structure
+    improved_elites = np.array(list(zip(
+        improved_elites['solution'], improved_elites['objective'],          objective_improvement , improved_elites['behavior'])), 
+        dtype=[        ('solution', object),        ('objective', float), ('objective_improvement', float),        ('behavior', object)])
+    # Sort & flip to ensure descending order
+    improved_elites = improved_elites[np.argsort(improved_elites['objective_improvement'])]
+    improved_elites = np.flip(improved_elites)
     
-    max_acq_improvement_elites = max_acq_improvement_elites[np.argsort(max_acq_improvement_elites['objective_improvement'])]
-    max_acq_improvement_elites = np.flip(max_acq_improvement_elites)
-    new_elites = np.array(list(zip(new_elites['solution'], new_elites['objective'], new_elites['objective'], new_elites['behavior'])), 
-                                      dtype=[('solution', object), ('objective', float),('objective_improvement', float), ('behavior', object)])
+    new_elites = np.array(list(zip(
+        new_elites['solution'], new_elites['objective'],        new_elites['objective'], new_elites['behavior'])), 
+           dtype=[('solution', object),   ('objective', float),('objective_improvement', float),   ('behavior', object)])
+    
+    new_elites      = new_elites[np.argsort(new_elites['objective_improvement'])]
+    new_elites      = np.flip(new_elites)
 
-    return max_acq_improvement_elites, new_elites
+    n_obj_improvements = improved_elites.shape[0] + new_elites.shape[0]
+
+    return improved_elites, new_elites, n_obj_improvements
 
 
 def store_n_best_elites(archive: GridArchive, n: int, update_acq=True, gp_model=None, obj_archive=None):
@@ -162,15 +183,6 @@ def store_n_best_elites(archive: GridArchive, n: int, update_acq=True, gp_model=
 
     return archive
 
-
-def init_pred_archive(pred_archive, obj_archive, seed, sigma_emitter=SIGMA_PRED_EMITTER):
-    """
-    - Stores Obj Elites in Pred Archive
-    - Generates Emitter for Pred Archive
-    """
-    pred_archive.add([elite.solution for elite in obj_archive], [elite.objective for elite in obj_archive], [elite.measures for elite in obj_archive])
-    pred_emitter = generate_emitter(init_solutions=[elite.solution for elite in obj_archive], archive=pred_archive, seed=seed, sigma_emitter=sigma_emitter)
-    return pred_archive, pred_emitter
 
 
 def select_new_elites(elite_status_vector,candidate_elites, obj_evals):
@@ -215,36 +227,3 @@ def generate_emitter(init_solutions, archive, seed, sigma_emitter=SIGMA_EMITTER,
     )]
 
     return emitter
-
-
-def define_archives(initial_seed):
-    """Reduces Overhead"""
-
-    obj_archive = GridArchive(
-        solution_dim=SOL_DIMENSION,         # Dimension of solution vector
-        dims=BHV_NUMBER_BINS,               # Discretization of behavioral bins
-        ranges=BHV_VALUE_RANGE,             # Possible values for behavior vector
-        qd_score_offset=-600,
-        threshold_min = -1,
-        seed=initial_seed
-        )
-    
-    acq_archive = GridArchive(
-        solution_dim=SOL_DIMENSION,
-        dims=BHV_NUMBER_BINS,
-        ranges=BHV_VALUE_RANGE,
-        qd_score_offset=-600,
-        threshold_min = -1,
-        seed=initial_seed
-        )
-    
-    pred_archive = GridArchive(
-        solution_dim=SOL_DIMENSION,
-        dims=BHV_NUMBER_BINS,
-        ranges=BHV_VALUE_RANGE,
-        qd_score_offset=-600,
-        threshold_min = -1,
-        seed=initial_seed,
-        )
-    
-    return obj_archive, acq_archive, pred_archive

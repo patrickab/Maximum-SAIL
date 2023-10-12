@@ -105,6 +105,8 @@ def generate_polynomial_coefficients(samples):    # PARSEC API: https://github.c
     vec_get_upper_y_vector = np.vectorize(get_upper_y_vector, signature='(7)->(6)')
     vec_get_lower_y_vector = np.vectorize(get_lower_y_vector, signature='(7)->(6)')
 
+    # how can i ensure that my sample array
+
     # Calculate Linear Equation Systems    (BATCH_SIZE x 6 x 6)
     x_up_matrices = vec_generate_polynomial_terms(samples[:,1].ravel())
     x_low_matrices = vec_generate_polynomial_terms(samples[:,5].ravel())

@@ -18,7 +18,7 @@ SOL_DIMENSION = config.SOL_DIMENSION
 BHV_NUMBER_BINS = config.BHV_NUMBER_BINS
 BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 
-def map_elites(archive, emitter, gp_model, n_evals, fuct_obj, new_elite_archive=None):
+def map_elites(self, target_archive, emitter, n_evals, fuct_obj, obj_flag=False, acq_flag=False, pred_flag=False, new_elite_archive=None):
     
     print("\n\nInitialize Map-Elites [...]")
 
@@ -29,9 +29,8 @@ def map_elites(archive, emitter, gp_model, n_evals, fuct_obj, new_elite_archive=
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
             threshold_min = -1,)
-        new_elite_archive.clear()
 
-    scheduler = Scheduler(archive, emitter)
+    scheduler = Scheduler(target_archive, emitter)
 
     remaining_evals = n_evals
     total_iterations = remaining_evals // BATCH_SIZE
@@ -43,40 +42,38 @@ def map_elites(archive, emitter, gp_model, n_evals, fuct_obj, new_elite_archive=
             valid_indices = numpy.empty(0, dtype=int) 
 
             samples = scheduler.ask() 
-            archive._seed += TEST_RUNS
+            self.update_seed()
 
-            valid_indices, surface_area_batch = generate_parsec_coordinates(samples)
-            valid_samples = samples[valid_indices] 
+            valid_indices, surface_batch = generate_parsec_coordinates(samples)
 
-            bhv_evals = samples[:,[1,2]]
-            obj_evals = fuct_obj(valid_samples, gp_model)
+            scheduler_bhv = samples[:,[1,2]]
 
-            # status_batch[0] = not added       status_batch[1] = added         status_batch[2] = updated
-            status_batch, value_batch = archive.add(valid_samples, obj_evals, bhv_evals[valid_indices])
-            non_0_status_indices = numpy.where(status_batch != 0)[0]
-            new_elites = valid_samples[non_0_status_indices]
+            candidate_sol = samples[valid_indices]
+            candidate_obj = fuct_obj(candidate_sol, self.gp_model)
+            candidate_bhv = scheduler_bhv[valid_indices]
 
-            new_elite_archive.add(new_elites, obj_evals[non_0_status_indices], bhv_evals[valid_indices][non_0_status_indices])
+
+            if obj_flag:
+                self.update_gp_model(candidate_sol, candidate_obj)
+
+            self.update_archive(candidate_sol, candidate_obj, candidate_bhv, obj_flag, acq_flag, pred_flag)
+            status_vector, _ = target_archive.add(candidate_sol, candidate_obj, candidate_bhv)
+                
+            non_0_status_indices = numpy.where(status_vector != 0)[0]
+
+            new_sol = candidate_sol[non_0_status_indices]
+            new_obj = candidate_obj[non_0_status_indices]
+            new_bhv = candidate_bhv[non_0_status_indices]
+
+            new_elite_archive.add(new_sol, new_obj, new_bhv)
 
             # Insert -1000 for invalid samples to avoid them being selected as elites
             for index in range(samples.shape[0]):
                 if index not in valid_indices:
-                    obj_evals = numpy.insert(obj_evals, index, -1000, axis=0)
+                    candidate_obj = numpy.insert(candidate_obj, index, -1000, axis=0)
+                    numpy.insert
 
-            scheduler.tell(obj_evals, bhv_evals)
+            scheduler.tell(candidate_obj, scheduler_bhv)
             remaining_evals -= BATCH_SIZE
     
-    return archive, new_elite_archive
-
-
-def select_new_elites(elite_status_vector,candidate_elites, obj_evals):
-
-    x_new_elites = []
-    obj_new_elites = []
-
-    for candidate_elite, obj_eval ,elite_status_value in candidate_elites, obj_evals, elite_status_vector:
-        if elite_status_value > 0:
-            x_new_elites.append(candidate_elite)
-            obj_new_elites.append(obj_eval)
-
-    return x_new_elites, obj_new_elites
+    return target_archive, new_elite_archive

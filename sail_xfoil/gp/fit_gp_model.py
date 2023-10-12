@@ -23,7 +23,6 @@ def fit_gp_model(x_solutions, y_obj_evals):
 
     print("\nfit_gp_model()...")
     print(f"n_data_points: {n_data_points}\n")
-    print("\nMALFUNCTIONING GP MODEL FITTING IN PREDICTION VERIFICATION LOPP\n")
 
     # Use a GPU if available
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -32,6 +31,8 @@ def fit_gp_model(x_solutions, y_obj_evals):
     # Convert variables to tensor
     x_tensor = torch.tensor(x_solutions, device=device, dtype=dtype)
     y_tensor = torch.tensor(y_obj_evals, device=device, dtype=dtype)
+
+    y_tensor = y_tensor.unsqueeze(-1)
 
     lower_bounds = torch.tensor([lower for lower, _ in SOL_VALUE_RANGE])
     upper_bounds = torch.tensor([upper for _, upper in SOL_VALUE_RANGE])
