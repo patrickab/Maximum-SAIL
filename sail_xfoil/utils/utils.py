@@ -7,20 +7,14 @@ from ribs.emitters import GaussianEmitter
 from xfoil.generate_airfoils import generate_parsec_coordinates
 from xfoil.simulate_airfoils import xfoil
 from acq_functions.acq_ucb import acq_ucb
-from utils.pprint_nd import pprint_nd, pprint, pprint_fstring
+from utils.pprint_nd import pprint
 
 ### Global Parameters ###
 from config.config import Config
 config = Config(os.path.join(os.path.dirname(__file__), '../config', 'config.ini'))
-SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
-SOL_DIMENSION = config.SOL_DIMENSION
-BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
-BHV_NUMBER_BINS = config.BHV_NUMBER_BINS
 BATCH_SIZE = config.BATCH_SIZE
+SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 SIGMA_EMITTER = config.SIGMA_EMITTER
-SIGMA_PRED_EMITTER = config.SIGMA_PRED_EMITTER
-MAX_PRED_VERIFICATION = config.MAX_PRED_VERIFICATION
-PRED_ELITE_REEVALS = config.PRED_ELITE_REEVALS
 
 
 def eval_xfoil_loop(self, candidate_sol, candidate_bhv, obj_flag=False, pred_flag=False, acq_flag=False, archive=None):
@@ -73,11 +67,11 @@ def eval_xfoil_loop(self, candidate_sol, candidate_bhv, obj_flag=False, pred_fla
         succes_indices_batch = np.vstack((succes_indices_batch, success_indices*iteration*BATCH_SIZE)) if succes_indices_batch.size > 0 else success_indices
 
         # add converged solutions & render .pngs - if specified update & render other archive(s)
-        self.update_archive(converged_sol, converged_obj, converged_bhv, obj_flag=True)
+        self.update_archive(candidate_sol=converged_sol, candidate_obj=converged_obj, candidate_bhv=converged_bhv, obj_flag=True)
         if pred_flag:
-            self.update_archive(converged_sol, converged_obj, converged_bhv, pred_flag=True)
+            self.update_archive(candidate_sol=converged_sol, candidate_obj=converged_obj, candidate_bhv=converged_bhv, pred_flag=True)
         if acq_flag:
-            self.update_archive(converged_sol, converged_obj, converged_bhv, acq_flag=True)
+            self.update_archive(candidate_sol=converged_sol, candidate_obj=converged_obj, candidate_bhv=converged_bhv, acq_flag=True)
 
         # prepare data for calling function
         if converged_sol.shape[0] != 0:

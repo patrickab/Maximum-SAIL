@@ -1,4 +1,6 @@
 from ribs.visualize import grid_archive_heatmap
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import subprocess
 import os
@@ -24,6 +26,7 @@ def anytime_archive_visualizer(self, archive):
     grid_archive_heatmap(archive, ax=ax, vmin=0, vmax=5)
     plt.xlabel("X Up")
     plt.ylabel("Z Up")
+
     plt.title(f"Objective Eval Heatmap: ({domain} , {iteration})")
     iteration_str = str(iteration).zfill(3)
     fig.savefig(f"obj_{iteration_str}_{domain}_heatmap.png")
@@ -36,8 +39,8 @@ def anytime_archive_visualizer(self, archive):
         subprocess.run(f"./ffmpeg.sh {output_file}", input=b'y\n',shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         os.chdir(f"imgs/{domain}/{initial_seed}")
 
-    print("Anytime Visualizer: currently bufferd videos:")
-    print(((iteration) % PNG_BUFFERSIZE))
+    n_buffered_vids = (iteration) % PNG_BUFFERSIZE
+    print(f"Anytime Visualizer: currently bufferd videos:  {n_buffered_vids}")
 
     if (iteration) % PNG_BUFFERSIZE == 0 and iteration != 0:
 

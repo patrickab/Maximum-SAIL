@@ -48,6 +48,7 @@ def pprint(array1, array2=None, array3=None):
         array2 = np.vstack(array2)
         array3 = np.vstack(array3)
 
+
         for sol, obj, bhv in zip(array1, array2, array3):
             print(sol, obj, bhv, sep="\t")
 
@@ -67,15 +68,31 @@ def pprint(array1, array2=None, array3=None):
             break
 
     if array2 is None and array3 is None:
+
         print(f"{name_array1}:")
         pprint1(array1)
         return
 
     if array3 is None:
-        print(f"{name_array1}:\t{name_array2}:")
+
+        rowlength1 = np.vstack(array1).shape[1]
+        tabs1 = "\t" * (rowlength1//2)
+
+        rowlength2 = np.vstack(array2).shape[1]
+        tabs2 = "\t" * (rowlength2//2)
+
+        print(f"{tabs1}{name_array1}{tabs1+tabs2}{name_array2}:")
         pprint2(array1, array2)
         return
-    
-    print(f"{name_array1}:\t{name_array2}:\t{name_array3}:")
+
+    rowlength1 = np.vstack(array1).shape[1]
+    tabs1 = "\t" * (rowlength1//2)
+
+    rowlength2 = np.vstack(array2).shape[1]
+    tabs2 = "\t" * (rowlength2//2)
+
+    tab = "\t" 
+
+    print(f"{tabs1}{name_array1}{tabs1+tab}{name_array2}{tabs2+tab}{name_array3}:")
     pprint3(array1, array2, array3)
     return
