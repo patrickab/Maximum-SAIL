@@ -10,7 +10,7 @@ from gpytorch.mlls import ExactMarginalLogLikelihood
 
 
 ### Custom Scripts ###
-from utils.pprint_nd import pprint, pprint_nd
+from utils.pprint_nd import pprint
 
 ### Global Ressources ###
 from config.config import Config

@@ -6,6 +6,7 @@ from ribs.emitters import GaussianEmitter
 ### Custom Scripts ###
 from xfoil.generate_airfoils import generate_parsec_coordinates
 from xfoil.simulate_airfoils import xfoil
+from gp import predict_objective
 from acq_functions.acq_ucb import acq_ucb
 from utils.pprint_nd import pprint
 
@@ -17,39 +18,33 @@ SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 SIGMA_EMITTER = config.SIGMA_EMITTER
 
 
-def eval_xfoil_loop(self, candidate_sol, candidate_bhv, obj_flag=False, pred_flag=False, acq_flag=False, archive=None):
+def eval_xfoil_loop(self, candidate_sol, pred_flag, acq_flag):
     """
+    Ensures that iter_samples <= BATCH_SIZE are evaluated
+    
     XFOIL evaluation is performed in Batches of BATCH_SIZE
         Therefore, if n_samples != BATCH_SIZE, 
         samples need to be evaluated in a loop
 
-    Always ensure to call self.update_gp_model() after calling this function
-        This feature is not integrated, in order to allow for more flexibility
-
-    - ensures that iter_samples <= BATCH_SIZE are evaluated
-
-    input:
+    Input:
         samples     Type: ndarrayn_samples      Shape: (n_samples, SOL_DIMENSION)
     returns:
         conv_sol_batch, conv_obj_batch, conv_bhv_batch, archive, extra_evals
 
     """
-    conv_sol_batch = np.empty(0)
-    conv_obj_batch = np.empty(0)
-    conv_bhv_batch = np.empty(0)
-    succes_indices_batch = np.empty(0)
 
-
+    n_errors = 0
     iteration = 0
-    n_candidates=candidate_sol.shape[0]
-    remaining_samples = n_candidates
+    remaining_samples = candidate_sol.shape[0]
 
     while remaining_samples>0: # allows indices [0:10], [10:20], [20:22]
 
         sample_index = iteration*BATCH_SIZE
         i_solutions = candidate_sol[sample_index:sample_index+BATCH_SIZE] # alows indices eg [20:22] to be sampled, if 2 samples are left
-        i_behaviors = candidate_bhv[sample_index:sample_index+BATCH_SIZE]
         iteration += 1
+
+        if i_solutions.shape[0] > BATCH_SIZE:
+            raise ValueError(f'eval_xfoil_loop: i_solutions.shape[0] > BATCH_SIZE')
         
         i_candidates = i_solutions.shape[0]
         remaining_samples -= i_candidates
@@ -62,28 +57,24 @@ def eval_xfoil_loop(self, candidate_sol, candidate_bhv, obj_flag=False, pred_fla
         _, success_indices, converged_obj = xfoil(i_candidates)
         success_indices = success_indices[:i_candidates]
         converged_sol = i_solutions[success_indices]
-        converged_bhv = i_behaviors[success_indices]
-        success_indices = np.hstack(np.vstack(success_indices) + sample_index)
-        succes_indices_batch = np.vstack((succes_indices_batch, success_indices*iteration*BATCH_SIZE)) if succes_indices_batch.size > 0 else success_indices
+        converged_bhv = i_solutions[:,1:3][success_indices] # ToDo: generalize calculate behavior
 
+        i_errors = i_candidates - len(success_indices)
+        n_errors += i_errors
+
+        if i_errors < 0:
+            raise ValueError(f'eval_xfoil_loop: i_errors < 0')
+        
         # add converged solutions & render .pngs - if specified update & render other archive(s)
-        self.update_archive(candidate_sol=converged_sol, candidate_obj=converged_obj, candidate_bhv=converged_bhv, obj_flag=True)
-        if pred_flag:
-            self.update_archive(candidate_sol=converged_sol, candidate_obj=converged_obj, candidate_bhv=converged_bhv, pred_flag=True)
-        if acq_flag:
-            self.update_archive(candidate_sol=converged_sol, candidate_obj=converged_obj, candidate_bhv=converged_bhv, acq_flag=True)
+        self.update_archive(candidate_sol=converged_sol, candidate_obj=converged_obj, candidate_bhv=converged_bhv, obj_flag=True, pred_flag=pred_flag, acq_flag=acq_flag)
 
-        # prepare data for calling function
-        if converged_sol.shape[0] != 0:
-            if conv_sol_batch.size > 0:
-                conv_sol_batch = np.vstack((conv_sol_batch, converged_sol))
-                conv_obj_batch = np.append(conv_obj_batch, converged_obj)
-                conv_bhv_batch = np.vstack((conv_bhv_batch, converged_bhv))
-            else:
-                conv_sol_batch = converged_sol
-                conv_obj_batch = converged_obj
-                conv_bhv_batch = converged_bhv
-    return conv_sol_batch, conv_obj_batch, conv_bhv_batch, succes_indices_batch, archive
+        # iteratively store new data data in self._sol_array & self._obj_array
+        self.update_gp_data(new_solutions=converged_sol, new_objectives=converged_obj)
+
+    # update GP model with new data
+    self.set_n_errors(n_errors)
+    self.update_gp_model()
+    return
 
 
 def store_n_best_elites(archive: GridArchive, n: int, update_acq=True, gp_model=None, obj_archive=None):
@@ -152,3 +143,12 @@ def generate_emitter(init_solutions, archive, seed, sigma_emitter=SIGMA_EMITTER,
     )]
 
     return emitter
+
+
+def calculate_behavior(solutions):
+    if solutions.size == 0:
+        return np.array([])
+    elif solutions.shape[0] == 1:
+        return solutions[0][1:3]
+    else:
+        return solutions[:][1:3]

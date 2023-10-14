@@ -5,7 +5,7 @@ from torch import float64
 
 from acq_functions.acq_ucb import acq_ucb
 from xfoil.generate_airfoils import generate_parsec_coordinates
-from utils.pprint_nd import pprint, pprint_nd
+from utils.pprint_nd import pprint
 
 # xfoil parameters
 from config.config import Config

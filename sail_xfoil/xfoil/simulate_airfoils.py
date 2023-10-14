@@ -7,7 +7,7 @@ import subprocess
 import numpy as np
 import concurrent.futures
 from queue import Queue, Empty
-from utils.pprint_nd import pprint, pprint_nd
+from utils.pprint_nd import pprint
 
 from memory_profiler import profile
 

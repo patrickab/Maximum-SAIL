@@ -6,7 +6,7 @@ import subprocess
 import os
 import gc
 
-PNG_BUFFERSIZE = 20
+PNG_BUFFERSIZE = 10
 
 
 def anytime_archive_visualizer(self, archive):
@@ -15,10 +15,12 @@ def anytime_archive_visualizer(self, archive):
     domain = self.domain
     initial_seed = self.initial_seed
 
-    print(f"\n\nanytime_archive_visualizer(): iteration: {iteration}")
+    print(f"anytime_archive_visualizer(): iteration: {iteration}")
 
     if not os.path.exists(f"imgs/{domain}/{initial_seed}"): 
         os.makedirs(f"imgs/{domain}/{initial_seed}")
+
+    # print current working directory
 
     os.chdir(f"imgs/{domain}/{initial_seed}")
 
@@ -33,21 +35,16 @@ def anytime_archive_visualizer(self, archive):
     plt.close()
 
     if iteration == 0:
-
+        print("condition reached")
         output_file = f'obj_{initial_seed}_{domain}.mp4'
-        os.chdir("../../..")
-        subprocess.run(f"./ffmpeg.sh {output_file}", input=b'y\n',shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        os.chdir(f"imgs/{domain}/{initial_seed}")
-
-    n_buffered_vids = (iteration) % PNG_BUFFERSIZE
-    print(f"Anytime Visualizer: currently bufferd videos:  {n_buffered_vids}")
+        print(f"anytime_archive_visualizer(): cwd: {os.getcwd()}")
+        subprocess.run(f"ffmpeg -framerate 5 -i obj_%03d_{domain}_heatmap.png -r 30 -pix_fmt yuv420p {output_file}", shell=True, input=b'y\n', stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     if (iteration) % PNG_BUFFERSIZE == 0 and iteration != 0:
 
         # render images into video using default buffervid.mp4 name
         output_file = f'buffer_vid.mp4'
-        os.chdir("../../..")
-        subprocess.run(f"./ffmpeg.sh {output_file}",shell=True, input=b'y\n', stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(f"ffmpeg -framerate 5 -i obj_%03d_{domain}_heatmap.png -r 30 -pix_fmt yuv420p {output_file}", shell=True, input=b'y\n', stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         os.chdir(f"imgs/{domain}/{initial_seed}")
 
         ffmpeg_combine = [
@@ -60,6 +57,7 @@ def anytime_archive_visualizer(self, archive):
         ]
 
         subprocess.run(ffmpeg_combine, input=b'y\n', stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run("rm *.png", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
         subprocess.run("rm buffer_vid.mp4", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
         gc.collect()
 

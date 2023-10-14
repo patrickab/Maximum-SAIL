@@ -8,10 +8,10 @@ import gc
 import os
 
 ###### Import Custom Scripts ######
-from sail_runner import SailRun, run_custom_sail, run_vanilla_sail, run_random_sail, prediction_verification_loop
+from sail_runner import SailRun, run_custom_sail, run_vanilla_sail, run_random_sail, prediction_verification_loop #run_vanilla_sail, run_random_sail, 
 from gp.predict_objective import predict_objective
+from utils.pprint_nd import pprint
 from map_elites import map_elites
-from utils.pprint_nd import pprint, pprint_fstring
 
 
 ###### Configurable Variables ######
@@ -19,7 +19,6 @@ from config.config import Config
 config = Config('config/config.ini')
 MAX_PRED_VERIFICATION = config.MAX_PRED_VERIFICATION
 SIGMA_PRED_EMITTER = config.SIGMA_PRED_EMITTER
-PRED_ELITE_REEVALS = config.PRED_ELITE_REEVALS
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 SIGMA_EMITTER = config.SIGMA_EMITTER
 PRED_N_EVALS = config.PRED_N_EVALS
@@ -35,6 +34,7 @@ np.set_printoptions(precision=4, suppress=True, floatmode='fixed', linewidth=120
 benchmark_domains = []
 
 def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, pred_verific_flag=False, greedy_flag=False, explore_flag=False, extra_evals=None):
+
     """
     Note: Extra Evals are only used if pred_verific_flag is set to True resulting in more than ACQ_N_OBJ_EVALS. In this case the extra evaluations are counted, returned & also given to subsequent sail runs
     """
@@ -57,49 +57,22 @@ def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_ran
         gc.collect()
 
     global benchmark_domains
-    benchmark_domains.append(current_run.benchmark_domain)
+    benchmark_domains.append(current_run.domain)
 
 
     print("\n\n ## Exit Acquisition Loop ##")
     print(" ## Enter Prediction Loop ##\n\n")
 
-    pred_archive, pred_emitter = init_prediction_loop(current_run.pred_archive, current_run.obj_archive, current_run.current_seed)
-
     if current_run.pred_verific_flag:
-        pred_archive, extra_evals = prediction_verification_loop(current_run, pred_archive, pred_emitter)
+        pred_archive, extra_evals = prediction_verification_loop(current_run)
     else:
-        pred_archive, new_elite_archive = map_elites(current_run, target_archive=pred_archive, emitter=pred_emitter, 
-                                            n_evals=PRED_N_EVALS, fuct_obj=predict_objective, pred_flag=True)
+        pred_archive, new_elite_archive = map_elites(current_run, target_archive=pred_archive, n_evals=PRED_N_EVALS, fuct_obj=predict_objective, pred_flag=True)
 
     gc.collect()
     print("[...] Terminate sail()")
 
     return current_run.extra_evals
 
-
-def init_prediction_loop(pred_archive, obj_archive, seed, sigma_emitter=SIGMA_PRED_EMITTER):
-    """
-    - Stores Obj Elites in Pred Archive
-    - Generates Emitter for Pred Archive
-    """
-
-    dummy_solutions = [elite.solution for elite in obj_archive]
-    pred_archive.add([elite.solution for elite in obj_archive], [elite.objective for elite in obj_archive], [elite.measures for elite in obj_archive])
-
-    if sol_value_range is None:
-        sol_value_range = SOL_VALUE_RANGE
-
-    pred_emitter = [
-        GaussianEmitter(
-        archive=pred_archive,
-        sigma=sigma_emitter,
-        bounds= np.array(sol_value_range),
-        batch_size=BATCH_SIZE,
-        initial_solutions=dummy_solutions, # these solutions are used, if the emitter samples from an empty archive, which does not happen, as the pred archive is initialized with obj elites
-        seed=seed
-    )]
-
-    return pred_archive, pred_emitter
 
 
 if __name__ == "__main__":
@@ -110,14 +83,18 @@ if __name__ == "__main__":
 
         gc.collect()
         
-        benchmark_domains = ["custom", "vanilla", "prediction_verification", "random"]
-        extra_evals_1 = sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, greedy_flag=True)
-        extra_evals_2 = sail(initial_seed=i, sail_vanilla_flag=True, pred_verific_flag=True, explore_flag=True)
-        extra_evals = max(extra_evals_1, extra_evals_2)
-        sail(initial_seed=i, sail_vanilla_flag=True, extra_evals=extra_evals)
-        sail(initial_seed=i, sail_custom_flag=True, extra_evals=extra_evals)
-        sail(initial_seed=i, sail_random_flag=True, extra_evals=extra_evals)
-        extra_evals = 0 # not sure if necessary, but better safe then sorry
+        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, greedy_flag=True)
+        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, greedy_flag=True)
+        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, explore_flag=True)
+        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, explore_flag=True)
+        # sail(initial_seed=i, sail_vanilla_flag=True)
+        # sail(initial_seed=i, sail_random_flag=True)
+        # #extra_evals_2 = sail(initial_seed=i, sail_vanilla_flag=True, pred_verific_flag=True, explore_flag=True)
+        # extra_evals = max(extra_evals_1, extra_evals_2)
+        # sail(initial_seed=i, sail_vanilla_flag=True, extra_evals=extra_evals)
+        # sail(initial_seed=i, sail_custom_flag=True, extra_evals=extra_evals)
+        # sail(initial_seed=i, sail_random_flag=True, extra_evals=extra_evals)
+        # extra_evals = 0 # not sure if necessary, but better safe then sorry
         gc.collect()
 
     benchmark_filepaths = " ".join(["imgs/" + benchmark_domain for benchmark_domain in benchmark_domains])

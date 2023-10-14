@@ -4,7 +4,7 @@ import numpy as np
 from numpy import tan, sqrt
 
 ### Import Custom Scripts ###
-from utils.pprint_nd import pprint, pprint_nd, pprint_fstring
+from utils.pprint_nd import pprint
 
 ### Global Variables ###
 from config.config import Config
@@ -31,6 +31,9 @@ def export_parsec_coordinates(upper_xy, lower_xy):
 
     surface_batch = np.empty(0)
     for index in range(upper_xy.shape[0]):
+
+        if upper_xy.shape[0] != BATCH_SIZE:
+            ValueError(f'EXPORT PARSEC: upper_xy.shape[0] != BATCH_SIZE')
 
         # Check if polynomials intersect
         upper_i_xy = upper_xy[index,:,:]
@@ -66,8 +69,12 @@ def generate_parsec_coordinates(samples, xte=1.0): # 'x trailing edge'
     input:      samples (scaled to solution space boundaries)
     output:     .txt file with (x,y) coordinates
 
-    returns:   valid_indices (indices of valid airfoils)
+    returns:    valid_indices (indices of valid airfoils)
+                surface_batch (surface area of valid airfoils)
     """
+
+    if samples.shape[0] != BATCH_SIZE:
+        ValueError(f'GENERATE PARSEC: samples.shape[0] != BATCH_SIZE')  
     
     n_samples = samples.shape[0]
     valid_indices = np.empty(0)

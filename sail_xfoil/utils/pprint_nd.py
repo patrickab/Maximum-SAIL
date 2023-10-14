@@ -85,6 +85,10 @@ def pprint(array1, array2=None, array3=None):
         pprint2(array1, array2)
         return
 
+    if array1.size == 0 and array2.size == 0 and array3.size == 0:
+        print("Empty arrays")
+        return
+    
     rowlength1 = np.vstack(array1).shape[1]
     tabs1 = "\t" * (rowlength1//2)
 
