@@ -81,7 +81,6 @@ def generate_parsec_coordinates(samples, xte=1.0): # 'x trailing edge'
     surface_batch = np.empty(0)
     
     if n_samples != BATCH_SIZE:
-        Warning(f'GENERATE PARSEC: n_samples != BATCH_SIZE')
         print(f"    n_samples: {n_samples}")
         if n_samples == 0:
             return valid_indices, surface_batch

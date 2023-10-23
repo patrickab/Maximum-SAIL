@@ -27,9 +27,10 @@ BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 SIGMA_PRED_EMITTER = config.SIGMA_PRED_EMITTER
 
-PRED_ELITE_REEVALS = config.PRED_ELITE_REEVALS
 MAX_PRED_VERIFICATION = config.MAX_PRED_VERIFICATION
 PREDICTION_VERIFICATIONS = config.PREDICTION_VERIFICATIONS
+
+total_obj_evals = INIT_N_EVALS + ACQ_N_OBJ_EVALS + MAX_PRED_VERIFICATION
 
 ###### Import Custom Scripts ######
 
@@ -44,11 +45,9 @@ from acq_functions.acq_ucb import acq_ucb
 from gp.fit_gp_model import fit_gp_model
 from map_elites import map_elites
 
-
-
 class SailRun:
 
-    def __init__(self, initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, pred_verific_flag=False, greedy_flag=False, explore_flag=False, extra_evals=0):
+    def __init__(self, initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, pred_verific_flag=False, greedy_flag=False, explore_flag=False, hybrid_flag=False):
 
         """
         Initialize a SAIL Run.
@@ -66,8 +65,10 @@ class SailRun:
         self.logger = logging.getLogger(__name__)
         self.logger.info("Initialize SAIL Run")
 
-        self.current_iteration = 0
-        self.extra_evals = extra_evals
+        self.obj_current_iteration = 1
+        self.new_current_iteration = 1
+        self.acq_current_iteration = 1
+        self.pred_current_iteration = 1
 
         if sail_custom_flag:
             self.domain = "custom"
@@ -79,14 +80,16 @@ class SailRun:
             self.domain = self.domain + "_greedy"
         if explore_flag:
             self.domain = self.domain + "_explore"
+        if hybrid_flag:
+            self.domain = self.domain + "_hybrid"
         if pred_verific_flag:
             self.domain = self.domain + "_prediction_verification"
         if greedy_flag and explore_flag:
             raise ValueError("Greedy and Explore Flags cannot both be True")
-        if pred_verific_flag and not (greedy_flag or explore_flag):
+        if pred_verific_flag and not (greedy_flag or explore_flag or hybrid_flag):
             raise ValueError("Prediction Verification Flag requires Greedy or Explore Flag to be True")
 
-        # stores new solutions from custom_update_archive()
+        # stores new solutions from reevaluate_archive()
         self.new_sol = np.empty((0, SOL_DIMENSION))
         self.new_obj = np.empty((0, OBJ_DIMENSION))
         self.new_bhv = np.empty((0, BHV_DIMENSION))
@@ -94,39 +97,37 @@ class SailRun:
         self.initial_seed = initial_seed
         self.current_seed = initial_seed
 
+        self.convergence_errors = 0
+
+        self.custom_flag = sail_custom_flag
+        self.vanilla_flag = sail_vanilla_flag
+
         self.greedy_flag = greedy_flag
         self.explore_flag = explore_flag
+        self.hybrid_flag = hybrid_flag
         self.pred_verific_flag = pred_verific_flag
 
         self.sol_array = np.empty((0, SOL_DIMENSION))
         self.obj_array = np.empty((0, OBJ_DIMENSION))
 
-        self.obj_archive, self.acq_archive, self.pred_archive = self.define_archives(initial_seed)
+        self.obj_archive, self.acq_archive, self.pred_archive, self.new_archive, self.evaluated_predictions_archive, self.prediction_error_archive = self.define_archives(initial_seed)
 
-        print("\nInitialize SAIL Run")
+        print("\n\n\nInitialize SAIL Run")
         print(f"Domain: {self.domain}")
         print(f"Initial Seed: {self.initial_seed}")    
         print(f"Initialize Archive [...]")
         total_errors = 0
 
-        samples = create_sobol_samples(order=INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed)
+        samples = create_sobol_samples(order=INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
         samples = samples.T
         scale_samples(samples) # sobol samples are between [0;1]
-        self.init_samples = samples
-        eval_xfoil_loop(self, samples, pred_flag=False, acq_flag=False)   # fill obj archive inside eval_xfoil_loop()
-        self.update_archive(self.new_sol, self.new_obj, self.new_bhv, acq_flag=True)   # initialize acq_archive with obj_elites
-
-        # If the # of convergence errors doesnt match the # of converged solutions
-        if self.n_errors != INIT_N_EVALS-self.sol_array.shape[0]:
-            raise ValueError("Archive Initialization Error")
-
+        eval_xfoil_loop(self, candidate_sol=samples) # fill obj archive inside eval_xfoil_loop() & update+render acq_archive
         print("[...] Terminate init_archive()\n")
 
     
     def update_gp_data(self, new_solutions, new_objectives):
 
-        print(f"Update GP Data [...]")
-        pprint(new_solutions, new_objectives)
+        print(f"Update GP Data [...]\n")
         n_new = new_solutions.shape[0]
         n_old = self.sol_array.shape[0]
         n_expected = n_old + n_new 
@@ -136,7 +137,6 @@ class SailRun:
         self.sol_array = np.vstack((self.sol_array, new_solutions))
         self.obj_array = np.vstack((self.obj_array, new_objectives))
         n_resulted = self.sol_array.shape[0]
-        print(f"GP Data Points: {n_resulted}")
 
         if n_resulted != n_expected:
             raise ValueError("GP Data Update Error")
@@ -158,168 +158,59 @@ class SailRun:
 
         self.gp_model = fit_gp_model(self.sol_array, self.obj_array)
 
-    def update_iteration(self):
-        self.current_iteration += 1
-
     def update_seed(self):
-
         self.current_seed += TEST_RUNS
         return self.current_seed
 
-    def visualize_archive(self, archive):
-        anytime_archive_visualizer(self, archive)
-        self.update_iteration()
+    def visualize_archive(self, archive, obj_flag=False, acq_flag=False, pred_flag=False, new_flag=False):
+        anytime_archive_visualizer(self, archive=archive, obj_flag=obj_flag, acq_flag=acq_flag, pred_flag=pred_flag, new_flag=new_flag)
+        if obj_flag:
+            self.obj_current_iteration += 1
+        if new_flag:
+            self.new_current_iteration += 1
+        if acq_flag:
+            self.acq_current_iteration += 1
+        if pred_flag:
+            self.pred_current_iteration += 1
 
-    def update_archive(self, candidate_sol=None, candidate_obj=None, candidate_bhv=None, obj_flag=False, acq_flag=False, pred_flag=False, surpress_print=False):
+    def update_archive(self, candidate_sol=None, candidate_obj=None, candidate_bhv=None, obj_flag=False, acq_flag=False, pred_flag=False, evaluate_prediction_archive=False):
         """"
         Input:
             Option 1: Call with archive & archive flag
             Option 2: Call with candidate_sol, candidate_obj, candidate_bhv & archive flag
         """            
 
-        candidate_obj = candidate_obj.ravel()
-
-        if np.sum([obj_flag, acq_flag, pred_flag] == True) > 1:
-            raise ValueError("More than one flag is True, use update_acq_archive")
+        if np.sum([obj_flag, acq_flag, pred_flag, evaluate_prediction_archive]) != 1:
+            raise ValueError("Update Archive: Exactly one flag is supposed to be true - update archives seperately")
         
         if obj_flag:
 
-            self.obj_t0 = self.obj_archive.stats.num_elites    
+            candidate_obj = candidate_obj.ravel()
+
             status_vector, _ = self.obj_archive.add(candidate_sol, candidate_obj, candidate_bhv)
             non_0_status_indices = np.where(status_vector != 0)[0]
             self.new_sol = candidate_sol[non_0_status_indices]
             self.new_obj = candidate_obj[non_0_status_indices]
             self.new_bhv = candidate_bhv[non_0_status_indices]
-            self.obj_t1 = self.obj_archive.stats.num_elites
-            self.visualize_archive(self.obj_archive)
-            self.convergence_errors = BATCH_SIZE - candidate_sol.shape[0]
-            if not surpress_print:
-                print("Elites in Obj Archive (before): " + str(self.obj_t0))
-                print("Elites in Obj Archive  (after): " + str(self.obj_t1))
 
+            self.new_archive.clear()
+            self.new_archive.add(self.new_sol, self.new_obj, self.new_bhv)
+
+            return
+        
+        if evaluate_prediction_archive:
+            self.evaluated_predictions_archive.add(candidate_sol, candidate_obj, candidate_bhv)
+            return
+        
+        if candidate_obj != None:
+            raise ValueError("Update Archive: candidate_obj is supposed to be None when updating acq/pred archive")
 
         if acq_flag:
-
-            self.acq_t0 = self.acq_archive.stats.num_elites
-            status_vector, _ = self.acq_archive.add(candidate_sol, candidate_obj, candidate_bhv)
-            non_0_status_indices = np.where(status_vector != 0)[0]
-
-            if self.pred_verific_flag:
-                # new target sol is set in custom_update_archive()
-                # defining update_archive in this manner enables us to
-                # use update_archive() regardless of pred_verific_flag
-                self.custom_update_archive(self.acq_archive, acq_ucb, acq_flag=True) # modularize later to use MES
-                #self.visualize_archive(self.acq_archive)
-                self.acq_t1 = self.acq_archive.stats.num_elites
-                if not surpress_print:
-                    print("Elites in Acq Archive (before): " + str(self.acq_t0))
-                    print("Elites in Acq Archive  (after): " + str(self.acq_t1))  
-
-            else :
-                #self.visualize_archive(self.acq_archive)
-                self.acq_t1 = self.acq_archive.stats.num_elites
-                self.new_target_elite_sol = candidate_sol[non_0_status_indices]
-                self.new_target_elite_obj = candidate_obj[non_0_status_indices]
-                self.new_target_elite_bhv = candidate_bhv[non_0_status_indices]
-                if not surpress_print:
-                    print("Elites in Acq Archive (before): " + str(self.acq_t0))
-                    print("Elites in Acq Archive  (after): " + str(self.acq_t1))  
-
-
+            candidate_acq = acq_ucb(genomes=candidate_sol, gp_model=self.gp_model) if candidate_sol.shape[0] != 0 else None
+            self.acq_archive.add(candidate_sol, candidate_acq, candidate_bhv) if candidate_sol.shape[0] != 0 else None
         if pred_flag:
-
-            self.pred_t0 = self.pred_archive.stats.num_elites
-            status_vector, _ = self.pred_archive.add(candidate_sol, candidate_obj, candidate_bhv)
-            non_0_status_indices = np.where(status_vector != 0)[0]
-
-            if self.pred_verific_flag:
-                # new target sol is set in custom_update_archive()
-                # defining update_archive in this manner enables us to
-                # use update_archive() regardless of pred_verific_flag
-                self.custom_update_archive(self.pred_archive, predict_objective, pred_flag=True)
-                #self.visualize_archive(self.pred_archive)
-                self.pred_t1 = self.pred_archive.stats.num_elites
-                if not surpress_print:
-                    print("Elites in Pred Archive (before): " + str(self.pred_t0))
-                    print("Elites in Pred Archive  (after): " + str(self.pred_t1))  
-
-            else :
-                #self.visualize_archive(self.pred_archive)
-                self.pred_t1 = self.pred_archive.stats.num_elites
-                self.new_target_elite_sol = candidate_sol[non_0_status_indices]
-                self.new_target_elite_obj = candidate_obj[non_0_status_indices]
-                self.new_target_elite_bhv = candidate_bhv[non_0_status_indices]
-                if not surpress_print:
-                    print("Elites in Pred Archive (before): " + str(self.pred_t0))
-                    print("Elites in Pred Archive  (after): " + str(self.pred_t1))          
-
-
-
-
-    def custom_update_archive(self, target_archive ,target_function, pred_flag=False, acq_flag=False):
-        """
-
-        Seperate function compared to Class Method update_archive()
-        Combines obj_archive and ((archive)) into one archive 
-        to ensure (minimum fitness == objective archive fitness).
-
-        This function also preserves elites in the (prediction/acquisition) archive,
-        that remain highly performant even after refitting the Gaussian Process.
-
-        This is done by reevaluating fuct_acq() in acq_elites, 
-        and then letting them compete against obj_elites.
-
-        New elites are stored in self.new_* class variables
-
-        Make sure to call this function right after model refitting.
-    
-            Input: Updated Archive, GP Model, Flag for model fitting
-                   target_function = fuct_acq() or fuct_predict(), in order to update acquisition values or predictions according to new GP
-            Output: Updated Archive
-        """
-        if pred_flag:
-            self.pred_archive = target_archive
-        if acq_flag:
-            self.acq_archive = target_archive
-
-        # extract elites from obj_archive
-        n_obj_elites = sorted(self.obj_archive, key=lambda x: x.objective, reverse=True)[:self.obj_archive.stats.num_elites]
-        n_obj_sol = np.array([elite.solution for elite in n_obj_elites])    
-        n_obj_bhv = np.array([elite.measures for elite in n_obj_elites])
-        n_obj_acq = np.array([elite.objective for elite in n_obj_elites])
-
-        # extract & reevaluate elites from target_archive
-        target_elites = sorted(target_archive, key=lambda x: x.objective, reverse=True)[:target_archive.stats.num_elites]
-        target_elite_obj = np.array([elite.solution for elite in target_elites])
-        target_elite_bhv = np.array([elite.measures for elite in target_elites])
-        target_elite_acq = target_function(target_elite_obj, self.gp_model) # cant dynamically program this for some reason, therefore acq_ucb is set as default
-    
-        # concatenate elites from both archives
-        n_sol = np.concatenate((n_obj_sol, target_elite_obj), axis=0) if target_archive.stats.num_elites != 0 else n_obj_sol
-        n_acq = np.concatenate((n_obj_acq, target_elite_acq), axis=0) if target_archive.stats.num_elites != 0 else n_obj_acq
-        n_bhv = np.concatenate((n_obj_bhv, target_elite_bhv), axis=0) if target_archive.stats.num_elites != 0 else n_obj_bhv
-    
-        # let elites compete, store resulting archive
-        if acq_flag:
-            self.acq_t0 = self.acq_archive.stats.num_elites
-            self.acq_archive.clear()
-            status_vector, _ = self.acq_archive.add(n_sol, n_acq, n_bhv)
-            self.acq_t1 = self.acq_archive.stats.num_elites
-        if pred_flag:
-            self.pred_t0 = self.pred_archive.stats.num_elites
-            self.pred_archive.clear()
-            status_vector, _ = self.pred_archive.add(n_sol, n_acq, n_bhv)
-            self.pred_t1 = self.pred_archive.stats.num_elites
-
-        self.new_target_elite_sol = n_sol[status_vector]
-        self.new_target_elite_obj = n_acq[status_vector]
-        self.new_target_elite_bhv = n_bhv[status_vector]
-        return
-    
-
-    def set_n_errors(self, n_errors):
-        self.n_errors = n_errors
-        return
+            candidate_pred = predict_objective(genomes=candidate_sol, gp_model=self.gp_model) if candidate_sol.shape[0] != 0 else None
+            self.pred_archive.add(candidate_sol, candidate_pred, candidate_bhv) if candidate_sol.shape[0] != 0 else None
     
 
     def define_archives(self, seed):
@@ -348,7 +239,34 @@ class SailRun:
             threshold_min = -1
         )
 
-        return obj_archive, acq_archive, pred_archive
+        # Used for visualizing new elites (improved + new bin discoveries)
+        new_archive = GridArchive(
+            solution_dim=SOL_DIMENSION,
+            dims=BHV_NUMBER_BINS,
+            ranges=BHV_VALUE_RANGE,
+            qd_score_offset=-600,
+            threshold_min = -1
+        )
+
+        # Used for evaluating quality of results
+        evaluated_predictions_archive = GridArchive(
+            solution_dim=SOL_DIMENSION,
+            dims=BHV_NUMBER_BINS,
+            ranges=BHV_VALUE_RANGE,
+            qd_score_offset=-600,
+            threshold_min = -1
+        )
+
+        # Used for visualizing prediction errors
+        prediction_error_archive = GridArchive(
+            solution_dim=SOL_DIMENSION,
+            dims=BHV_NUMBER_BINS,
+            ranges=BHV_VALUE_RANGE,
+            qd_score_offset=-600,
+            threshold_min = -1
+        )
+
+        return obj_archive, acq_archive, pred_archive, new_archive, evaluated_predictions_archive, prediction_error_archive
 
 
 def run_custom_sail(self: SailRun):
@@ -358,115 +276,122 @@ def run_custom_sail(self: SailRun):
     """
 
     iteration = 1
-    mean_obj = 0
-    mean_acq = 0
-    i_mean_acq = 0
-    i_mean_obj = 0
     total_obj_improvements = 0
-    total_acq_improvements = 0
+    total_new_acq_bins = 0
+    total_new_obj_bins = 0
     total_convergence_errors = 0
-    mean_acq_improvement = 0
+    mean_acq_improvement = 0 # ToDo
     mean_obj_improvement = 0 # ToDo
-    anytime_metrics = pandas.DataFrame(columns=['Iteration', 'Mean Obj', 'Mean Acq', 'Mean Obj Improvement', 'Mean Acq Improvement', 'Percentage Improvements', 'Total Improvements', 'Percentage Convergence Errors', 'Convergence Errors', 'Total Convergence Errors', 'New Acq Elites', 'New Obj Elites'])
-    eval_budget = ACQ_N_OBJ_EVALS
+    anytime_metrics = pandas.DataFrame(columns= ['Iteration',   'Mean Obj QD Score', 'Mean Obj QD Score per Bin', 'Mean Acq QD Score', 'Mean Acq QD Score per Bin', 'Percentage Improvements', 'Total Obj Improvements', 'New Obj Improvements','Percentage New Obj Bins', 'Total New Obj Bins', 'New Obj Bins','Percentage Convergence Errors', 'Total Convergence Errors','New Convergence Errors',])
 
-    while(eval_budget >= BATCH_SIZE):
+    total_eval_budget = ACQ_N_OBJ_EVALS if self.pred_verific_flag else ACQ_N_OBJ_EVALS + MAX_PRED_VERIFICATION # if no budget for prediction verification is given, add MAX_PRED_VERIFICATION to ACQ_N_MAP_EVALS to ensure equal number of evaluations
+    current_eval_budget = total_eval_budget
 
-        old_acq_elites = np.array([(  elite.solution,     elite.index,     elite.objective,       elite.measures) for elite in self.acq_archive],
+    while(current_eval_budget >= BATCH_SIZE):
+
+        old_elites = np.array([(  elite.solution,     elite.index,     elite.objective,       elite.measures) for elite in self.obj_archive],
                         dtype=[('solution', object), ('index', int), ('objective', float), ('behavior', object)])
-
 
         # calculate & evaluate elites, that maximize acquisition values
         # update obj_archive and gp_model inside eval_max_obj_improvement()
-        map_elites(self, target_archive=self.acq_archive, target_function=acq_ucb, acq_flag=True)
-        improved_elites, new_bin_elites = maximize_improvement(new_elite_archive=self.acq_archive, old_elites=old_acq_elites) 
-        evaluate_max_improvement(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, old_elites=old_acq_elites, target_function=acq_ucb, acq_flag=True)
+        acq_archive, new_acq_elite_archive, acq_t0, acq_t1 = map_elites(self, target_function=acq_ucb, acq_flag=True)
+        improved_elites, new_bin_elites = maximize_improvement(new_elite_archive=new_acq_elite_archive, old_elites=old_elites) 
+        evaluate_max_improvement(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, old_elites=old_elites, target_function=acq_ucb, acq_flag=True)
 
-        eval_budget -= BATCH_SIZE
+        current_eval_budget -= BATCH_SIZE
+        consumed_obj_evals = total_eval_budget - current_eval_budget
         
-        # Calculate Anytime Metrics
-        acquisition_improvements = np.vstack(np.hstack((improved_elites['objective_improvement'],new_bin_elites['objective_improvement'])))
-
-        convergence_errors = self.convergence_errors
-
-        # Mean Obj & Acq in current iteration
-        i_mean_obj += np.mean(self.new_obj)
-        i_mean_acq += np.mean(self.new_target_elite_obj)
-        mean_obj = np.mean(mean_obj + i_mean_obj)
-        mean_acq = np.mean(mean_acq + i_mean_acq)
-        mean_acq_improvement = np.mean(acquisition_improvements)
-
-        # Elites in archive before & after
+        # Count newly discovered bins
         obj_t0 = self.obj_t0
         obj_t1 = self.obj_t1
-        acq_t0 = self.acq_t0
-        acq_t1 = self.acq_t1
-        n_obj_improvements = obj_t1 - obj_t0
-        n_acq_improvements = acq_t1 - acq_t0
-        total_obj_improvements += n_obj_improvements
-        total_acq_improvements += n_acq_improvements
-        percentage_improvements       = (total_obj_improvements/ACQ_N_OBJ_EVALS)*100
-        percentage_convergence_errors = (total_convergence_errors/ACQ_N_OBJ_EVALS)*100
+        n_new_obj_bins = obj_t1 - obj_t0
+        n_new_acq_bins = acq_t1 - acq_t0
+        total_new_obj_bins += n_new_obj_bins
+        total_new_acq_bins += n_new_acq_bins
+        percentage_new_obj_bins = (total_new_obj_bins/consumed_obj_evals)*100
+
+        # Count newly discovered elites
+        n_new_obj_elites = self.new_obj.shape[0]
+        n_new_acq_elites = improved_elites.shape[0] + new_bin_elites.shape[0]
+        total_obj_improvements += n_new_obj_elites
+
+        convergence_errors = self.convergence_errors
+        total_convergence_errors += convergence_errors
+
+        percentage_obj_improvements   = (total_obj_improvements/consumed_obj_evals)*100
+        percentage_convergence_errors = (total_convergence_errors/consumed_obj_evals)*100
 
         # Acq/Obj Metrics
-        qd_obj = self.obj_archive.stats.qd_score
-        qd_acq = self.acq_archive.stats.qd_score
-        print(self.obj_archive.dims)
-        obj_qd_per_bin = qd_obj/self.obj_archive.dims
-        acq_qd_per_bin = qd_acq/self.acq_archive.dims
-        obj_mean_qd_score = qd_obj/self.obj_archive.stats.num_elites
-        acq_mean_qd_score = qd_acq/self.acq_archive.stats.num_elites
+        qd_obj = sum([elite.objective for elite in self.obj_archive])
+        qd_acq = sum([elite.objective for elite in self.acq_archive])
+        n_bins = np.prod(self.obj_archive.dims)
+
+        obj_qd_per_bin = round(qd_obj/n_bins, 1)
+        acq_qd_per_bin = round(qd_acq/n_bins, 1)
+        obj_mean_qd_score = round(qd_obj/self.obj_archive.stats.num_elites, 1)
+        acq_mean_qd_score = round(qd_acq/self.acq_archive.stats.num_elites, 1)
+
         # ToDo: mean improvements (new_converged_elites - old_corresponding_elites) / n_converged_elites 
         # ToDo: print new_converged_elites next to old_corresponding_elites
         # old_corresponding_elites -> right join by index
         # print("Mean Obj Improvement: {:.1f}".format(mean_obj_improvement))
-        old_elite_obj = old_acq_elites['objective']
+        old_elite_obj = old_elites['objective']
 
         # Print Anytime Metrics
-        print("Percentage Improvements: {:.1f}".format(percentage_improvements) + "%")
+        print("Percentage Improvements: {:.1f}".format(percentage_obj_improvements) + "%")
+        print("Percentage New Obj Bins: {:.1f}".format(percentage_new_obj_bins) + "%")
         print("Percentage Convergence Errors: {:.1f}".format(percentage_convergence_errors) + "%")
-        print("Total Improvements: "       + str(total_obj_improvements))
+        print("Total Improvements: " + str(total_obj_improvements))
+        print("Total New Obj Bins: " + str(total_new_obj_bins))
         print("Total Convergence Errors: " + str(total_convergence_errors))
-        print("Mean Acq Improvement: {:.1f}".format(mean_acq_improvement))
+        print("Iter Convergence Errors: "  + str(convergence_errors))
         print("   Acq Archive Size (before): " + str(acq_t0))
         print("   Acq Archive Size  (after): " + str(acq_t1))
-        print("   Mean Acq QD Score: " + str(acq_qd_per_bin))        
-        print("   New Acq Elites: " + str(acq_t1 - acq_t0))
-        print("   Acq QD Score:   " + str(acq_mean_qd_score))
-        print("   Obj QD Score:   " + str(obj_mean_qd_score))
-        print("   New Obj Elites: " + str(obj_t1 - obj_t0))
-        print("   Mean Obj QD Score: " + str(obj_qd_per_bin))
+        print("   Acq QD (per bin): " + str(acq_qd_per_bin))        
+        print("   New Acq Elites: " + str(n_new_acq_elites))
+        print("   New Acq Bins:   " + str(n_new_acq_bins))
+        print("   Mean Acq QD:   " + str(acq_mean_qd_score))
+        print("   Mean Obj QD:   " + str(obj_mean_qd_score))
+        print("   New Obj Bins:   " + str(n_new_obj_bins))
+        print("   New Obj Elites: " + str(n_new_obj_elites))
+        print("   Obj QD (per bin): " + str(obj_qd_per_bin))
         print("   Obj Archive Size (before): " + str(obj_t0))
         print("   Obj Archive Size  (after): " + str(obj_t1))
-        print("Airfoil Convergence Errors: " + str(convergence_errors))
-        print("Remaining ACQ Precise Evals: " + str(eval_budget) + "\n\n")
+        print("Remaining ACQ Precise Evals: " + str(current_eval_budget) + "\n\n")
+
         # Store Anytime Metrics in Pandas Dataframe
-        anytime_data = [iteration, i_mean_obj, obj_qd_per_bin, obj_mean_qd_score,
-                                   i_mean_acq, acq_qd_per_bin, acq_mean_qd_score,
-                                   percentage_improvements, total_obj_improvements,
-                                   percentage_convergence_errors, convergence_errors,
-                                   total_convergence_errors]
+        anytime_data = [iteration, obj_mean_qd_score, obj_qd_per_bin,
+                                   acq_mean_qd_score, acq_qd_per_bin,
+                                   percentage_obj_improvements, total_obj_improvements, n_new_obj_elites,
+                                   percentage_new_obj_bins, total_new_obj_bins, n_new_obj_bins,
+                                   percentage_convergence_errors, total_convergence_errors, convergence_errors,]
         anytime_metrics.loc[len(anytime_metrics)] = anytime_data
 
         if iteration % 20 == 0:
             # Save Anytime Metrics to CSV. If no csv is saved create new csv, else append to existing csv
             try:
-                anytime_metrics.to_csv('acq_loop_anytime_metrics.csv', mode='a', header=False, index=False)
+                anytime_metrics.to_csv(f'{self.initial_seed}_{self.domain}_acq_loop_anytime_metrics.csv', mode='a', header=False, index=False)
             except:
-                anytime_metrics.to_csv('acq_loop_anytime_metrics.csv', index=False)
+                anytime_metrics.to_csv(f'{self.initial_seed}_{self.domain}_acq_loop_anytime_metrics.csv', index=False)
             # Reset to empty dataframe
-            anytime_metrics = pandas.DataFrame(columns= ['Iteration',   'Iteration Mean Obj', 'Mean Obj QD Score', 'Mean Obj QD Score per Bin', 
-                                                                        'Iteration Mean Acq', 'Mean Acq QD Score', 'Mean Acq QD Score per Bin',
-                                                                        'Percentage Improvements', 'Total Improvements',
-                                                                        'Percentage Convergence Errors', 'Convergence Errors',
-                                                                        'Total Convergence Errors'])
+            anytime_metrics = pandas.DataFrame(columns= ['Iteration',   'Mean Obj QD Score', 'Mean Obj QD Score per Bin', 
+                                                                        'Mean Acq QD Score', 'Mean Acq QD Score per Bin', 
+                                                                        'Percentage Improvements', 'Total Obj Improvements', 'New Obj Improvements',
+                                                                        'Percentage New Obj Bins', 'Total New Obj Bins', 'New Obj Bins',
+                                                                        'Percentage Convergence Errors', 'Total Convergence Errors','New Convergence Errors',])
+            
+        iteration += 1
 
-    iteration += 1
+
 
     if iteration % 20 == 0:
         gc.collect()
 
     return
+
+
+def run_vanilla_sail(self: SailRun):
+    return "Work to be done"
 
 
 def maximize_improvement(new_elite_archive: GridArchive, old_elites: np.ndarray):
@@ -484,10 +409,9 @@ def maximize_improvement(new_elite_archive: GridArchive, old_elites: np.ndarray)
     elites = np.array([(elite.solution, elite.index, elite.objective, elite.measures) for elite in new_elite_archive], dtype=[('solution', object), ('index', int), ('objective', float), ('behavior', object)])
     elites = elites[np.argsort(elites['index'])]
     
-    print(f"\n\nMaximize Improvement - New Elites:\n\n")
-    
     # Seperate improved elites (niche compete) from new elites (new niches)
     is_improved_new_elite = np.isin(elites['index'], old_elites['index'])
+
     improved_elites = elites[is_improved_new_elite]
     new_bin_elites   = elites[~is_improved_new_elite]
 
@@ -498,6 +422,7 @@ def maximize_improvement(new_elite_archive: GridArchive, old_elites: np.ndarray)
     # Select old elites that have been improved
     is_improved_old_elite = np.isin(old_elites['index'], improved_elites['index'])
     old_elites_improved   = old_elites[is_improved_old_elite]
+    old_elites_improved   = old_elites_improved[np.argsort(old_elites_improved['index'])]
 
     objective_improvement = improved_elites['objective'] - old_elites_improved['objective']
 
@@ -530,17 +455,16 @@ def evaluate_max_improvement(self: SailRun, improved_elites, new_bin_elites, old
     Input:
         "improved_elites": Elites sorted in descending order (niche competition winners)
         "old_elites"   :   Elites sorted in descending order (niche competition losers)
+        "new_bin_elites"   :   Elites sorted in descending order (new bin discoveries)
 
-        "new_elites"   :   Elites sorted in descending order (new bin discoveries)
-        "n_obj_evals"  :   Number of evaluations - allows n_evals != BATCH_SIZE
-
-        "emitter"      :   Used for map_elites if n_elites < n_evals (sampling)
-        "target_archive":  Used for map_elites if n_elites < n_evals  (storing)
-        "n_map_evals"  :   N evaluations for map_elites
         "target_function"     :   Obj function for map_elites
 
         "new_elite_archive": (((check if necessary)))
     """
+
+    if not acq_flag and not pred_flag:
+        raise ValueError("Evaluate Max Improvement: Either acq_flag or pred_flag has to be True")
+
     def ensure_n_samples(improved_elites, new_bin_elites, acq_flag, pred_flag):
 
         """
@@ -549,18 +473,19 @@ def evaluate_max_improvement(self: SailRun, improved_elites, new_bin_elites, old
         """
 
         if acq_flag:
-            target_archive = self.acq_archive
             n_samples = BATCH_SIZE
         if pred_flag and self.pred_verific_flag:
-            target_archive = self.pred_archive
             n_samples = MAX_PRED_VERIFICATION//PREDICTION_VERIFICATIONS
 
         # If enough elites have been sampled, return
+        print("n_samples: " + str(n_samples))
+        print("n improvements: " + str(improved_elites.shape[0]))
         if n_samples < improved_elites.shape[0] + new_bin_elites.shape[0]:
+            print("Enough Acq Improvements: Returning")
             return improved_elites, new_bin_elites, n_samples
 
         # Sample more elites & add improved elites + new bin elites to target_archive
-        i_target_archive, i_new_elite_archive = map_elites(self, target_archive=target_archive, target_function=target_function, acq_flag=acq_flag, pred_flag=pred_flag)
+        i_target_archive, i_new_elite_archive, _, _ = map_elites(self, target_function=target_function, acq_flag=acq_flag, pred_flag=pred_flag)
         i_improved_elites, i_new_bin_elites = maximize_improvement(i_new_elite_archive, old_elites)
         n_improvements = i_new_elite_archive.stats.num_elites
         iteration = 0
@@ -569,7 +494,7 @@ def evaluate_max_improvement(self: SailRun, improved_elites, new_bin_elites, old
         while n_improvements < n_samples and iteration <= 2:
             print("n_improvements: " + str(n_improvements))
             print("\n\n### Not enough Acq Improvements: Re-entering acquisition loop###\n\n")
-            i_target_archive, i_new_elite_archive = map_elites(self, target_archive=i_target_archive, target_function=target_function, new_elite_archive=i_new_elite_archive, acq_flag=acq_flag, pred_flag=pred_flag)
+            i_target_archive, i_new_elite_archive, _, _ = map_elites(self, target_function=target_function, new_elite_archive=i_new_elite_archive, acq_flag=acq_flag, pred_flag=pred_flag)
             n_improvements = i_new_elite_archive.stats.num_elites
 
         # Enough samples have been found, or Loop has been re-entered twice
@@ -599,68 +524,38 @@ def evaluate_max_improvement(self: SailRun, improved_elites, new_bin_elites, old
             else:
                 candidate_elites = np.concatenate((improved_elites, new_bin_elites), axis=0)
                 n_candidate_elites = candidate_elites[:n_samples]
-        
+
+        if self.hybrid_flag:
+
+            n_new_bin_elites = new_bin_elites.shape[0]
+            n_improved_elites = improved_elites.shape[0]
+
+            if n_new_bin_elites < n_samples//3:
+                new_candidate_elites = new_bin_elites
+                improved_candidate_elites = improved_elites[: (n_samples-new_candidate_elites.shape[0])]
+            if n_new_bin_elites >= n_samples//3:
+                new_candidate_elites = new_bin_elites[:n_samples//3]
+                improved_candidate_elites = improved_elites[: (n_samples-new_candidate_elites.shape[0])]
+
+            new_acq = new_candidate_elites['objective']
+            new_impr = new_candidate_elites['objective_improvement']
+            impr_acq = improved_candidate_elites['objective']
+            impr_impr = improved_candidate_elites['objective_improvement']
+
+            print("\n")
+            pprint(new_acq, new_impr)
+            pprint(impr_acq, impr_impr)
+
+            candidate_elites = np.concatenate((new_candidate_elites, improved_candidate_elites), axis=0)  
+            n_candidate_elites = candidate_elites[:n_samples]              
+
         return n_candidate_elites
-
-
 
     i_improved_elites, i_new_bin_elites, n_samples = ensure_n_samples(improved_elites=improved_elites, new_bin_elites=new_bin_elites, acq_flag=acq_flag, pred_flag=pred_flag)
     candidate_elites = select_samples(improved_elites=i_improved_elites, new_bin_elites=i_new_bin_elites, n_samples=n_samples)
-    eval_xfoil_loop(self, candidate_sol=candidate_elites['solution'], acq_flag=acq_flag, pred_flag=pred_flag)
-    # GP Model is updated inside eval_xfoil_loop()
 
-
-def run_vanilla_sail(self: SailRun):
-    """
-    Extra evaluations are given if eval_pred_flag is True (see sail.py)
-        if not eval_pred_flag, extra_evals = 0
-    """
-
-    total_improvements = 0
-    total_convergence_errors = 0
-    mean_acq_improvement = 0
-    eval_budget = ACQ_N_OBJ_EVALS + PRED_N_EVALS
-    while(eval_budget >= BATCH_SIZE):
-        eval_budget -= BATCH_SIZE
-
-        #acq_archive = store_n_best_elites(acq_archive, obj_archive.stats.num_elites, update_acq=True, gp_model=gp_model, obj_archive=obj_archive)
-        acq_archive, _ = map_elites(self, target_archive=self.acq_archive, target_function=acq_ucb, acq_flag=True)                           # evolve acquisition archive
-
-        acq_elite_batch = acq_archive.sample_elites(BATCH_SIZE)        
-        acq_elite_solutions = acq_elite_batch[0]
-        acq_elite_acquisitions = acq_elite_batch[1]
-        acq_elite_measures = acq_elite_batch[2]
-
-        # acq_archive only contains valid solutions (= non-intersecting polynomials), therefore no need to check for validity using valid_indices
-        _, surface_area_batch = generate_parsec_coordinates(acq_elite_solutions)
-        convergence_errors, success_indices, obj_batch = xfoil(BATCH_SIZE)
-
-        # store evaluations for GP model
-
-        acq_batch = acq_elite_acquisitions[success_indices]
-        status_vector, value_vector = self.obj_archive.add(acq_elite_solutions[success_indices], obj_batch, acq_elite_measures[success_indices])
-        total_improvements += np.sum(status_vector > 0)
-        total_convergence_errors += np.sum(convergence_errors)
-        mean_obj_improvement = np.mean(obj_batch)/(BATCH_SIZE-convergence_errors)
-        percentage_improvements = (total_improvements/(ACQ_N_OBJ_EVALS-eval_budget))*100
-        percentage_convergence_errors = (total_convergence_errors/(ACQ_N_OBJ_EVALS-eval_budget))*100
-
-        print("Total Improvements: " + str(total_improvements))
-        print("Total Convergence Errors: " + str(total_convergence_errors))
-        print("Percentage Improvements: {:.1f}".format(percentage_improvements) + "%")
-        print("Percentage Convergence Errors: {:.1f}".format(percentage_convergence_errors) + "%")
-        print("Mean Obj Improvement: {:.1f}".format(mean_obj_improvement))
-        print("Status Vector: " + str(status_vector))
-        pprint(acq_batch, obj_batch)
-        print("Acq Archive Size: " + str(self.acq_archive.stats.num_elites))
-        print("Obj Archive Size: " + str(self.obj_archive.stats.num_elites))
-        print("Airfoil Convergence Errors: " + str(convergence_errors))
-        print("Remaining ACQ Precise Evals: " + str(eval_budget) + "\n\n")
-
-        self.update_gp_model(new_solutions=acq_elite_solutions ,new_objectives=obj_batch)
-
-    return
-
+    # fill obj archive inside eval_xfoil_loop() & update acq_archive/pred_archive with new obj solutions
+    eval_xfoil_loop(self, candidate_sol=candidate_elites['solution'], candidate_acq=candidate_elites['objective'])
 
 
 def run_random_sail(self: SailRun):
@@ -707,130 +602,125 @@ def prediction_verification_loop(self: SailRun):
     During Prediction, stop after a specified number of evaluations and verify predictions
     """
 
-    obj_elite_sol = [elite.solution for elite in self.obj_archive]
-    obj_elite_obj = [elite.objective for elite in self.obj_archive]
-    obj_elite_bhv = [elite.measures for elite in self.obj_archive]
-    self.update_archive(candidate_sol=obj_elite_sol, candidate_obj=obj_elite_obj, candidate_bhv=obj_elite_bhv, pred_flag=True)
-    self.update_seed()
-
-
-    emitter = [
-        GaussianEmitter(
-        archive=self.pred_archive,
-        sigma=SIGMA_EMITTER,
-        bounds= np.array(SOL_VALUE_RANGE),
-        batch_size=BATCH_SIZE,
-        initial_solutions=obj_elite_sol,
-        seed=self.current_seed
-    )]
-
-
     print("\n\n ## Enter Prediction Verification Loop##")
 
+
+
     iteration = 1
-    mean_obj = 0
-    mean_acq = 0
-    i_mean_acq = 0
-    i_mean_obj = 0
     total_obj_improvements = 0
-    total_acq_improvements = 0
+    total_new_pred_bins = 0
+    total_new_obj_bins = 0
     total_convergence_errors = 0
-    mean_acq_improvement = 0
+    mean_pred_improvement = 0 # ToDo
     mean_obj_improvement = 0 # ToDo
-    anytime_metrics = pandas.DataFrame(columns=['Iteration', 'Mean Obj', 'Mean Acq', 'Mean Obj Improvement', 'Mean Acq Improvement', 'Percentage Improvements', 'Total Improvements', 'Percentage Convergence Errors', 'Convergence Errors', 'Total Convergence Errors', 'New Acq Elites', 'New Obj Elites'])
-    eval_budget = ACQ_N_OBJ_EVALS
+    anytime_metrics = pandas.DataFrame(columns= ['Iteration',   'Mean Obj QD Score', 'Mean Obj QD Score per Bin', 'Mean pred QD Score', 'Mean pred QD Score per Bin', 'Percentage Improvements', 'Total Obj Improvements', 'New Obj Improvements','Percentage New Obj Bins', 'Total New Obj Bins', 'New Obj Bins','Percentage Convergence Errors', 'Total Convergence Errors','New Convergence Errors',])
+    total_eval_budget = MAX_PRED_VERIFICATION
+    current_eval_budget = total_eval_budget
+    iter_evals = MAX_PRED_VERIFICATION//(PREDICTION_VERIFICATIONS) # verify predictions n=PREDICTION_VERIFICATIONS times, then continue with predictions
 
-    while(eval_budget >= BATCH_SIZE):
+    while(current_eval_budget >= iter_evals):
 
-        old_acq_elites = np.array([(  elite.solution,     elite.index,     elite.objective,       elite.measures) for elite in self.acq_archive],
+        print("Prediction Verification Loop")
+        print("Iter Evals: " + str(iter_evals))
+        print("Eval Budget: " + str(current_eval_budget))
+
+        current_eval_budget -= iter_evals
+
+        old_elites = np.array([(  elite.solution,     elite.index,     elite.objective,       elite.measures) for elite in self.obj_archive],
                         dtype=[('solution', object), ('index', int), ('objective', float), ('behavior', object)])
 
 
-        # calculate & evaluate elites, that maximize acquisition values
-        # update obj_archive and gp_model inside eval_max_obj_improvement()
+        pred_archive, new_pred_elite_archive, pred_t0, pred_t1 = map_elites(self, target_function=predict_objective, pred_flag=True)
+        improved_elites, new_bin_elites = maximize_improvement(new_elite_archive=new_pred_elite_archive, old_elites=old_elites) 
+        evaluate_max_improvement(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, old_elites=old_elites, target_function=predict_objective, pred_flag=True)
 
-        map_elites(self, target_archive=self.acq_archive, target_function=predict_objective, pred_flag=True)
-        improved_elites, new_bin_elites = maximize_improvement(new_elite_archive=self.acq_archive, old_elites=old_acq_elites) 
-        evaluate_max_improvement(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, old_elites=old_acq_elites, target_function=predict_objective, acq_flag=True)
+        self.visualize_archive(archive=self.pred_archive, pred_flag=True)
 
-        eval_budget -= BATCH_SIZE
+        consumed_obj_evals = total_eval_budget - current_eval_budget
         
-        # Calculate Anytime Metrics
-        # acquisition_improvements = np.vstack(np.hstack((improved_elites['objective_improvement'],new_bin_elites['objective_improvement'])))
+        # Count newly discovered bins
+        obj_t0 = self.obj_t0
+        obj_t1 = self.obj_t1
+        n_new_obj_bins = obj_t1 - obj_t0
+        n_new_pred_bins = pred_t1 - pred_t0
+        total_new_obj_bins += n_new_obj_bins
+        total_new_pred_bins += n_new_pred_bins
+        percentage_new_obj_bins = (total_new_obj_bins/consumed_obj_evals)*100
 
-        # convergence_errors = self.convergence_errors
+        # Count newly discovered elites
+        n_new_obj_elites = self.new_obj.shape[0]
+        n_new_pred_elites = improved_elites.shape[0] + new_bin_elites.shape[0]
+        total_obj_improvements += n_new_obj_elites
 
-        # # Mean Obj & Acq in current iteration
-        # i_mean_obj += np.mean(self.new_obj)
-        # i_mean_acq += np.mean(self.new_target_elite_obj)
-        # mean_obj = np.mean(mean_obj + i_mean_obj)
-        # mean_acq = np.mean(mean_acq + i_mean_acq)
-        # mean_acq_improvement = np.mean(acquisition_improvements)
+        convergence_errors = self.convergence_errors
+        total_convergence_errors += convergence_errors
 
-        # # Elites in archive before & after
-        # obj_t0 = self.obj_t0
-        # obj_t1 = self.obj_t1
-        # acq_t0 = self.acq_t0
-        # acq_t1 = self.acq_t1
-        # n_obj_improvements = obj_t1 - obj_t0
-        # n_acq_improvements = acq_t1 - acq_t0
-        # total_obj_improvements += n_obj_improvements
-        # total_acq_improvements += n_acq_improvements
-        # percentage_improvements       = (total_obj_improvements/ACQ_N_OBJ_EVALS)*100
-        # percentage_convergence_errors = (total_convergence_errors/ACQ_N_OBJ_EVALS)*100
+        percentage_obj_improvements   = (total_obj_improvements/consumed_obj_evals)*100
+        percentage_convergence_errors = (total_convergence_errors/consumed_obj_evals)*100
 
-        # # Acq/Obj Metrics
-        # qd_obj = self.obj_archive.stats.qd_score
-        # qd_acq = self.acq_archive.stats.qd_score
-        # print(self.obj_archive.dims)
-        # obj_qd_per_bin = qd_obj/self.obj_archive.dims
-        # acq_qd_per_bin = qd_acq/self.acq_archive.dims
-        # obj_mean_qd_score = qd_obj/self.obj_archive.stats.num_elites
-        # acq_mean_qd_score = qd_acq/self.acq_archive.stats.num_elites
+        # Acq/Obj Metrics
+        qd_obj = sum([elite.objective for elite in self.obj_archive])
+        qd_pred = sum([elite.objective for elite in self.pred_archive])
+        n_bins = np.prod(self.obj_archive.dims)
+
+        obj_qd_per_bin = round(qd_obj/n_bins, 1)
+        pred_qd_per_bin = round(qd_pred/n_bins, 1)
+        obj_mean_qd_score = round(qd_obj/self.obj_archive.stats.num_elites, 1)
+        pred_mean_qd_score = round(qd_pred/self.acq_archive.stats.num_elites, 1)
+
         # ToDo: mean improvements (new_converged_elites - old_corresponding_elites) / n_converged_elites 
         # ToDo: print new_converged_elites next to old_corresponding_elites
         # old_corresponding_elites -> right join by index
         # print("Mean Obj Improvement: {:.1f}".format(mean_obj_improvement))
-        old_elite_obj = old_acq_elites['objective']
+        old_elite_obj = old_elites['objective']
 
         # Print Anytime Metrics
-        # print("Percentage Improvements: {:.1f}".format(percentage_improvements) + "%")
-        # print("Percentage Convergence Errors: {:.1f}".format(percentage_convergence_errors) + "%")
-        # print("Total Improvements: "       + str(total_obj_improvements))
-        # print("Total Convergence Errors: " + str(total_convergence_errors))
-        # print("Mean Acq Improvement: {:.1f}".format(mean_acq_improvement))
-        # print("   Acq Archive Size (before): " + str(acq_t0))
-        # print("   Acq Archive Size  (after): " + str(acq_t1))
-        # print("   Mean Acq QD Score: " + str(acq_qd_per_bin))        
-        # print("   New Acq Elites: " + str(acq_t1 - acq_t0))
-        # print("   Acq QD Score:   " + str(acq_mean_qd_score))
-        # print("   Obj QD Score:   " + str(obj_mean_qd_score))
-        # print("   New Obj Elites: " + str(obj_t1 - obj_t0))
-        # print("   Mean Obj QD Score: " + str(obj_qd_per_bin))
-        # print("   Obj Archive Size (before): " + str(obj_t0))
-        # print("   Obj Archive Size  (after): " + str(obj_t1))
-        # print("Airfoil Convergence Errors: " + str(convergence_errors))
-        # print("Remaining ACQ Precise Evals: " + str(eval_budget) + "\n\n")
-        # # Store Anytime Metrics in Pandas Dataframe
-        # anytime_data = [iteration, i_mean_obj, obj_qd_per_bin, obj_mean_qd_score,
-        #                            i_mean_acq, acq_qd_per_bin, acq_mean_qd_score,
-        #                            percentage_improvements, total_obj_improvements,
-        #                            percentage_convergence_errors, convergence_errors,
-        #                            total_convergence_errors]
-        # anytime_metrics.loc[len(anytime_metrics)] = anytime_data
+        print("Percentage Improvements: {:.1f}".format(percentage_obj_improvements) + "%")
+        print("Percentage New Obj Bins: {:.1f}".format(percentage_new_obj_bins) + "%")
+        print("Percentage Convergence Errors: {:.1f}".format(percentage_convergence_errors) + "%")
+        print("Total Improvements: " + str(total_obj_improvements))
+        print("Total New Obj Bins: " + str(total_new_obj_bins))
+        print("Total Convergence Errors: " + str(total_convergence_errors))
+        print("Iter Convergence Errors: "  + str(convergence_errors))
+        print("   pred Archive Size (before): " + str(pred_t0))
+        print("   pred Archive Size  (after): " + str(pred_t1))
+        print("   pred QD (per bin): " + str(pred_qd_per_bin))        
+        print("   New pred Elites: " + str(n_new_pred_elites))
+        print("   New pred Bins:   " + str(n_new_pred_bins))
+        print("   Mean pred QD:   " + str(pred_mean_qd_score))
+        print("   Mean Obj QD:   " + str(obj_mean_qd_score))
+        print("   New Obj Bins:   " + str(n_new_obj_bins))
+        print("   New Obj Elites: " + str(n_new_obj_elites))
+        print("   Obj QD (per bin): " + str(obj_qd_per_bin))
+        print("   Obj Archive Size (before): " + str(obj_t0))
+        print("   Obj Archive Size  (after): " + str(obj_t1))
+        print("Remaining pred Precise Evals: " + str(total_eval_budget) + "\n\n")
 
-        # if iteration % 20 == 0:
-        #     # Save Anytime Metrics to CSV. If no csv is saved create new csv, else append to existing csv
-        #     try:
-        #         anytime_metrics.to_csv('acq_loop_anytime_metrics.csv', mode='a', header=False, index=False)
-        #     except:
-        #         anytime_metrics.to_csv('acq_loop_anytime_metrics.csv', index=False)
-        #     # Reset to empty dataframe
-        #     anytime_metrics = pandas.DataFrame(columns= ['Iteration',   'Iteration Mean Obj', 'Mean Obj QD Score', 'Mean Obj QD Score per Bin', 
-        #                                                                 'Iteration Mean Acq', 'Mean Acq QD Score', 'Mean Acq QD Score per Bin',
-        #                                                                 'Percentage Improvements', 'Total Improvements',
-        #                                                                 'Percentage Convergence Errors', 'Convergence Errors',
-        #                                                                 'Total Convergence Errors'])
+        # Store Anytime Metrics in Pandas Dataframe
+        anytime_data = [iteration, obj_mean_qd_score, obj_qd_per_bin,
+                                   pred_mean_qd_score, pred_qd_per_bin,
+                                   percentage_obj_improvements, total_obj_improvements, n_new_obj_elites,
+                                   percentage_new_obj_bins, total_new_obj_bins, n_new_obj_bins,
+                                   percentage_convergence_errors, total_convergence_errors, convergence_errors,]
+        anytime_metrics.loc[len(anytime_metrics)] = anytime_data
 
-    iteration += 1
-    return
+        if iteration % 20 == 0:
+            # Save Anytime Metrics to CSV. If no csv is saved create new csv, else append to existing csv
+            try:
+                anytime_metrics.to_csv('pred_loop_anytime_metrics.csv', mode='a', header=False, index=False)
+            except:
+                anytime_metrics.to_csv('pred_loop_anytime_metrics.csv', index=False)
+            # Reset to empty dataframe
+            anytime_metrics = pandas.DataFrame(columns= ['Iteration',   'Mean Obj QD Score', 'Mean Obj QD Score per Bin', 
+                                                                        'Mean Pred QD Score', 'Mean Pred QD Score per Bin', 
+                                                                        'Percentage Improvements', 'Total Obj Improvements', 'New Obj Improvements',
+                                                                        'Percentage New Obj Bins', 'Total New Obj Bins', 'New Obj Bins',
+                                                                        'Percentage Convergence Errors', 'Total Convergence Errors','New Convergence Errors',])
+            gc.collect()
+        
+        iteration += 1
+
+    pred_archive, new_pred_elite_archive, pred_t0, pred_t1 = map_elites(self, target_function=predict_objective, pred_flag=True)
+
+
+    return pred_archive

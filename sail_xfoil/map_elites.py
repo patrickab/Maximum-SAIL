@@ -3,10 +3,12 @@ from ribs.schedulers import Scheduler
 from ribs.archives import GridArchive
 from ribs.emitters import GaussianEmitter
 from tqdm import tqdm
+import subprocess
 import numpy as np
 
 ##### Import custom scripts #####
 from utils.utils import calculate_behavior
+from utils.anytime_archive_visualizer import anytime_archive_visualizer
 from utils.pprint_nd import pprint
 from xfoil.generate_airfoils import generate_parsec_coordinates
 from acq_functions import acq_ucb
@@ -25,7 +27,7 @@ BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 ACQ_N_MAP_EVALS = config.ACQ_N_MAP_EVALS
 PREDICTION_VERIFICATIONS = config.PREDICTION_VERIFICATIONS
 
-def map_elites(self, target_archive, target_function, obj_flag=False, acq_flag=False, pred_flag=False, new_elite_archive=None, pred_verific_flag=False):
+def map_elites(self, target_function, obj_flag=False, acq_flag=False, pred_flag=False, new_elite_archive=None, pred_verific_flag=False):
 
     """
     Perform MAP-Elites iterations.
@@ -53,21 +55,6 @@ def map_elites(self, target_archive, target_function, obj_flag=False, acq_flag=F
     function and the codeblock checking for validity can be
     removed.
     """
-
-
-    def update_emitter(target_archive, initial_solutions, sigma_emitter=SIGMA_EMITTER, sol_value_range=SOL_VALUE_RANGE):
-
-        emitter = [
-            GaussianEmitter(
-            archive=target_archive,
-            sigma=sigma_emitter,
-            bounds= np.array(sol_value_range),
-            batch_size=BATCH_SIZE,
-            initial_solutions=initial_solutions[:BATCH_SIZE],
-            seed=self.current_seed
-        )]
-
-        return emitter
     
     print("\n\nInitialize Map-Elites [...]")
 
@@ -79,43 +66,30 @@ def map_elites(self, target_archive, target_function, obj_flag=False, acq_flag=F
             qd_score_offset=-600,
             threshold_min = -1,)
         
-    # initializing archive
-    if not acq_flag and not pred_flag:
-        initial_solutions = self.init_samples
-        n_evals = ACQ_N_MAP_EVALS
+    target_archive, dummy_solutions, n_evals = define_mapping_behavior(self, acq_flag, pred_flag, pred_verific_flag, target_function)
 
-    if acq_flag:
-        n_evals = ACQ_N_MAP_EVALS
-        initial_solutions = np.vstack(([elite.solution for elite in self.obj_archive], [elite.solution for elite in self.acq_archive])) if self.acq_archive.stats.num_elites != 0 else np.array([elite.solution for elite in self.obj_archive])
-
-    if pred_flag:
-        initial_solutions = np.vstack(([elite.solution for elite in self.obj_archive], [elite.solution for elite in self.pred_archive])) if self.pred_archive.stats.num_elites != 0 else np.array([elite.solution for elite in self.obj_archive])
-        if pred_verific_flag:
-            n_evals = PRED_N_EVALS//PREDICTION_VERIFICATIONS
-        else:
-            n_evals = PREDICTION_VERIFICATIONS
+    size_t0 = target_archive.stats.num_elites
+    subprocess.run("rm *.dat", shell=True)
 
     remaining_evals = n_evals
     total_iterations = remaining_evals // BATCH_SIZE
-    
-    emitter = update_emitter(target_archive=target_archive, initial_solutions=initial_solutions)
-    scheduler = Scheduler(target_archive, emitter)
-    
+        
     with tqdm(total=total_iterations) as progress:
         while((remaining_evals-BATCH_SIZE >= 0)):
-            self.update_seed()
+
             progress.update(1)
             valid_indices = np.empty(0, dtype=int) 
 
-            if remaining_evals % 100 == 0:
-                update_emitter(target_archive=target_archive, initial_solutions=initial_solutions)
-                scheduler = Scheduler(target_archive, emitter)
+            emitter = update_emitter(self, target_archive=target_archive, initial_solutions=dummy_solutions)
+            scheduler = Scheduler(target_archive, emitter)
 
             # Create Samples
             samples = scheduler.ask()
 
-            if samples.shape[0] != BATCH_SIZE:
-                ValueError("Scheduler did not return BATCH_SIZE samples")
+            # Check if a dummy solution is contained in the samples
+            for dummy_solution in dummy_solutions:
+                if np.any(np.all(samples == dummy_solution, axis=1)):
+                    raise ValueError("Dummy solution contained in samples")
 
             valid_indices, surface_batch = generate_parsec_coordinates(samples)
 
@@ -124,39 +98,86 @@ def map_elites(self, target_archive, target_function, obj_flag=False, acq_flag=F
             candidate_obj = target_function(candidate_sol, self.gp_model)
             candidate_bhv = scheduler_bhv[valid_indices]
 
-            # Add Elites to archive, then communicate new archive to SAIL Runner
-            self.update_archive(candidate_sol=candidate_sol, candidate_obj=candidate_obj, candidate_bhv=candidate_bhv, obj_flag=obj_flag, acq_flag=acq_flag, pred_flag=pred_flag, surpress_print=True)
+            status_vector, _ = target_archive.add(candidate_sol, candidate_obj, candidate_bhv)
 
-            new_sol = self.new_target_elite_sol
-            new_obj = self.new_target_elite_obj
-            new_bhv = self.new_target_elite_bhv
-            new_elite_archive.add(new_sol, new_obj, new_bhv) 
-            # store new elites to return to calling function
-            # allows to maximize improvement of target_function
+            # First iteration contains old elites as initial samples - Only new elites shall be stored in new_elite_archive
+            if remaining_evals != n_evals:
+                # store newly discovered elites
+                non_0_status_indices = np.where(status_vector != 0)[0]            
+                new_sol = candidate_sol[non_0_status_indices]
+                new_obj = candidate_obj[non_0_status_indices]
+                new_bhv = candidate_bhv[non_0_status_indices]
+                new_elite_archive.add(new_sol, new_obj, new_bhv)
 
-
-            # Scheduler.ask() returns BATCH_SIZE samples
-            # Scheduler.tell() expects BATCH_SIZE objectives
-            # Insert -1000 for invalid samples to avoid them being selected as elites
-            if candidate_obj.shape[0] == BATCH_SIZE:
+            # Scheduler.ask() returns BATCH_SIZE samples --- Scheduler.tell() expects BATCH_SIZE objectives 
+            if candidate_obj.shape[0] == samples.shape[0]:
                 scheduler_obj = candidate_obj
             else:
-                # create an array equivalent to candidate_obj, but with -1000 for invalid samples
+                # Insert -1000 for invalid samples to avoid them being selected as elites
                 scheduler_obj = np.full(samples.shape[0], -1000, dtype=float)
                 scheduler_obj[valid_indices] = candidate_obj
 
             scheduler.tell(scheduler_obj, scheduler_bhv)
             remaining_evals -= BATCH_SIZE
 
-    self.update_seed()
+    size_t1 = target_archive.stats.num_elites
 
-    if obj_flag: # Allows benchmarking against default MAP-Elites
+    return target_archive, new_elite_archive, size_t0, size_t1
 
-        self.update_gp_model(candidate_sol, candidate_obj)
+
+def define_mapping_behavior(self, acq_flag, pred_flag, pred_verific_flag, target_function):
+    """
+    Custom version: Use obj elites + acq elites as starting population
+    Default version: Use obj elites as starting population
+    """
+
+    dummy_elites = sorted(self.obj_archive, key=lambda x: x.objective, reverse=True)[:BATCH_SIZE]
+    dummy_solutions = np.array([elite.solution for elite in dummy_elites])
+
+    obj_elites = sorted(self.obj_archive, key=lambda x: x.objective, reverse=True)[:self.obj_archive.stats.num_elites]
+    obj_elites_sol = np.array([elite.solution for elite in obj_elites])
+    obj_elites_bhv = np.array([elite.measures for elite in obj_elites])
+    obj_elites_obj = target_function(obj_elites_sol, self.gp_model)
 
     if acq_flag:
-        print(self.acq_archive.stats.num_elites)
-    if pred_flag:
-        print(self.pred_archive.stats.num_elites)
+        n_evals = ACQ_N_MAP_EVALS
 
-    return target_archive, new_elite_archive
+        if self.custom_flag:
+            target_archive = self.acq_archive
+        if self.vanilla_flag:
+            self.acq_archive.clear()
+            self.acq_archive.add(obj_elites_sol, obj_elites_obj, obj_elites_bhv)
+            target_archive = self.acq_archive
+
+    if pred_flag:
+
+        if self.pred_verific_flag:
+            n_evals = PRED_N_EVALS//(PREDICTION_VERIFICATIONS+1)
+        else:
+            n_evals = PRED_N_EVALS
+
+        if self.custom_flag:
+            target_archive = self.pred_archive
+        if self.vanilla_flag:
+            self.pred_archive.clear()
+            self.pred_archive.add(obj_elites_sol, obj_elites_obj, obj_elites_bhv)
+            target_archive = self.pred_archive
+            
+    return target_archive, dummy_solutions, n_evals
+
+
+def update_emitter(self, target_archive, initial_solutions, sigma_emitter=SIGMA_EMITTER, sol_value_range=SOL_VALUE_RANGE):
+
+    self.update_seed()
+
+    emitter = [
+        GaussianEmitter(
+        archive=target_archive,
+        sigma=sigma_emitter,
+        bounds= np.array(sol_value_range),
+        batch_size=BATCH_SIZE,
+        initial_solutions=initial_solutions,
+        seed=self.current_seed
+    )]
+
+    return emitter

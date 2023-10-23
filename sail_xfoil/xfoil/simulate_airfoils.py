@@ -9,8 +9,6 @@ import concurrent.futures
 from queue import Queue, Empty
 from utils.pprint_nd import pprint
 
-from memory_profiler import profile
-
 ### Global Variables ###
 from config.config import Config
 config = Config(os.path.join(os.path.dirname(__file__), '../config', 'config.ini'))
@@ -24,7 +22,7 @@ REYNOLDS = config.REYNOLDS
 base_area = numpy.float64(0.07798448603500001) # (reference: calculate_rae2822_surface()) - needs to be updated with correct values
 base_lift = numpy.float64(0.5517) # (reference: xfoil_compatible_rae2822.log) - needs to be updated with correct value
 
-xfoil_iterations = 400
+xfoil_iterations = 650
 xfoil_path = r"/mnt/c/Program Files/xfoil/./xfoil.exe"
 np.set_printoptions(precision=4, suppress=True, floatmode='fixed', linewidth=120)
 
@@ -168,7 +166,7 @@ def capture_errors(process, queue, i):
 
     while True:
         try:
-            line = queue.get(timeout=0.75)
+            line = queue.get(timeout=0.65)
             #print(line.strip())
 
             if not line: # empty line
