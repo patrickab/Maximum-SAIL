@@ -12,7 +12,7 @@ config = Config(os.path.join(os.path.dirname(__file__), '../config', 'config.ini
 BATCH_SIZE = config.BATCH_SIZE
 N_XY_COORDINATES = config.N_XY_COORDINATES
 
-def export_parsec_coordinates(upper_xy, lower_xy):
+def export_parsec_coordinates(upper_xy, lower_xy, io_flag=True):
     """
     Writes PARSEC-encoded coordinates in 'airfoil_{i}.dat'
 
@@ -39,14 +39,18 @@ def export_parsec_coordinates(upper_xy, lower_xy):
         lower_y = lower_xy[index,:,1]
         delta_y = upper_y - lower_y
 
-        # Check if                   polynomials intersect  upper polynomial neg            lower polynomial pos (lower y > 0 happens often & has no negative impact on convergence)  
-        is_unvalid_airfoil = True if np.any(delta_y < 0) or np.any(upper_y < 0) else False
+        np.diff(upper_y)
+        is_rollercoaster_airfoil = True if np.where(np.diff(np.sign(upper_y)))[0] > 1 else False
+        is_itersecting_airfoil = True if np.any(delta_y < 0) else False
+        is_negative_upper_y = True if np.any(upper_y < 0) else False
 
-        if not is_unvalid_airfoil:
+        is_invalid_airfoil = True if is_rollercoaster_airfoil or is_itersecting_airfoil or is_negative_upper_y else False
+
+        if not is_invalid_airfoil:
 
             valid_indices.append(index)
             stacked_xy = np.vstack((upper_xy[index], lower_xy[index][::-1]))
-            np.savetxt(f'airfoil_{index}.dat', stacked_xy, fmt='%f', delimiter=' ', newline='\n', header=f'airfoil_{index}\n', comments='')
+            np.savetxt(f'airfoil_{index}.dat', stacked_xy, fmt='%f', delimiter=' ', newline='\n', header=f'airfoil_{index}\n', comments='') if io_flag else None
 
             # Calculate the surface area using the trapezoidal rule in a vectorized manner
             dx = 1/N_XY_COORDINATES
@@ -55,9 +59,10 @@ def export_parsec_coordinates(upper_xy, lower_xy):
             surface_batch = np.append(surface_batch, surface)
 
         else:
-            with open(f'airfoil_{index}.dat', 'w') as f:
-                f.write(f'airfoil_{index}\n\n')
-                f.write("Invalid Airfoil\n")
+            if io_flag:
+                with open(f'airfoil_{index}.dat', 'w') as f:
+                    f.write(f'airfoil_{index}\n\n')
+                    f.write("Invalid Airfoil\n")
 
     return np.array(valid_indices), surface_batch
 
