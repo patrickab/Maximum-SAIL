@@ -69,10 +69,10 @@ def eval_xfoil_loop(self, candidate_sol, evaluate_prediction_archive=False, cand
 
         # generate .dat files
         i_solutions = np.vstack(i_solutions)
-        _ , surface_batch = generate_parsec_coordinates(i_solutions)
+        generate_parsec_coordinates(i_solutions)
 
         # evaluate samples batch & extract converged solutions
-        _, success_indices, converged_obj = xfoil(i_candidates, surface_batch)
+        _, success_indices, converged_obj = xfoil(i_candidates)
         success_indices = success_indices[:i_candidates]
         converged_sol = i_solutions[success_indices]
         converged_bhv = i_solutions[:,1:3][success_indices] # ToDo: generalize calculate behavior
@@ -112,10 +112,11 @@ def eval_xfoil_loop(self, candidate_sol, evaluate_prediction_archive=False, cand
         new_obj = np.vstack(converged_obj)
         new_objectives = np.vstack((new_objectives, new_obj))
 
-    print("\n\nObjective Evaluation Results and Corresponding Acquisitions/Predictions:")
-    target_objectives = np.vstack(converged_acq_or_pred) if candidate_acq_or_pred is not None else None
-    true_objectives = np.vstack(new_objectives)
-    pprint(target_objectives, true_objectives) if candidate_acq_or_pred is not None else pprint(true_objectives)
+    if candidate_acq_or_pred is not None:
+        print("\n\nObjective Evaluation Results and Corresponding Acquisitions/Predictions:")
+        target_objectives = np.vstack(converged_acq_or_pred)
+        true_objectives = np.vstack(new_objectives)
+        pprint(target_objectives, true_objectives)
 
     # evaluate candidates, then exit loop
     if evaluate_prediction_archive:

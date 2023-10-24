@@ -111,8 +111,6 @@ def generate_parsec_coordinates(samples, xte=1.0, io_flag=True): # 'x trailing e
 
     valid_indices, surface_batch = export_parsec_coordinates(upper_xy, lower_xy, io_flag=io_flag)
 
-    surface_batch = np.vstack(surface_batch) if surface_batch.shape[0] != 0 else []
-
     return valid_indices, surface_batch
 
 

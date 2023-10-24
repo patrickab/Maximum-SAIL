@@ -27,7 +27,7 @@ xfoil_path = r"/mnt/c/Program Files/xfoil/./xfoil.exe"
 np.set_printoptions(precision=4, suppress=True, floatmode='fixed', linewidth=120)
 
 
-def xfoil(iterations, surface_batch):
+def xfoil(iterations):
 
     """Executes xfoil with given parameters, implements Thread counting errors on stdout"""
 
@@ -51,17 +51,10 @@ def xfoil(iterations, surface_batch):
             if i not in success_indices:
                 success_indices.append(i)
 
-    if surface_batch.shape[0] != iterations:
-        raise ValueError(f'XFOIL: surface_batch.shape[0] != iterations')
-
     obj_batch = []
     success_indices_copy = success_indices.copy()
     for index in success_indices_copy:
         
-        surface = surface_batch[index]
-        if surface == -1337:
-            raise ValueError(f'XFOIL: surface == -1337 indicates wrong indexing')
-
         output_index_data = numpy.loadtxt(f'airfoil_{index}.log', skiprows=12)
 
         lift, drag = output_index_data[1], output_index_data[2]
@@ -72,7 +65,7 @@ def xfoil(iterations, surface_batch):
             if drag < 0: print("\n")
             success_indices.remove(index)
         else:
-            obj = calculate_obj(drag, lift, surface)
+            obj = calculate_obj(drag, lift)
             obj_batch.append(obj)
 
     obj_batch = np.array(obj_batch)
@@ -141,7 +134,7 @@ def run_xfoil(index):
     return is_valid_solution
 
 
-def calculate_obj(drag, lift, surface_area):
+def calculate_obj_seed(drag, lift, surface_area):
 
     area_penalty = (1 - (numpy.abs(surface_area - base_area) / base_area)) ** 7
     lift_penalty = (lift / base_lift)**2 if lift < base_lift else 1
@@ -151,10 +144,10 @@ def calculate_obj(drag, lift, surface_area):
     return obj
 
 
-def calculate_obj_custom(drag, lift):
+def calculate_obj(drag, lift):
 
     # for some reason the authors calculate logarithm of drag
-    obj = -numpy.log(drag) * lift
+    obj = -numpy.log(drag/lift)
     return obj
 
 
