@@ -19,6 +19,7 @@ from map_elites import map_elites
 ###### Configurable Variables ######
 from config.config import Config
 config = Config('config/config.ini')
+PREDICTION_VERIFICATIONS = config.PREDICTION_VERIFICATIONS
 MAX_PRED_VERIFICATION = config.MAX_PRED_VERIFICATION
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 SIGMA_EMITTER = config.SIGMA_EMITTER
@@ -33,6 +34,9 @@ np.set_printoptions(precision=4, suppress=True, floatmode='fixed', linewidth=120
 
 # global variable used for building dynamic folder structure for benchmarks
 benchmark_domains = []
+
+if (BATCH_SIZE%2)!=0 or ((MAX_PRED_VERIFICATION//PREDICTION_VERIFICATIONS)%2)!=0:
+    raise ValueError("BATCH_SIZE and MAX_PRED_VERIFICATION//PEDICTION_VERIFICATION must be even numbers")
 
 def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, pred_verific_flag=False, greedy_flag=False, explore_flag=False, hybrid_flag=False):
 
@@ -49,9 +53,9 @@ def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_ran
         run_custom_sail(current_run)
         gc.collect()
 
-    if sail_vanilla_flag:
-        run_vanilla_sail(current_run)
-        gc.collect()
+    # if sail_vanilla_flag:
+    #     run_vanilla_sail(current_run)
+    #     gc.collect()
 
     if sail_random_flag:
         run_random_sail(current_run)
@@ -127,7 +131,7 @@ def evaluate_predictions(self: SailRun):
     unevaluated_prediction_elites = sorted(self.pred_archive, key=lambda x: x.objective, reverse=True)[:self.pred_archive.stats.num_elites]
     unevaluated_prediction_elites = np.array([(elite.solution, elite.index, elite.objective, elite.measures) for elite in unevaluated_prediction_elites], dtype=[('solution', object), ('index', int), ('objective', float), ('behavior', object)])
     unevaluated_prediction_solutions = unevaluated_prediction_elites['solution']
-    eval_xfoil_loop(self, candidate_sol=unevaluated_prediction_solutions, evaluate_prediction_archive=True)
+    eval_xfoil_loop(self, candidate_sol=unevaluated_prediction_solutions, evaluate_prediction_archive=True, candidate_acq_or_pred = unevaluated_prediction_elites['objective'])
 
     # Extract all elites from the evaluated predictions archive - (sorted by index for comparison)
     evaluated_prediction_elites = sorted(self.evaluated_predictions_archive, key=lambda x: x.index)[:self.evaluated_predictions_archive.stats.num_elites]
@@ -173,12 +177,10 @@ if __name__ == "__main__":
 
         benchmark_domains = []
         
-        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, hybrid_flag=True)
         sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True,  hybrid_flag=True)
-        # sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, explore_flag=True)
-        # sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True,  explore_flag=True)
-        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, greedy_flag=True)
         sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True,  greedy_flag=True)
+        # sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, hybrid_flag=True)
+        # sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, greedy_flag=True)
         gc.collect()
 
         img_filenames = [f"imgs/final_heatmaps_{i}_{benchmark_domain}.png" for benchmark_domain in benchmark_domains]
@@ -192,8 +194,9 @@ if __name__ == "__main__":
     current_time = datetime.datetime.now()
     timestamp = current_time.strftime("%Y%m%d%H%M")
     os.makedirs(timestamp)
+    subprocess.run("find . -type f -name '*_heatmaps.mp4' -exec mv -i '{}' . \;", shell=True)
     subprocess.run(f"cp config/config.ini {timestamp}/reproduction_info.txt", shell=True)
-    subprocess.run(f'mv csv error_log {timestamp}', shell=True)
+    subprocess.run(f'mv csv *.csv *.mp4 imgs error_log {timestamp}', shell=True)
     if not os.path.exists("benchmarks"): os.makedirs("benchmarks")
     subprocess.run(f"mv {timestamp} benchmarks", shell=True)
 

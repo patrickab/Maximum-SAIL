@@ -16,7 +16,8 @@ INIT_N_EVALS = config.INIT_N_EVALS
 MAX_PRED_VERIFICATION = config.MAX_PRED_VERIFICATION
 
 
-# eg for n_obj_evals=1000, and BATCH_SIZE=10, we buffer 100/4 = 25 pngs
+# eg for n_obj_evals=1280, and BATCH_SIZE=10, we buffer 128/(2^3) = 16 pngs
+# for rendering all videos correctly, n_obj_evals must be contained in [BATCH_SIZE * 2^(n+3)]
 n_obj_evals = INIT_N_EVALS + ACQ_N_OBJ_EVALS + MAX_PRED_VERIFICATION
 PNG_BUFFERSIZE = (n_obj_evals/BATCH_SIZE) / 8
 
@@ -142,6 +143,23 @@ def anytime_archive_visualizer(self, archive, obj_flag=False, acq_flag=False, pr
             subprocess.run(f"rm {combined_file_a} {buffervid_b}", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
             gc.collect()
 
+        # if the last iteration is reached & all videos are buffered
+        if acq_flag and (iteration == n_obj_evals//BATCH_SIZE):
+
+            # go to the parent directory & move all contents from all subdirectories to parent directory
+            os.chdir("..")
+            
+            # Move all contents from all subdirectories to the parent directory - then delete all subdirectories (except for pred)
+            subprocess.run(f"mv obj/* acq/* new/* .", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(f"rm -rf obj acq new", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+            # then combine all 3 videos horizontally, first obj_*.mp4 then acq_*.mp4 then new_*.mp4
+            subprocess.run(f"ffmpeg -i obj_{initial_seed}_{domain}_{iteration}_heatmap.mp4 -i acq_{initial_seed}_{domain}_{iteration}_heatmap.mp4 -i new_{initial_seed}_{domain}_{iteration}_heatmap.mp4 -filter_complex \"[0:v][1:v][2:v]hstack=inputs=3[v]\" -map \"[v]\" {domain}_{initial_seed}_heatmaps.mp4", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+            # remove all 3 subdirectories, then move back to sail rootfolder
+            subprocess.run(f"rm -rf obj acq new", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            os.chdir("../../..")
+            return
 
     os.chdir(f"../../../..")
     return

@@ -7,12 +7,7 @@ import subprocess
 import numpy as np
 
 ##### Import custom scripts #####
-from utils.utils import calculate_behavior
-from utils.anytime_archive_visualizer import anytime_archive_visualizer
-from utils.pprint_nd import pprint
 from xfoil.generate_airfoils import generate_parsec_coordinates
-from acq_functions import acq_ucb
-from gp import predict_objective
 
 from config.config import Config
 config = Config('config/config.ini')
@@ -73,6 +68,10 @@ def map_elites(self, target_function, obj_flag=False, acq_flag=False, pred_flag=
 
     remaining_evals = n_evals
     total_iterations = remaining_evals // BATCH_SIZE
+
+    print("Start Map-Elites [...]")
+    obj_t0 = self.obj_archive.stats.num_elites
+    print("Acq Elite Archive Size: ", str(self.acq_archive.stats.num_elites))
         
     with tqdm(total=total_iterations) as progress:
         while((remaining_evals-BATCH_SIZE >= 0)):
@@ -91,8 +90,8 @@ def map_elites(self, target_function, obj_flag=False, acq_flag=False, pred_flag=
                 if np.any(np.all(samples == dummy_solution, axis=1)):
                     raise ValueError("Dummy solution contained in samples")
 
-            valid_indices, surface_batch = generate_parsec_coordinates(samples)
-
+            valid_indices, surface_batch = generate_parsec_coordinates(samples, io_flag=False)
+            
             scheduler_bhv = samples[:,1:3]  # ToDO: generalize calculate_behavior()
             candidate_sol = samples[valid_indices]
             candidate_obj = target_function(candidate_sol, self.gp_model)
@@ -121,6 +120,12 @@ def map_elites(self, target_function, obj_flag=False, acq_flag=False, pred_flag=
             remaining_evals -= BATCH_SIZE
 
     size_t1 = target_archive.stats.num_elites
+    obj_t1 = self.obj_archive.stats.num_elites
+    if obj_t1 != obj_t0:
+        raise ValueError("MAP-Elites:  obj_t1 != obj_t0   -   debug this!")
+
+    print("Acq Elite Archive Size: ", str(self.acq_archive.stats.num_elites))
+    print("End Map-Elites [...]\n\n")
 
     return target_archive, new_elite_archive, size_t0, size_t1
 
@@ -134,9 +139,9 @@ def define_mapping_behavior(self, acq_flag, pred_flag, pred_verific_flag, target
     dummy_elites = sorted(self.obj_archive, key=lambda x: x.objective, reverse=True)[:BATCH_SIZE]
     dummy_solutions = np.array([elite.solution for elite in dummy_elites])
 
-    obj_elites = sorted(self.obj_archive, key=lambda x: x.objective, reverse=True)[:self.obj_archive.stats.num_elites]
-    obj_elites_sol = np.array([elite.solution for elite in obj_elites])
-    obj_elites_bhv = np.array([elite.measures for elite in obj_elites])
+    obj_df = self.obj_archive.as_pandas()
+    obj_elites_sol = obj_df.values[:,4:]
+    obj_elites_bhv = obj_df.values[:,1:3]
     obj_elites_obj = target_function(obj_elites_sol, self.gp_model)
 
     if acq_flag:

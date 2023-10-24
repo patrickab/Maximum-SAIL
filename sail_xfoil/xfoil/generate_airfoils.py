@@ -12,7 +12,8 @@ config = Config(os.path.join(os.path.dirname(__file__), '../config', 'config.ini
 BATCH_SIZE = config.BATCH_SIZE
 N_XY_COORDINATES = config.N_XY_COORDINATES
 
-def export_parsec_coordinates(upper_xy, lower_xy, io_flag=True):
+
+def export_parsec_coordinates(upper_xy, lower_xy, io_flag):
     """
     Writes PARSEC-encoded coordinates in 'airfoil_{i}.dat'
 
@@ -22,13 +23,14 @@ def export_parsec_coordinates(upper_xy, lower_xy, io_flag=True):
 
     valid_indices = []
 
-    for index in range(BATCH_SIZE):
+    for index in range(upper_xy.shape[0]):
         if os.path.exists("airfoil_{index}.dat"):
             os.remove("airfoil_{index}.dat")
 
         if os.path.exists("airfoil_{index}.log"):
             os.remove("airfoil_{index}.log")
 
+    all_samples_invalid = True
     surface_batch = np.empty(0)
     for index in range(upper_xy.shape[0]):
 
@@ -39,14 +41,18 @@ def export_parsec_coordinates(upper_xy, lower_xy, io_flag=True):
         lower_y = lower_xy[index,:,1]
         delta_y = upper_y - lower_y
 
-        np.diff(upper_y)
-        is_rollercoaster_airfoil = True if np.where(np.diff(np.sign(upper_y)))[0] > 1 else False
+        dy = np.diff(upper_y)
+        sign_changes = np.where(np.diff(np.sign(dy)))[0]
+        num_optima = len(sign_changes)
+        is_rollercoaster_airfoil = True if num_optima > 1 else False
         is_itersecting_airfoil = True if np.any(delta_y < 0) else False
         is_negative_upper_y = True if np.any(upper_y < 0) else False
 
         is_invalid_airfoil = True if is_rollercoaster_airfoil or is_itersecting_airfoil or is_negative_upper_y else False
 
         if not is_invalid_airfoil:
+
+            all_samples_invalid = False
 
             valid_indices.append(index)
             stacked_xy = np.vstack((upper_xy[index], lower_xy[index][::-1]))
@@ -59,14 +65,20 @@ def export_parsec_coordinates(upper_xy, lower_xy, io_flag=True):
             surface_batch = np.append(surface_batch, surface)
 
         else:
+            surface_batch = np.append(surface_batch, -1337)
             if io_flag:
                 with open(f'airfoil_{index}.dat', 'w') as f:
                     f.write(f'airfoil_{index}\n\n')
                     f.write("Invalid Airfoil\n")
 
+    if all_samples_invalid:
+        print("\n\n\nAll samples invalid\n\n\n")
+        return np.array([], dtype=int), np.array([], dtype=int)
+    
     return np.array(valid_indices), surface_batch
 
-def generate_parsec_coordinates(samples, xte=1.0): # 'x trailing edge'
+
+def generate_parsec_coordinates(samples, xte=1.0, io_flag=True): # 'x trailing edge'
     """
     Generates Polynomial (x,y) coordinates for sample genomes
     
@@ -97,7 +109,9 @@ def generate_parsec_coordinates(samples, xte=1.0): # 'x trailing edge'
     upper_xy = vec_upper_y_solutions(upper_polynomial_coefficients)
     lower_xy = vec_lower_y_solutions(lower_polynomial_coefficients)
 
-    valid_indices, surface_batch = export_parsec_coordinates(upper_xy, lower_xy)
+    valid_indices, surface_batch = export_parsec_coordinates(upper_xy, lower_xy, io_flag=io_flag)
+
+    surface_batch = np.vstack(surface_batch) if surface_batch.shape[0] != 0 else []
 
     return valid_indices, surface_batch
 
