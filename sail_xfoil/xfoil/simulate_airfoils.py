@@ -22,12 +22,12 @@ REYNOLDS = config.REYNOLDS
 base_area = numpy.float64(0.07798448603500001) # (reference: calculate_rae2822_surface()) - needs to be updated with correct values
 base_lift = numpy.float64(0.5517) # (reference: xfoil_compatible_rae2822.log) - needs to be updated with correct value
 
-xfoil_iterations = 650
+xfoil_iterations = 350
 xfoil_path = r"/mnt/c/Program Files/xfoil/./xfoil.exe"
 np.set_printoptions(precision=4, suppress=True, floatmode='fixed', linewidth=120)
 
 
-def xfoil(iterations):
+def xfoil(iterations, surface_batch):
 
     """Executes xfoil with given parameters, implements Thread counting errors on stdout"""
 
@@ -51,19 +51,28 @@ def xfoil(iterations):
             if i not in success_indices:
                 success_indices.append(i)
 
+    if surface_batch.shape[0] != iterations:
+        raise ValueError(f'XFOIL: surface_batch.shape[0] != iterations')
+
     obj_batch = []
     success_indices_copy = success_indices.copy()
     for index in success_indices_copy:
+        
+        surface = surface_batch[index]
+        if surface == -1337:
+            raise ValueError(f'XFOIL: surface == -1337 indicates wrong indexing')
 
         output_index_data = numpy.loadtxt(f'airfoil_{index}.log', skiprows=12)
 
         lift, drag = output_index_data[1], output_index_data[2]
 
         if lift < 0 or drag < 0:
-            print(f"{index}: (negative lift or drag)")
+            if drag < 0: print("\n")
+            print(f"{index}: (negative lift or drag) - drag: {drag}")
+            if drag < 0: print("\n")
             success_indices.remove(index)
         else:
-            obj = calculate_obj(drag, lift)
+            obj = calculate_obj(drag, lift, surface)
             obj_batch.append(obj)
 
     obj_batch = np.array(obj_batch)
@@ -132,7 +141,7 @@ def run_xfoil(index):
     return is_valid_solution
 
 
-def calculate_obj_seed(drag, lift, surface_area):
+def calculate_obj(drag, lift, surface_area):
 
     area_penalty = (1 - (numpy.abs(surface_area - base_area) / base_area)) ** 7
     lift_penalty = (lift / base_lift)**2 if lift < base_lift else 1
@@ -142,7 +151,7 @@ def calculate_obj_seed(drag, lift, surface_area):
     return obj
 
 
-def calculate_obj(drag, lift):
+def calculate_obj_custom(drag, lift):
 
     # for some reason the authors calculate logarithm of drag
     obj = -numpy.log(drag) * lift
@@ -166,7 +175,7 @@ def capture_errors(process, queue, i):
 
     while True:
         try:
-            line = queue.get(timeout=0.65)
+            line = queue.get(timeout=0.8)
             #print(line.strip())
 
             if not line: # empty line
