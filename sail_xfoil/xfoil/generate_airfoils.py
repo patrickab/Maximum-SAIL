@@ -35,18 +35,17 @@ def export_parsec_coordinates(upper_xy, lower_xy):
         if upper_xy.shape[0] != BATCH_SIZE:
             ValueError(f'EXPORT PARSEC: upper_xy.shape[0] != BATCH_SIZE')
 
-        # Check if polynomials intersect
-        upper_i_xy = upper_xy[index,:,:]
-        lower_i_xy = lower_xy[index,:,:]
-        upper_y = upper_i_xy[:,1]
-        lower_y = lower_i_xy[:,1]
+        upper_y = upper_xy[index,:,1]
+        lower_y = lower_xy[index,:,1]
         delta_y = upper_y - lower_y
-        is_unvalid_airfoil = np.any(delta_y < 0) # returns True if polynomials dont intersect
+
+        # Check if                   polynomials intersect  upper polynomial neg            lower polynomial pos (lower y > 0 happens often & has no negative impact on convergence)  
+        is_unvalid_airfoil = True if np.any(delta_y < 0) or np.any(upper_y < 0) else False
 
         if not is_unvalid_airfoil:
 
             valid_indices.append(index)
-            stacked_xy = np.vstack((upper_i_xy, np.flip(lower_i_xy, axis=0)))
+            stacked_xy = np.vstack((upper_xy[index], lower_xy[index][::-1]))
             np.savetxt(f'airfoil_{index}.dat', stacked_xy, fmt='%f', delimiter=' ', newline='\n', header=f'airfoil_{index}\n', comments='')
 
             # Calculate the surface area using the trapezoidal rule in a vectorized manner
