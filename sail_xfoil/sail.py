@@ -8,7 +8,8 @@ import gc
 import os
 
 ###### Import Custom Scripts ######
-from sail_runner import SailRun, run_custom_sail, run_vanilla_sail, run_random_sail, prediction_verification_loop #run_vanilla_sail, run_random_sail, 
+from sail_runner import SailRun, run_vanilla_sail #run_vanilla_sail, run_random_sail, 
+from run_custom_sail import run_custom_sail, prediction_verification_loop
 from utils.anytime_archive_visualizer import archive_visualizer
 from gp.predict_objective import predict_objective
 from utils.utils import eval_xfoil_loop
@@ -57,9 +58,9 @@ def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_ran
     #     run_vanilla_sail(current_run)
     #     gc.collect()
 
-    if sail_random_flag:
-        run_random_sail(current_run)
-        gc.collect()
+    # if sail_random_flag:
+    #     run_random_sail(current_run)
+    #     gc.collect()
 
     global benchmark_domains
     benchmark_domains.append(current_run.domain)
@@ -84,10 +85,10 @@ def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_ran
 
 def store_final_data(self: SailRun):
 
-    archive_visualizer(self=self, archive=self.obj_archive, prefix="obj", name="Final Objective Archive", min_val=10, max_val=120)
-    archive_visualizer(self=self, archive=self.acq_archive, prefix="acq", name="Final Acquisition Archive", min_val=10, max_val=120)
-    archive_visualizer(self=self, archive=self.pred_archive, prefix="pred", name="Final Prediction Archive (unevaluated)", min_val=10, max_val=120)
-    archive_visualizer(self=self, archive=self.evaluated_predictions_archive, prefix="evaluted_pred", name="Final Prediction Archive (evaluated)", min_val=10, max_val=120)
+    archive_visualizer(self=self, archive=self.obj_archive, prefix="obj", name="Final Objective Archive", min_val=50, max_val=200)
+    archive_visualizer(self=self, archive=self.acq_archive, prefix="acq", name="Final Acquisition Archive", min_val=50, max_val=200)
+    archive_visualizer(self=self, archive=self.pred_archive, prefix="pred", name="Final Prediction Archive (unevaluated)", min_val=50, max_val=200)
+    archive_visualizer(self=self, archive=self.evaluated_predictions_archive, prefix="evaluted_pred", name="Final Prediction Archive (evaluated)", min_val=50, max_val=200)
     archive_visualizer(self=self, archive=self.prediction_error_archive, prefix="error", name="Prediction Error Archive", min_val=0, max_val=1)
 
     initial_seed = self.initial_seed

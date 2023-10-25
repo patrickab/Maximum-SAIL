@@ -1,5 +1,10 @@
 **/__pycache__/
+sail_xfoil/treasurebox
+sail_xfoil/benchmarks
+error_log
 *.dat
 *.csv
 *.log
+*.png
+*.mp4
 fragen.txt
