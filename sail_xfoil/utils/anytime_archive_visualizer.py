@@ -57,7 +57,7 @@ def anytime_archive_visualizer(self, archive, obj_flag=False, acq_flag=False, pr
     os.chdir(f"imgs/{domain}/{initial_seed}/{prefix}")
 
     fig, ax = plt.subplots(figsize=(8, 8))
-    grid_archive_heatmap(archive, ax=ax, vmin=0, vmax=6)
+    grid_archive_heatmap(archive, ax=ax, vmin=5, vmax=120)
     plt.xlabel("X Up")
     plt.ylabel("Z Up")
 

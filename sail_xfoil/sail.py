@@ -84,10 +84,10 @@ def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_ran
 
 def store_final_data(self: SailRun):
 
-    archive_visualizer(self=self, archive=self.obj_archive, prefix="obj", name="Final Objective Archive", min_val=0, max_val=6)
-    archive_visualizer(self=self, archive=self.acq_archive, prefix="acq", name="Final Acquisition Archive", min_val=0, max_val=6)
-    archive_visualizer(self=self, archive=self.pred_archive, prefix="pred", name="Final Prediction Archive (unevaluated)", min_val=0, max_val=6)
-    archive_visualizer(self=self, archive=self.evaluated_predictions_archive, prefix="evaluted_pred", name="Final Prediction Archive (evaluated)", min_val=0, max_val=6)
+    archive_visualizer(self=self, archive=self.obj_archive, prefix="obj", name="Final Objective Archive", min_val=10, max_val=120)
+    archive_visualizer(self=self, archive=self.acq_archive, prefix="acq", name="Final Acquisition Archive", min_val=10, max_val=120)
+    archive_visualizer(self=self, archive=self.pred_archive, prefix="pred", name="Final Prediction Archive (unevaluated)", min_val=10, max_val=120)
+    archive_visualizer(self=self, archive=self.evaluated_predictions_archive, prefix="evaluted_pred", name="Final Prediction Archive (evaluated)", min_val=10, max_val=120)
     archive_visualizer(self=self, archive=self.prediction_error_archive, prefix="error", name="Prediction Error Archive", min_val=0, max_val=1)
 
     initial_seed = self.initial_seed
@@ -169,6 +169,7 @@ def evaluate_predictions(self: SailRun):
 
 if __name__ == "__main__":
 
+    subprocess.run("clean", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) # custom bash command to remove all files from last run
     exec_start = time.time()
 
     for i in range(TEST_RUNS):

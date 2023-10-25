@@ -72,7 +72,7 @@ def export_parsec_coordinates(upper_xy, lower_xy, io_flag):
                     f.write("Invalid Airfoil\n")
 
     if all_samples_invalid:
-        print("\n\n\nAll samples invalid\n\n\n")
+        print("All samples invalid")
         return np.array([], dtype=int), np.array([], dtype=int)
     
     return np.array(valid_indices), surface_batch

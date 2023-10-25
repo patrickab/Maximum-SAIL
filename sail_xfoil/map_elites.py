@@ -61,17 +61,17 @@ def map_elites(self, target_function, obj_flag=False, acq_flag=False, pred_flag=
             qd_score_offset=-600,
             threshold_min = -1,)
         
+    target = "Acq Archive" if acq_flag else "Pred Archive"
     target_archive, dummy_solutions, n_evals = define_mapping_behavior(self, acq_flag, pred_flag, pred_verific_flag, target_function)
 
-    size_t0 = target_archive.stats.num_elites
     subprocess.run("rm *.dat", shell=True, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
 
     remaining_evals = n_evals
     total_iterations = remaining_evals // BATCH_SIZE
 
-    print("Start Map-Elites [...]")
     obj_t0 = self.obj_archive.stats.num_elites
-    print("Acq Elite Archive Size: ", str(self.acq_archive.stats.num_elites))
+    size_t0 = target_archive.stats.num_elites
+    print(f"{target} Size: ", str(size_t0))
         
     with tqdm(total=total_iterations) as progress:
         while((remaining_evals-BATCH_SIZE >= 0)):
@@ -113,13 +113,16 @@ def map_elites(self, target_function, obj_flag=False, acq_flag=False, pred_flag=
             scheduler.tell(scheduler_obj, scheduler_bhv)
             remaining_evals -= BATCH_SIZE
 
-    size_t1 = target_archive.stats.num_elites
     obj_t1 = self.obj_archive.stats.num_elites
+    size_t1 = target_archive.stats.num_elites
+
     if obj_t1 != obj_t0:
         raise ValueError("MAP-Elites:  obj_t1 != obj_t0   -   debug this!")
+    if size_t0 > size_t1:
+        raise ValueError("MAP-Elites:  size_t0 < size_t1   -   debug this!")
 
-    print("Acq Elite Archive Size: ", str(self.acq_archive.stats.num_elites))
-    print("End Map-Elites [...]\n\n")
+    print(f"{target} Size: ", str(size_t1))
+    print("[...] End Map-Elites\n\n")
 
     return target_archive, new_elite_archive, size_t0, size_t1
 
