@@ -113,10 +113,13 @@ def eval_xfoil_loop(self, candidate_sol, evaluate_prediction_archive=False, cand
         new_objectives = np.vstack((new_objectives, new_obj))
 
     if candidate_acq_or_pred is not None:
-        print("\n\nObjective Evaluation Results and Corresponding Acquisitions/Predictions:")
-        target_objectives = np.vstack(converged_acq_or_pred)
-        true_objectives = np.vstack(new_objectives)
-        pprint(target_objectives, true_objectives)
+        if converged_acq_or_pred.shape[0] != 0:
+            print("\n\nObjective Evaluation Results and Corresponding Acquisitions/Predictions:")
+            target_objectives = np.vstack(converged_acq_or_pred)
+            true_objectives = np.vstack(new_objectives)
+            pprint(target_objectives, true_objectives)
+        else:
+            print("\n\nNo Converged Solutions")
 
     # evaluate candidates, then exit loop
     if evaluate_prediction_archive:

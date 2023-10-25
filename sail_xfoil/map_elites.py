@@ -64,7 +64,7 @@ def map_elites(self, target_function, obj_flag=False, acq_flag=False, pred_flag=
     target_archive, dummy_solutions, n_evals = define_mapping_behavior(self, acq_flag, pred_flag, pred_verific_flag, target_function)
 
     size_t0 = target_archive.stats.num_elites
-    subprocess.run("rm *.dat", shell=True)
+    subprocess.run("rm *.dat", shell=True, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
 
     remaining_evals = n_evals
     total_iterations = remaining_evals // BATCH_SIZE
@@ -99,14 +99,12 @@ def map_elites(self, target_function, obj_flag=False, acq_flag=False, pred_flag=
 
             status_vector, _ = target_archive.add(candidate_sol, candidate_obj, candidate_bhv)
 
-            # First iteration contains old elites as initial samples - Only new elites shall be stored in new_elite_archive
-            if remaining_evals != n_evals:
-                # store newly discovered elites
-                non_0_status_indices = np.where(status_vector != 0)[0]            
-                new_sol = candidate_sol[non_0_status_indices]
-                new_obj = candidate_obj[non_0_status_indices]
-                new_bhv = candidate_bhv[non_0_status_indices]
-                new_elite_archive.add(new_sol, new_obj, new_bhv)
+            # store newly discovered elites
+            non_0_status_indices = np.where(status_vector != 0)[0]            
+            new_sol = candidate_sol[non_0_status_indices]
+            new_obj = candidate_obj[non_0_status_indices]
+            new_bhv = candidate_bhv[non_0_status_indices]
+            new_elite_archive.add(new_sol, new_obj, new_bhv)
 
             # Scheduler.ask() returns BATCH_SIZE samples --- Scheduler.tell() expects BATCH_SIZE objectives 
             if candidate_obj.shape[0] == samples.shape[0]:

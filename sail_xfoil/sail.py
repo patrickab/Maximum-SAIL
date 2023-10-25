@@ -179,8 +179,8 @@ if __name__ == "__main__":
         
         sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True,  hybrid_flag=True)
         sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True,  greedy_flag=True)
-        # sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, hybrid_flag=True)
-        # sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, greedy_flag=True)
+        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, hybrid_flag=True)
+        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, greedy_flag=True)
         gc.collect()
 
         img_filenames = [f"imgs/final_heatmaps_{i}_{benchmark_domain}.png" for benchmark_domain in benchmark_domains]

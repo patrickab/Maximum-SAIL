@@ -476,16 +476,20 @@ def evaluate_max_improvement(self: SailRun, improved_elites, new_bin_elites, old
         After 4 extra evaluations, the function returns the best elites found so far to avoid infinite loops
         """
 
+        target = "Acq" if acq_flag else "Pred"
+
         if acq_flag:
             n_samples = BATCH_SIZE
         if pred_flag and self.pred_verific_flag:
             n_samples = MAX_PRED_VERIFICATION//PREDICTION_VERIFICATIONS
+        if pred_flag and not self.pred_verific_flag:
+            raise ValueError("Maximize Improvement: Prediction Flag is True, but Prediction Verification Flag is False")
 
         # If enough elites have been sampled, return
         print("\nn_samples: " + str(n_samples))
         print("n improvements: " + str(improved_elites.shape[0]+new_bin_elites.shape[0]))
         if n_samples < improved_elites.shape[0] + new_bin_elites.shape[0]:
-            print("Enough Acq Improvements: Returning")
+            print(f'Enough {target} Improvements: Returning')
             return improved_elites, new_bin_elites, n_samples
 
         # Sample more elites & add improved elites + new bin elites to target_archive
@@ -495,11 +499,14 @@ def evaluate_max_improvement(self: SailRun, improved_elites, new_bin_elites, old
         iteration = 0
 
         # Re-enter MAP-Elites (acq/obj) up to 2 times if necessary 
-        while n_improvements < n_samples and iteration <= 2:
-            print("n_improvements: " + str(n_improvements))
-            print("\n\n### Not enough Acq Improvements: Re-entering acquisition loop###\n\n")
+        while n_improvements < n_samples and iteration <= 5:
+
+            iteration += 1
+
+            print(f'\n\n### Not enough {target} Improvements: Re-entering {target} Loop###\n\n')
             i_target_archive, i_new_elite_archive, _, _ = map_elites(self, target_function=target_function, new_elite_archive=i_new_elite_archive, acq_flag=acq_flag, pred_flag=pred_flag)
             n_improvements = i_new_elite_archive.stats.num_elites
+            print("n_improvements: " + str(n_improvements))
 
         # Enough samples have been found, or Loop has been re-entered twice
         # Proceed to sample selection
