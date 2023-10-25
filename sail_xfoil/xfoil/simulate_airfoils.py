@@ -168,7 +168,7 @@ def capture_errors(process, queue, i):
 
     while True:
         try:
-            line = queue.get(timeout=0.8)
+            line = queue.get(timeout=0.4)
             #print(line.strip())
 
             if not line: # empty line

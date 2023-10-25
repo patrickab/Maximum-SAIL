@@ -264,7 +264,7 @@ class SailRun:
             dims=BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
-            threshold_min = 5
+            threshold_min = 0
         )
 
         return obj_archive, acq_archive, pred_archive, new_archive, evaluated_predictions_archive, prediction_error_archive

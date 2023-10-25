@@ -152,7 +152,9 @@ def evaluate_predictions(self: SailRun):
     self.evaluated_predictions_archive.add(np.vstack(converged_evaluated_prediction_elites['solution']), converged_evaluated_prediction_elites['objective'], np.vstack(converged_evaluated_prediction_elites['behavior']))
     self.prediction_error_archive.add(np.vstack(converged_unevaluated_prediction_elites['solution']), np.abs(prediction_error), np.vstack(converged_unevaluated_prediction_elites['behavior']))
 
+    pred_errors_greater_than_1 = np.sum(np.abs(prediction_error) > 1)
     error_str = f"Initial Seed: {self.initial_seed}  Domain: {self.domain}  MAE Error: {mae_error}  MSE Error: {mse_error} \nPrediction Errors: \n{np.array2string(prediction_error)}\n"
+    print("Absolute Prediction Errors Greater than 1: ", pred_errors_greater_than_1)
     with open("error_log", "a") as file: file.write(error_str)
 
     true_objective = np.vstack(converged_evaluated_prediction_elites['objective'])
