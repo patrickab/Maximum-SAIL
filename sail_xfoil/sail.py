@@ -84,10 +84,10 @@ def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_ran
 
 def store_final_data(self: SailRun):
 
-    archive_visualizer(self=self, archive=self.obj_archive, prefix="obj", name="Final Objective Archive", min_val=0, max_val=5)
-    archive_visualizer(self=self, archive=self.acq_archive, prefix="acq", name="Final Acquisition Archive", min_val=0, max_val=5)
-    archive_visualizer(self=self, archive=self.pred_archive, prefix="pred", name="Final Prediction Archive (unevaluated)", min_val=0, max_val=5)
-    archive_visualizer(self=self, archive=self.evaluated_predictions_archive, prefix="evaluted_pred", name="Final Prediction Archive (evaluated)", min_val=0, max_val=5)
+    archive_visualizer(self=self, archive=self.obj_archive, prefix="obj", name="Final Objective Archive", min_val=0, max_val=6)
+    archive_visualizer(self=self, archive=self.acq_archive, prefix="acq", name="Final Acquisition Archive", min_val=0, max_val=6)
+    archive_visualizer(self=self, archive=self.pred_archive, prefix="pred", name="Final Prediction Archive (unevaluated)", min_val=0, max_val=6)
+    archive_visualizer(self=self, archive=self.evaluated_predictions_archive, prefix="evaluted_pred", name="Final Prediction Archive (evaluated)", min_val=0, max_val=6)
     archive_visualizer(self=self, archive=self.prediction_error_archive, prefix="error", name="Prediction Error Archive", min_val=0, max_val=1)
 
     initial_seed = self.initial_seed
@@ -178,9 +178,9 @@ if __name__ == "__main__":
         benchmark_domains = []
         
         sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True,  hybrid_flag=True)
-        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True,  greedy_flag=True)
         sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, hybrid_flag=True)
-        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, greedy_flag=True)
+        # sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True,  greedy_flag=True)
+        # sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, greedy_flag=True)
         gc.collect()
 
         img_filenames = [f"imgs/final_heatmaps_{i}_{benchmark_domain}.png" for benchmark_domain in benchmark_domains]

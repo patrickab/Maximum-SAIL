@@ -277,16 +277,33 @@ def run_custom_sail(self: SailRun):
     """
 
     iteration = 1
-    total_obj_improvements = 0
-    total_new_acq_bins = 0
-    total_new_obj_bins = 0
-    total_convergence_errors = 0
+
     mean_acq_improvement = 0 # ToDo
     mean_obj_improvement = 0 # ToDo
-    anytime_metrics = pandas.DataFrame(columns= ['Iteration',   'Mean Obj QD Score', 'Mean Obj QD Score per Bin', 'Mean Acq QD Score', 'Mean Acq QD Score per Bin', 'Percentage Improvements', 'Total Obj Improvements', 'New Obj Improvements','Percentage New Obj Bins', 'Total New Obj Bins', 'New Obj Bins','Percentage Convergence Errors', 'Total Convergence Errors','New Convergence Errors',])
+    total_new_obj_bins = 0
+    total_new_acq_bins = 0
+    total_new_obj_elites = 0
+    total_new_acq_elites = 0
+    total_obj_improvements = 0
+    total_acq_improvements = 0
+    total_convergence_errors = 0
+
+    anytime_columns = ['Iteration', 'Obj QD (per elite)', 'Obj QD (per bin)', 
+                                    'Acq QD (per elite)', 'Acq QD (per bin)',
+                                    'Percentage New Obj Elites', 'Total New Obj Elites', 'Iteration New Obj Elites',
+                                    'Percentage New Acq Elites', 'Total New Acq Elites', 'Iteration New Acq Elites',
+                                    'Percentage Obj Improvements', 'Total Obj Improvements', 'Iteration Obj Improvements',
+                                    'Percentage Acq Improvements', 'Total Acq Improvements', 'Iteration Acq Improvements',
+                                    'Percentage New Obj Bins', 'Total New Obj Bins', 'Iteration New Obj Bins',
+                                    'Percentage New Acq Bins', 'Total New Acq Bins', 'Iteration New Acq Bins',
+                                    'Percentage Convergence Errors', 'Total Convergence Errors', 'Iteration Convergence Errors']
+
+    anytime_metrics = pandas.DataFrame(columns= anytime_columns)
 
     total_eval_budget = ACQ_N_OBJ_EVALS if self.pred_verific_flag else ACQ_N_OBJ_EVALS + MAX_PRED_VERIFICATION # if no budget for prediction verification is given, add MAX_PRED_VERIFICATION to ACQ_N_MAP_EVALS to ensure equal number of evaluations
+    total_acq_eval_budget = ACQ_N_MAP_EVALS * (ACQ_N_OBJ_EVALS//BATCH_SIZE)
     current_eval_budget = total_eval_budget
+    current_acq_eval_budget = total_acq_eval_budget
 
     while(current_eval_budget >= BATCH_SIZE):
 
@@ -300,26 +317,36 @@ def run_custom_sail(self: SailRun):
         evaluate_max_improvement(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, old_elites=old_elites, target_function=acq_ucb, acq_flag=True)
 
         current_eval_budget -= BATCH_SIZE
+        current_acq_eval_budget -= ACQ_N_MAP_EVALS
         consumed_obj_evals = total_eval_budget - current_eval_budget
+        consumed_acq_evals = total_acq_eval_budget - current_acq_eval_budget
         
-        # Count newly discovered bins
+        # Count newly discovered elites
         obj_t0 = self.obj_t0
         obj_t1 = self.obj_t1
         n_new_obj_bins = obj_t1 - obj_t0
-        n_new_acq_bins = acq_t1 - acq_t0
-        total_new_obj_bins += n_new_obj_bins
-        total_new_acq_bins += n_new_acq_bins
-        percentage_new_obj_bins = (total_new_obj_bins/consumed_obj_evals)*100
-
-        # Count newly discovered elites
+        n_new_acq_bins = new_bin_elites.shape[0]
         n_new_obj_elites = self.new_obj.shape[0]
         n_new_acq_elites = improved_elites.shape[0] + new_bin_elites.shape[0]
-        total_obj_improvements += n_new_obj_elites
+        n_new_obj_improvements = n_new_obj_elites - n_new_obj_bins
+        n_new_acq_improvements = n_new_acq_elites - n_new_acq_bins
+        # Sum newly discovered elites
+        total_new_obj_bins += n_new_obj_bins
+        total_new_acq_bins += n_new_acq_bins
+        total_new_obj_elites += n_new_obj_elites
+        total_new_acq_elites += n_new_acq_elites
+        total_obj_improvements += n_new_obj_improvements
+        total_acq_improvements += n_new_acq_improvements
+        # Calculate percentages
+        percentage_new_obj_bins = (total_new_obj_bins/consumed_obj_evals)*100
+        percentage_new_acq_bins = (total_new_acq_bins/consumed_acq_evals)*100
+        percentage_new_obj_elites = (total_new_obj_elites/consumed_obj_evals)*100
+        percentage_new_acq_elites = (total_new_acq_elites/consumed_acq_evals)*100
+        percentage_obj_improvements   = (total_obj_improvements/consumed_obj_evals)*100
+        percentage_acq_improvements   = (total_acq_improvements/consumed_acq_evals)*100
 
         convergence_errors = self.convergence_errors
         total_convergence_errors += convergence_errors
-
-        percentage_obj_improvements   = (total_obj_improvements/consumed_obj_evals)*100
         percentage_convergence_errors = (total_convergence_errors/consumed_obj_evals)*100
 
         qd_obj = sum(self.obj_archive.as_pandas(include_solutions=True)['objective'].values)
@@ -328,8 +355,8 @@ def run_custom_sail(self: SailRun):
 
         obj_qd_per_bin = round(qd_obj/n_bins, 1)
         acq_qd_per_bin = round(qd_acq/n_bins, 1)
-        obj_mean_qd_score = round(qd_obj/self.obj_archive.stats.num_elites, 1)
-        acq_mean_qd_score = round(qd_acq/self.acq_archive.stats.num_elites, 1)
+        obj_qd_per_elite = round(qd_obj/self.obj_archive.stats.num_elites, 1)
+        acq_qd_per_elite = round(qd_acq/self.acq_archive.stats.num_elites, 1)
 
         # ToDo: mean improvements (new_converged_elites - old_corresponding_elites) / n_converged_elites 
         # ToDo: print new_converged_elites next to old_corresponding_elites
@@ -338,20 +365,34 @@ def run_custom_sail(self: SailRun):
         old_elite_obj = old_elites['objective']
 
         # Print Anytime Metrics
-        print(f"\n\nPercentage New Obj Bins      : {percentage_new_obj_bins:.1f}%")
-        print(f"Percentage Improvements      : {percentage_obj_improvements:.1f}%")
-        print(f"Percentage Convergence Errors: {percentage_convergence_errors:.1f}%")
-        print(f"Total New Obj Bins           : {total_new_obj_bins}")
-        print(f"Total Improvements           : {total_obj_improvements}")
-        print(f"Total Convergence Errors     : {total_convergence_errors}")
-        print(f"Iter Convergence Errors      : {convergence_errors}\n")
+        print(f"\n\nObj Archive Size (before)     : {obj_t0}")
+        print(f"Obj Archive Size  (after)     : {obj_t1}")
+        print(f"Obj QD (per elite)            : {obj_qd_per_elite}")
+        print(f"Obj QD (per bin)              : {obj_qd_per_bin}\n")
 
-        print(f"Obj Archive Size (before)    : {obj_t0}")
-        print(f"Obj Archive Size  (after)    : {obj_t1}")
-        print(f"New Obj Bins                 : {n_new_obj_bins}")
-        print(f"New Obj Elites               : {n_new_obj_elites}")
-        print(f"Mean Obj QD                  : {obj_mean_qd_score}")
-        print(f"Obj QD (per bin)             : {obj_qd_per_bin}\n")
+        print(f"Percentage New Obj Bins       : {percentage_new_obj_bins:.1f}%")
+        print(f"Percentage Obj Improvements   : {percentage_obj_improvements:.1f}%")
+        print(f"Percentage New Obj Elites     : {percentage_new_obj_elites:.1f}%")
+        print(f"Total New Obj Bins            : {total_new_obj_bins}")
+        print(f"Total Improvements            : {total_obj_improvements}")
+        print(f"Total New Obj Elites          : {total_new_obj_elites}")
+        print(f"Iteration New Obj Bins        : {n_new_obj_bins}")
+        print(f"Iteration Improvements        : {n_new_obj_improvements}")
+        print(f"Iteration New Obj Elites      : {n_new_obj_elites}\n")
+
+        print(f"Percentage Convergence Errors : {percentage_convergence_errors:.1f}%")
+        print(f"Total Convergence Errors      : {total_convergence_errors}")
+        print(f"Iteration Convergence Errors  : {convergence_errors}\n")
+
+        print(f"Percentage New Acq Bins       : {percentage_new_acq_bins:.1f}%")
+        print(f"Percentage Acq Improvements   : {percentage_acq_improvements:.1f}%")
+        print(f"Percentage New Acq Elites     : {percentage_new_acq_elites:.1f}%")
+        print(f"Total New Acq Bins            : {total_new_acq_bins}")
+        print(f"Total Improvements            : {total_acq_improvements}")
+        print(f"Total New Acq Elites          : {total_new_acq_elites}")
+        print(f"Iteration New Acq Bins        : {n_new_acq_bins}")
+        print(f"Iteration Improvements        : {n_new_acq_improvements}")
+        print(f"Iteration New Acq Elites      : {n_new_acq_elites}\n")
 
         print(f"Acq Archive Size (before)    : {acq_t0}")
         print(f"Acq Archive Size  (after)    : {acq_t1}")
@@ -359,15 +400,19 @@ def run_custom_sail(self: SailRun):
 
         print(f"Acq QD (per bin)             : {acq_qd_per_bin}")
         print(f"New Acq Bins                 : {n_new_acq_bins}")
-        print(f"Mean Acq QD                  : {acq_mean_qd_score}")
+        print(f"Mean Acq QD                  : {acq_qd_per_elite}")
         print(f"Remaining ACQ Precise Evals  : {current_eval_budget}\n\n")
 
 
         # Store Anytime Metrics in Pandas Dataframe
-        anytime_data = [iteration, obj_mean_qd_score, obj_qd_per_bin,
-                                   acq_mean_qd_score, acq_qd_per_bin,
+        anytime_data = [iteration, obj_qd_per_elite, obj_qd_per_bin,
+                                   acq_qd_per_elite, acq_qd_per_bin,
+                                   percentage_new_obj_elites, total_new_obj_elites, n_new_obj_elites,
+                                   percentage_new_acq_elites, total_new_acq_elites, n_new_acq_elites,
                                    percentage_obj_improvements, total_obj_improvements, n_new_obj_elites,
+                                   percentage_acq_improvements, total_acq_improvements, n_new_acq_elites,
                                    percentage_new_obj_bins, total_new_obj_bins, n_new_obj_bins,
+                                   percentage_new_acq_bins, total_new_acq_bins, n_new_acq_bins,
                                    percentage_convergence_errors, total_convergence_errors, convergence_errors,]
         anytime_metrics.loc[len(anytime_metrics)] = anytime_data
 
@@ -378,11 +423,7 @@ def run_custom_sail(self: SailRun):
             except:
                 anytime_metrics.to_csv(f'{self.initial_seed}_{self.domain}_acq_loop_anytime_metrics.csv', index=False)
             # Reset to empty dataframe
-            anytime_metrics = pandas.DataFrame(columns= ['Iteration',   'Mean Obj QD Score', 'Mean Obj QD Score per Bin', 
-                                                                        'Mean Acq QD Score', 'Mean Acq QD Score per Bin', 
-                                                                        'Percentage Improvements', 'Total Obj Improvements', 'New Obj Improvements',
-                                                                        'Percentage New Obj Bins', 'Total New Obj Bins', 'New Obj Bins',
-                                                                        'Percentage Convergence Errors', 'Total Convergence Errors','New Convergence Errors',])
+            anytime_metrics = pandas.DataFrame(columns= anytime_columns)
             
         iteration += 1
 
@@ -603,26 +644,40 @@ def prediction_verification_loop(self: SailRun):
     print("\n\n ## Enter Prediction Verification Loop##")
 
 
+    iteration = 1
 
-    iteration = 0
-    total_obj_improvements = 0
-    total_new_pred_bins = 0
-    total_new_obj_bins = 0
-    total_convergence_errors = 0
     mean_pred_improvement = 0 # ToDo
     mean_obj_improvement = 0 # ToDo
+    total_new_obj_bins = 0
+    total_new_pred_bins = 0
+    total_new_obj_elites = 0
+    total_new_pred_elites = 0
+    total_obj_improvements = 0
+    total_pred_improvements = 0
+    total_convergence_errors = 0
+
+    anytime_columns = ['Iteration', 'Obj QD (per elite)', 'Obj QD (per bin)', 
+                                    'Acq QD (per elite)', 'Acq QD (per bin)',
+                                    'Percentage New Obj Elites', 'Total New Obj Elites', 'Iteration New Obj Elites',
+                                    'Percentage New Acq Elites', 'Total New Acq Elites', 'Iteration New Acq Elites',
+                                    'Percentage Obj Improvements', 'Total Obj Improvements', 'Iteration Obj Improvements',
+                                    'Percentage Acq Improvements', 'Total Acq Improvements', 'Iteration Acq Improvements',
+                                    'Percentage New Obj Bins', 'Total New Obj Bins', 'Iteration New Obj Bins',
+                                    'Percentage New Acq Bins', 'Total New Acq Bins', 'Iteration New Acq Bins',
+                                    'Percentage Convergence Errors', 'Total Convergence Errors', 'Iteration Convergence Errors']
+
     anytime_metrics = pandas.DataFrame(columns= ['Iteration',   'Mean Obj QD Score', 'Mean Obj QD Score per Bin', 'Mean pred QD Score', 'Mean pred QD Score per Bin', 'Percentage Improvements', 'Total Obj Improvements', 'New Obj Improvements','Percentage New Obj Bins', 'Total New Obj Bins', 'New Obj Bins','Percentage Convergence Errors', 'Total Convergence Errors','New Convergence Errors',])
     total_eval_budget = MAX_PRED_VERIFICATION
+    total_pred_eval_budget = PRED_N_EVALS
     current_eval_budget = total_eval_budget
-    iter_evals = MAX_PRED_VERIFICATION//(PREDICTION_VERIFICATIONS) # verify predictions n=PREDICTION_VERIFICATIONS times, then continue with predictions
+    current_pred_eval_budget = total_pred_eval_budget
+    iter_evals = MAX_PRED_VERIFICATION//(PREDICTION_VERIFICATIONS)
 
     while(current_eval_budget >= iter_evals):
 
         print("Prediction Verification Loop")
         print("Iter Evals: " + str(iter_evals))
         print("Eval Budget: " + str(current_eval_budget))
-
-        current_eval_budget -= iter_evals
 
         old_elites = np.array([(  elite.solution,     elite.index,     elite.objective,       elite.measures) for elite in self.obj_archive],
                         dtype=[('solution', object), ('index', int), ('objective', float), ('behavior', object)])
@@ -634,37 +689,48 @@ def prediction_verification_loop(self: SailRun):
 
         self.visualize_archive(archive=self.pred_archive, pred_flag=True)
 
+        current_eval_budget -= iter_evals
+        current_pred_eval_budget -= PRED_N_EVALS//(MAX_PRED_VERIFICATION+1) # +1 because after the last prediction verification we predict once more
+
         consumed_obj_evals = total_eval_budget - current_eval_budget
+        consumed_pred_evals = total_pred_eval_budget - current_pred_eval_budget
         
-        # Count newly discovered bins
+        # Count newly discovered elites
         obj_t0 = self.obj_t0
         obj_t1 = self.obj_t1
         n_new_obj_bins = obj_t1 - obj_t0
-        n_new_pred_bins = pred_t1 - pred_t0
-        total_new_obj_bins += n_new_obj_bins
-        total_new_pred_bins += n_new_pred_bins
-        percentage_new_obj_bins = (total_new_obj_bins/consumed_obj_evals)*100
-
-        # Count newly discovered elites
+        n_new_pred_bins = new_bin_elites.shape[0]
         n_new_obj_elites = self.new_obj.shape[0]
         n_new_pred_elites = improved_elites.shape[0] + new_bin_elites.shape[0]
-        total_obj_improvements += n_new_obj_elites
+        n_new_obj_improvements = n_new_obj_elites - n_new_obj_bins
+        n_new_pred_improvements = n_new_pred_elites - n_new_pred_bins
+        # Sum newly discovered elites
+        total_new_obj_bins += n_new_obj_bins
+        total_new_pred_bins += n_new_pred_bins
+        total_new_obj_elites += n_new_obj_elites
+        total_new_pred_elites += n_new_pred_elites
+        total_obj_improvements += n_new_obj_improvements
+        total_pred_improvements += n_new_pred_improvements
+        # Calculate percentages
+        percentage_new_obj_bins = (total_new_obj_bins/consumed_obj_evals)*100
+        percentage_new_pred_bins = (total_new_pred_bins/consumed_pred_evals)*100
+        percentage_new_obj_elites = (total_new_obj_elites/consumed_obj_evals)*100
+        percentage_new_pred_elites = (total_new_pred_elites/consumed_pred_evals)*100
+        percentage_obj_improvements   = (total_obj_improvements/consumed_obj_evals)*100
+        percentage_pred_improvements   = (total_pred_improvements/consumed_pred_evals)*100
 
         convergence_errors = self.convergence_errors
         total_convergence_errors += convergence_errors
-
-        percentage_obj_improvements   = (total_obj_improvements/consumed_obj_evals)*100
         percentage_convergence_errors = (total_convergence_errors/consumed_obj_evals)*100
 
-        # Acq/Obj Metrics
-        qd_obj = sum([elite.objective for elite in self.obj_archive])
-        qd_pred = sum([elite.objective for elite in self.pred_archive])
+        qd_obj = sum(self.obj_archive.as_pandas(include_solutions=True)['objective'].values)
+        qd_pred = sum(self.pred_archive.as_pandas(include_solutions=True)['objective'].values)
         n_bins = np.prod(self.obj_archive.dims)
 
         obj_qd_per_bin = round(qd_obj/n_bins, 1)
         pred_qd_per_bin = round(qd_pred/n_bins, 1)
-        obj_mean_qd_score = round(qd_obj/self.obj_archive.stats.num_elites, 1)
-        pred_mean_qd_score = round(qd_pred/self.acq_archive.stats.num_elites, 1)
+        obj_qd_per_elite = round(qd_obj/self.obj_archive.stats.num_elites, 1)
+        pred_qd_per_elite = round(qd_pred/self.pred_archive.stats.num_elites, 1)
 
         # ToDo: mean improvements (new_converged_elites - old_corresponding_elites) / n_converged_elites 
         # ToDo: print new_converged_elites next to old_corresponding_elites
@@ -672,57 +738,73 @@ def prediction_verification_loop(self: SailRun):
         # print("Mean Obj Improvement: {:.1f}".format(mean_obj_improvement))
         old_elite_obj = old_elites['objective']
 
-
         # Print Anytime Metrics
-        print(f"\n\nPercentage New Obj Bins      : {percentage_new_obj_bins:.1f}%")
-        print(f"Percentage Improvements      : {percentage_obj_improvements:.1f}%")
-        print(f"Percentage Convergence Errors: {percentage_convergence_errors:.1f}%")
-        print(f"Total New Obj Bins           : {total_new_obj_bins}")
-        print(f"Total Improvements           : {total_obj_improvements}")
-        print(f"Total Convergence Errors     : {total_convergence_errors}")
-        print(f"Iter Convergence Errors      : {convergence_errors}\n")
+        print(f"\n\nObj Archive Size (before)     : {obj_t0}")
+        print(f"Obj Archive Size  (after)     : {obj_t1}")
+        print(f"Obj QD (per elite)            : {obj_qd_per_elite}")
+        print(f"Obj QD (per bin)              : {obj_qd_per_bin}\n")
 
-        print(f"Obj Archive Size (before)    : {obj_t0}")
-        print(f"Obj Archive Size  (after)    : {obj_t1}")
-        print(f"New Obj Bins                 : {n_new_obj_bins}")
-        print(f"New Obj Elites               : {n_new_obj_elites}")
-        print(f"Mean Obj QD                  : {obj_mean_qd_score}")
-        print(f"Obj QD (per bin)             : {obj_qd_per_bin}\n")
+        print(f"Percentage New Obj Bins       : {percentage_new_obj_bins:.1f}%")
+        print(f"Percentage Obj Improvements   : {percentage_obj_improvements:.1f}%")
+        print(f"Percentage New Obj Elites     : {percentage_new_obj_elites:.1f}%")
+        print(f"Total New Obj Bins            : {total_new_obj_bins}")
+        print(f"Total Improvements            : {total_obj_improvements}")
+        print(f"Total New Obj Elites          : {total_new_obj_elites}")
+        print(f"Iteration New Obj Bins        : {n_new_obj_bins}")
+        print(f"Iteration Improvements        : {n_new_obj_improvements}")
+        print(f"Iteration New Obj Elites      : {n_new_obj_elites}\n")
 
-        print(f"Pred Archive Size (before)   : {pred_t0}")
-        print(f"Pred Archive Size  (after)   : {pred_t1}")
-        print(f"New Pred Elites              : {n_new_pred_elites}\n")
+        print(f"Percentage Convergence Errors : {percentage_convergence_errors:.1f}%")
+        print(f"Total Convergence Errors      : {total_convergence_errors}")
+        print(f"Iteration Convergence Errors  : {convergence_errors}\n")
 
-        print(f"Pred QD (per bin)            : {pred_qd_per_bin}")
-        print(f"New Pred Bins                : {n_new_pred_bins}")
-        print(f"Mean Pred QD                 : {pred_mean_qd_score}")
-        print(f"Remaining Pred Precise Evals : {current_eval_budget}\n\n")
+        print(f"Percentage New Pred Bins       : {percentage_new_pred_bins:.1f}%")
+        print(f"Percentage Pred Improvements   : {percentage_pred_improvements:.1f}%")
+        print(f"Percentage New Pred Elites     : {percentage_new_pred_elites:.1f}%")
+        print(f"Total New Pred Bins            : {total_new_pred_bins}")
+        print(f"Total Improvements            : {total_pred_improvements}")
+        print(f"Total New Pred Elites          : {total_new_pred_elites}")
+        print(f"Iteration New Pred Bins        : {n_new_pred_bins}")
+        print(f"Iteration Improvements        : {n_new_pred_improvements}")
+        print(f"Iteration New Pred Elites      : {n_new_pred_elites}\n")
+
+        print(f"Pred Archive Size (before)    : {pred_t0}")
+        print(f"Pred Archive Size  (after)    : {pred_t1}")
+        print(f"New Pred Elites               : {n_new_pred_elites}\n")
+
+        print(f"Pred QD (per bin)             : {pred_qd_per_bin}")
+        print(f"New Pred Bins                 : {n_new_pred_bins}")
+        print(f"Mean Pred QD                  : {pred_qd_per_elite}")
+        print(f"Remaining ACQ Precise Evals  : {current_eval_budget}\n\n")
 
 
         # Store Anytime Metrics in Pandas Dataframe
-        anytime_data = [iteration, obj_mean_qd_score, obj_qd_per_bin,
-                                   pred_mean_qd_score, pred_qd_per_bin,
+        anytime_data = [iteration, obj_qd_per_elite, obj_qd_per_bin,
+                                   pred_qd_per_elite, pred_qd_per_bin,
+                                   percentage_new_obj_elites, total_new_obj_elites, n_new_obj_elites,
+                                   percentage_new_pred_elites, total_new_pred_elites, n_new_pred_elites,
                                    percentage_obj_improvements, total_obj_improvements, n_new_obj_elites,
+                                   percentage_pred_improvements, total_pred_improvements, n_new_pred_elites,
                                    percentage_new_obj_bins, total_new_obj_bins, n_new_obj_bins,
+                                   percentage_new_pred_bins, total_new_pred_bins, n_new_pred_bins,
                                    percentage_convergence_errors, total_convergence_errors, convergence_errors,]
         anytime_metrics.loc[len(anytime_metrics)] = anytime_data
 
-        # Buffer 10 Iterations
-        iteration += 1
-        if iteration % 10 == 0:
+        if iteration % 20 == 0:
             # Save Anytime Metrics to CSV. If no csv is saved create new csv, else append to existing csv
             try:
                 anytime_metrics.to_csv(f'{self.initial_seed}_{self.domain}_pred_loop_anytime_metrics.csv', mode='a', header=False, index=False)
             except:
                 anytime_metrics.to_csv(f'{self.initial_seed}_{self.domain}_pred_loop_anytime_metrics.csv', index=False)
             # Reset to empty dataframe
-            anytime_metrics = pandas.DataFrame(columns= ['Iteration',   'Mean Obj QD Score', 'Mean Obj QD Score per Bin', 
-                                                                        'Mean Pred QD Score', 'Mean Pred QD Score per Bin', 
-                                                                        'Percentage Improvements', 'Total Obj Improvements', 'New Obj Improvements',
-                                                                        'Percentage New Obj Bins', 'Total New Obj Bins', 'New Obj Bins',
-                                                                        'Percentage Convergence Errors', 'Total Convergence Errors','New Convergence Errors',])
+            anytime_metrics = pandas.DataFrame(columns= anytime_columns)
             
+        iteration += 1
 
+
+
+    if iteration % 20 == 0:
+        gc.collect()
 
     pred_archive, new_pred_elite_archive, pred_t0, pred_t1 = map_elites(self, target_function=predict_objective, pred_flag=True)
 

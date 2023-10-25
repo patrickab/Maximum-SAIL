@@ -85,6 +85,7 @@ def map_elites(self, target_function, obj_flag=False, acq_flag=False, pred_flag=
             # Create Samples
             samples = scheduler.ask()
 
+            # Generate Parsec Coordinates & remove Invalid Samples
             valid_indices, surface_batch = generate_parsec_coordinates(samples, io_flag=False)
             
             scheduler_bhv = samples[:,1:3]  # ToDO: generalize calculate_behavior()

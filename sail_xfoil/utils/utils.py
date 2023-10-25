@@ -53,8 +53,9 @@ def eval_xfoil_loop(self, candidate_sol, evaluate_prediction_archive=False, cand
     old_pred_solutions = old_pred_df.values[:,4:]
     old_pred_behavior = old_pred_df.values[:,1:3]
 
+    converged_acq_or_pred = np.empty((0, 1))
+
     self.obj_t0 = self.obj_archive.stats.num_elites
-    print("Obj Archive Size (before):", self.obj_t0)
     while remaining_samples>0: # allows indices [0:10], [10:20], [20:22]
 
         sample_index = iteration*BATCH_SIZE
@@ -80,7 +81,7 @@ def eval_xfoil_loop(self, candidate_sol, evaluate_prediction_archive=False, cand
         # used for printing - in future this can be used for visualizing obj improvements in an archive
         if candidate_acq_or_pred is not None:
             i_converged_acq_or_pred = candidate_acq_or_pred[sample_index:sample_index+BATCH_SIZE][success_indices] if success_indices != [] else []
-            converged_acq_or_pred = np.vstack(i_converged_acq_or_pred)
+            converged_acq_or_pred = np.vstack((converged_acq_or_pred, np.vstack(i_converged_acq_or_pred)))
 
         i_errors = i_candidates - len(success_indices)
         n_errors += i_errors
@@ -156,7 +157,6 @@ def eval_xfoil_loop(self, candidate_sol, evaluate_prediction_archive=False, cand
         self.visualize_archive(archive=self.acq_archive, acq_flag=True)
 
     self.obj_t1 = self.obj_archive.stats.num_elites
-    print("Obj Archive Size (after):", self.obj_t1)
     self.convergence_errors = n_errors
     gc.collect()
     return
