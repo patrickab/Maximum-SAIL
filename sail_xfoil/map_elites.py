@@ -85,11 +85,6 @@ def map_elites(self, target_function, obj_flag=False, acq_flag=False, pred_flag=
             # Create Samples
             samples = scheduler.ask()
 
-            # Check if a dummy solution is contained in the samples
-            for dummy_solution in dummy_solutions:
-                if np.any(np.all(samples == dummy_solution, axis=1)):
-                    raise ValueError("Dummy solution contained in samples")
-
             valid_indices, surface_batch = generate_parsec_coordinates(samples, io_flag=False)
             
             scheduler_bhv = samples[:,1:3]  # ToDO: generalize calculate_behavior()
