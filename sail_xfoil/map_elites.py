@@ -163,3 +163,74 @@ def update_emitter(self, target_archive, initial_solutions, sigma_emitter=SIGMA_
     )]
 
     return emitter
+
+
+class ScaledGaussianEmitter(GaussianEmitter):
+
+    """
+    Custom Emitter class
+        - Adds Gaussian Noise scaled to solution space boundaries
+        - Requires filled archive instead of initial solutions
+    """
+
+    def __init__(self,
+                 archive,
+                 *,
+                 sigma,
+                 bounds=None,
+                 batch_size=BATCH_SIZE,
+                 seed=None):
+
+        self._rng = np.random.default_rng(seed)
+        self._batch_size = batch_size
+        self._sigma = np.array(sigma, dtype=archive.dtype)
+
+        if archive.stats.num_elites == 0:
+            raise ValueError("Archive must be filled with initial solutions.")
+
+        EmitterBase.__init__(
+            self,
+            archive,
+            solution_dim=archive.solution_dim,
+            bounds=bounds,
+        )
+
+    @property
+    def sigma(self):
+        """float or numpy.ndarray: Standard deviation of the (diagonal) Gaussian
+        distribution when the archive is not empty."""
+        return self._sigma
+
+    @property
+    def batch_size(self):
+        """int: Number of solutions to return in :meth:`ask`."""
+        return self._batch_size
+
+    def ask(self):
+        """Creates solutions by adding Gaussian noise to elites in the archive.
+
+        Each solution is drawn from a distribution centered at a randomly
+        chosen elite with standard deviation ``self.sigma``.
+        """
+
+        parents = self.archive.sample_elites(self._batch_size).solution_batch
+
+        noise = self._rng.normal(
+            scale=self._sigma,
+            size=(self._batch_size, self.solution_dim),
+        ).astype(self.archive.dtype)
+
+        print("Noise: ", noise)
+
+        scale=self._sigma*((self.upper_bounds)-(self.lower_bounds))
+
+        print("Scale: ", scale)
+
+        scaled_noise = self._rng.normal(
+            scale=np.abs(self._sigma*(self.upper_bounds-self.lower_bounds)),
+            size=(self._batch_size),
+        )
+
+        print("Scaled Noise: ", scaled_noise)
+
+        return np.clip(parents + noise, self.lower_bounds, self.upper_bounds)
