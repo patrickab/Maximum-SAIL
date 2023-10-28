@@ -3,7 +3,6 @@ from ribs.schedulers import Scheduler
 from ribs.archives import GridArchive
 from ribs.emitters import GaussianEmitter
 from ribs.emitters._emitter_base import EmitterBase
-from ribs._utils import check_1d_shape, check_batch_shape
 from tqdm import tqdm
 import subprocess
 import numpy as np
@@ -68,22 +67,20 @@ def map_elites(self, target_function, acq_flag=False, pred_flag=False, new_elite
     if acq_flag:
         target = "Acq Archive"
         target_archive = self.acq_archive
+        if self.vanilla_flag:
+            obj_df = self.obj_archive.as_pandas(include_solutions=True)
+            self.acq_archive.clear()
+            self.acq_archive.add(obj_df.solution_batch(), obj_df.objective_batch(), obj_df.measures_batch())
         size_t0 = self.acq_archive.stats.num_elites
         n_evals = ACQ_N_MAP_EVALS
-        if self.vanilla_flag:
-            self.acq_archive.clear()
-            self.acq_archive.add(self.obj_archive.solution_batch(), self.obj_archive.objective_batch(), self.obj_archive.measures_batch())
     if pred_flag:
         target = "Pred Archive"
         target_archive = self.pred_archive
-        size_t0 = self.pred_archive.stats.num_elites
-        n_evals = PRED_N_EVALS if not self.pred_verific_flag else PRED_N_EVALS//(PREDICTION_VERIFICATIONS+1)
         if self.vanilla_flag:
             self.pred_archive.clear()
-            self.pred_archive.add(self.obj_archive.solution_batch(), self.obj_archive.objective_batch(), self.obj_archive.measures_batch())
-
-    dummy_elites = sorted(self.obj_archive, key=lambda x: x.objective, reverse=True)[:BATCH_SIZE] # these solutions are never used, but are required to initialize the emitter
-    dummy_solutions = np.array([elite.solution for elite in dummy_elites])
+            self.pred_archive.add(obj_df.solution_batch(), obj_df.solution_batch(), obj_df.solution_batch())
+        size_t0 = self.pred_archive.stats.num_elites
+        n_evals = PRED_N_EVALS if not self.pred_verific_flag else PRED_N_EVALS//(PREDICTION_VERIFICATIONS+1)
 
     remaining_evals = n_evals
     total_iterations = remaining_evals // BATCH_SIZE
@@ -96,7 +93,7 @@ def map_elites(self, target_function, acq_flag=False, pred_flag=False, new_elite
             progress.update(1)
             valid_indices = np.empty(0, dtype=int) 
 
-            emitter = update_emitter(self, target_archive=target_archive, initial_solutions=dummy_solutions)
+            emitter = update_emitter(self, target_archive=target_archive)
             scheduler = Scheduler(target_archive, emitter)
 
             # Create Samples
@@ -149,7 +146,7 @@ def map_elites(self, target_function, acq_flag=False, pred_flag=False, new_elite
     return new_elite_archive, size_t0, size_t1
 
 
-def update_emitter(self, target_archive, initial_solutions, sigma_emitter=SIGMA_EMITTER, sol_value_range=SOL_VALUE_RANGE):
+def update_emitter(self, target_archive, sigma_emitter=SIGMA_EMITTER, sol_value_range=SOL_VALUE_RANGE):
 
     self.update_seed()
 
@@ -215,22 +212,9 @@ class ScaledGaussianEmitter(GaussianEmitter):
 
         parents = self.archive.sample_elites(self._batch_size).solution_batch
 
-        noise = self._rng.normal(
-            scale=self._sigma,
-            size=(self._batch_size, self.solution_dim),
-        ).astype(self.archive.dtype)
-
-        print("Noise: ", noise)
-
-        scale=self._sigma*((self.upper_bounds)-(self.lower_bounds))
-
-        print("Scale: ", scale)
-
         scaled_noise = self._rng.normal(
             scale=np.abs(self._sigma*(self.upper_bounds-self.lower_bounds)),
-            size=(self._batch_size),
+            size=(self._batch_size, self.solution_dim),
         )
 
-        print("Scaled Noise: ", scaled_noise)
-
-        return np.clip(parents + noise, self.lower_bounds, self.upper_bounds)
+        return np.clip(parents + scaled_noise, self.lower_bounds, self.upper_bounds)

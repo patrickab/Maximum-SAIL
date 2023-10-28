@@ -1,8 +1,6 @@
 import os
 import gc
 import numpy as np
-from ribs.archives import GridArchive
-from ribs.emitters import GaussianEmitter
 
 ### Custom Scripts ###
 from xfoil.generate_airfoils import generate_parsec_coordinates
@@ -115,6 +113,9 @@ def eval_xfoil_loop(self, solution_batch, measures_batch, evaluate_prediction_ar
         i_new_sol = converged_obj.shape[0]
         n_new_sol = np.array(np.append(n_new_sol, i_new_sol), dtype=int)
 
+        if i_new_sol == 0:
+            continue
+        
         new_sol = converged_sol
         new_solutions = np.vstack((new_solutions, new_sol))
 
@@ -124,18 +125,18 @@ def eval_xfoil_loop(self, solution_batch, measures_batch, evaluate_prediction_ar
         new_obj = np.vstack(converged_obj)
         new_objectives = np.vstack((new_objectives, new_obj))
 
-    # within initialization, no "target_values" are available
-    # if candidate_targetvalues is not None:
-    #     if candidate_targetvalues.shape[0] != 0:
-    #         print("\n\nObjective Evaluation Results and Corresponding Acquisitions/Predictions:")
-    #         target_objectives = np.vstack(candidate_targetvalues)
-    #         true_objectives = np.vstack(new_objectives)
-    #         pprint(target_objectives, true_objectives)
-    #     else:
-    #         print("\n\nNo Converged Solutions")
-
     if evaluate_prediction_archive:
         return
+
+    # within initialization, no "target_values" are available
+    if candidate_targetvalues is not None:
+        if candidate_targetvalues.shape[0] != 0:
+            print("\n\nObjective Evaluation Results and Corresponding Acquisitions/Predictions:")
+            target_objectives = np.vstack(candidate_targetvalues)
+            true_objectives = np.vstack(new_objectives)
+            pprint(target_objectives, true_objectives)
+        else:
+            print("\n\nNo Converged Solutions")
 
     # update GP model with new data
     self.update_gp_model()
@@ -166,34 +167,3 @@ def eval_xfoil_loop(self, solution_batch, measures_batch, evaluate_prediction_ar
     self.convergence_errors = n_errors
     gc.collect()
     return obj_t0, obj_t1
-
-
-def scale_samples(samples, boundaries=SOL_VALUE_RANGE):
-    """Scales Samples to boundaries"""
-
-    # ToDo: vectorize
-    for i in range(len(samples)):
-        for j in range(len(samples[i])):
-            lower_bound, upper_bound = boundaries[j]
-            samples[i][j] = samples[i][j] *(upper_bound - lower_bound) + lower_bound
-
-    return samples
-
-
-def generate_emitter(init_solutions, archive, seed, sigma_emitter=SIGMA_EMITTER, sol_value_range=None):
-    """Reduces Overhead"""
-
-    if sol_value_range is None:
-        sol_value_range = SOL_VALUE_RANGE
-
-    emitter = [
-        GaussianEmitter(
-        archive=archive,
-        sigma=sigma_emitter,
-        bounds= np.array(sol_value_range),
-        batch_size=BATCH_SIZE,
-        initial_solutions=init_solutions,
-        seed=seed
-    )]
-
-    return emitter
