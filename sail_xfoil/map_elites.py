@@ -2,6 +2,8 @@
 from ribs.schedulers import Scheduler
 from ribs.archives import GridArchive
 from ribs.emitters import GaussianEmitter
+from ribs.emitters._emitter_base import EmitterBase
+from ribs._utils import check_1d_shape, check_batch_shape
 from tqdm import tqdm
 import subprocess
 import numpy as np
@@ -22,7 +24,7 @@ BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 ACQ_N_MAP_EVALS = config.ACQ_N_MAP_EVALS
 PREDICTION_VERIFICATIONS = config.PREDICTION_VERIFICATIONS
 
-def map_elites(self, target_function, obj_flag=False, acq_flag=False, pred_flag=False, new_elite_archive=None, pred_verific_flag=False):
+def map_elites(self, target_function, acq_flag=False, pred_flag=False, new_elite_archive=None, pred_verific_flag=False):
 
     """
     Perform MAP-Elites iterations.
@@ -60,17 +62,32 @@ def map_elites(self, target_function, obj_flag=False, acq_flag=False, pred_flag=
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
             threshold_min = -1,)
-        
-    target = "Acq Archive" if acq_flag else "Pred Archive"
-    target_archive, dummy_solutions, n_evals = define_mapping_behavior(self, acq_flag, pred_flag, pred_verific_flag, target_function)
 
     subprocess.run("rm *.dat", shell=True, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+        
+    if acq_flag:
+        target = "Acq Archive"
+        target_archive = self.acq_archive
+        size_t0 = self.acq_archive.stats.num_elites
+        n_evals = ACQ_N_MAP_EVALS
+        if self.vanilla_flag:
+            self.acq_archive.clear()
+            self.acq_archive.add(self.obj_archive.solution_batch(), self.obj_archive.objective_batch(), self.obj_archive.measures_batch())
+    if pred_flag:
+        target = "Pred Archive"
+        target_archive = self.pred_archive
+        size_t0 = self.pred_archive.stats.num_elites
+        n_evals = PRED_N_EVALS if not self.pred_verific_flag else PRED_N_EVALS//(PREDICTION_VERIFICATIONS+1)
+        if self.vanilla_flag:
+            self.pred_archive.clear()
+            self.pred_archive.add(self.obj_archive.solution_batch(), self.obj_archive.objective_batch(), self.obj_archive.measures_batch())
+
+    dummy_elites = sorted(self.obj_archive, key=lambda x: x.objective, reverse=True)[:BATCH_SIZE] # these solutions are never used, but are required to initialize the emitter
+    dummy_solutions = np.array([elite.solution for elite in dummy_elites])
 
     remaining_evals = n_evals
     total_iterations = remaining_evals // BATCH_SIZE
-
     obj_t0 = self.obj_archive.stats.num_elites
-    size_t0 = target_archive.stats.num_elites
     print(f"{target} Size: ", str(size_t0))
         
     with tqdm(total=total_iterations) as progress:
@@ -93,8 +110,7 @@ def map_elites(self, target_function, obj_flag=False, acq_flag=False, pred_flag=
             candidate_obj = target_function(candidate_sol, self.gp_model)
             candidate_bhv = scheduler_bhv[valid_indices]
 
-            status_vector, _ = target_archive.add(candidate_sol, candidate_obj, candidate_bhv)
-
+            status_vector, _ = target_archive.add(solution_batch=candidate_sol, objective_batch=candidate_obj, measures_batch=candidate_bhv)
             # store newly discovered elites
             non_0_status_indices = np.where(status_vector != 0)[0]            
             new_sol = candidate_sol[non_0_status_indices]
@@ -114,58 +130,23 @@ def map_elites(self, target_function, obj_flag=False, acq_flag=False, pred_flag=
             remaining_evals -= BATCH_SIZE
 
     obj_t1 = self.obj_archive.stats.num_elites
-    size_t1 = target_archive.stats.num_elites
-
-    if obj_t1 != obj_t0:
-        raise ValueError("MAP-Elites:  obj_t1 != obj_t0   -   debug this!")
-    if size_t0 > size_t1:
-        raise ValueError("MAP-Elites:  size_t0 < size_t1   -   debug this!")
+    size_t1 = self.acq_archive.stats.num_elites if acq_flag else self.pred_archive.stats.num_elites
+    target_size_t1 = target_archive.stats.num_elites
 
     print(f"{target} Size: ", str(size_t1))
+    if acq_flag and pred_flag:
+        raise ValueError("MAP-Elites:  acq_flag and pred_flag both True   -   debug this!")
+    if obj_t0 != obj_t1:
+        raise ValueError("MAP-Elites:  obj_t0 != obj_t1   -   debug this!")
+    if size_t0 > size_t1:
+        raise ValueError("MAP-Elites:  size_t0 < size_t1   -   debug this!")
+    if target_size_t1 != size_t1:
+        raise ValueError("MAP-Elites:  target_size_t1 != size_t1   -   debug this!")
+
+
     print("[...] End Map-Elites\n\n")
 
-    return target_archive, new_elite_archive, size_t0, size_t1
-
-
-def define_mapping_behavior(self, acq_flag, pred_flag, pred_verific_flag, target_function):
-    """
-    Custom version: Use obj elites + acq elites as starting population
-    Default version: Use obj elites as starting population
-    """
-
-    dummy_elites = sorted(self.obj_archive, key=lambda x: x.objective, reverse=True)[:BATCH_SIZE]
-    dummy_solutions = np.array([elite.solution for elite in dummy_elites])
-
-    obj_df = self.obj_archive.as_pandas()
-    obj_elites_sol = obj_df.values[:,4:]
-    obj_elites_bhv = obj_df.values[:,1:3]
-    obj_elites_obj = target_function(obj_elites_sol, self.gp_model)
-
-    if acq_flag:
-        n_evals = ACQ_N_MAP_EVALS
-
-        if self.custom_flag:
-            target_archive = self.acq_archive
-        if self.vanilla_flag:
-            self.acq_archive.clear()
-            self.acq_archive.add(obj_elites_sol, obj_elites_obj, obj_elites_bhv)
-            target_archive = self.acq_archive
-
-    if pred_flag:
-
-        if self.pred_verific_flag:
-            n_evals = PRED_N_EVALS//(PREDICTION_VERIFICATIONS+1)
-        else:
-            n_evals = PRED_N_EVALS
-
-        if self.custom_flag:
-            target_archive = self.pred_archive
-        if self.vanilla_flag:
-            self.pred_archive.clear()
-            self.pred_archive.add(obj_elites_sol, obj_elites_obj, obj_elites_bhv)
-            target_archive = self.pred_archive
-            
-    return target_archive, dummy_solutions, n_evals
+    return new_elite_archive, size_t0, size_t1
 
 
 def update_emitter(self, target_archive, initial_solutions, sigma_emitter=SIGMA_EMITTER, sol_value_range=SOL_VALUE_RANGE):
@@ -173,12 +154,11 @@ def update_emitter(self, target_archive, initial_solutions, sigma_emitter=SIGMA_
     self.update_seed()
 
     emitter = [
-        GaussianEmitter(
+        ScaledGaussianEmitter(
         archive=target_archive,
         sigma=sigma_emitter,
         bounds= np.array(sol_value_range),
         batch_size=BATCH_SIZE,
-        initial_solutions=initial_solutions,
         seed=self.current_seed
     )]
 

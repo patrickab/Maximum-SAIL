@@ -85,11 +85,11 @@ def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_ran
 
 def store_final_data(self: SailRun):
 
-    archive_visualizer(self=self, archive=self.obj_archive, prefix="obj", name="Final Objective Archive", min_val=50, max_val=200)
-    archive_visualizer(self=self, archive=self.acq_archive, prefix="acq", name="Final Acquisition Archive", min_val=50, max_val=200)
-    archive_visualizer(self=self, archive=self.pred_archive, prefix="pred", name="Final Prediction Archive (unevaluated)", min_val=50, max_val=200)
-    archive_visualizer(self=self, archive=self.evaluated_predictions_archive, prefix="evaluted_pred", name="Final Prediction Archive (evaluated)", min_val=50, max_val=200)
-    archive_visualizer(self=self, archive=self.prediction_error_archive, prefix="error", name="Prediction Error Archive", min_val=0, max_val=1)
+    archive_visualizer(self=self, archive=self.obj_archive, prefix="obj", name="Objective Archive", min_val=1.0, max_val=5)
+    archive_visualizer(self=self, archive=self.acq_archive, prefix="acq", name="Acquisition Archive", min_val=1.0, max_val=5)
+    archive_visualizer(self=self, archive=self.pred_archive, prefix="pred", name="Prediction Archive (unevaluated)", min_val=1.0, max_val=5)
+    archive_visualizer(self=self, archive=self.evaluated_predictions_archive, prefix="evaluted_pred", name="Prediction Archive (evaluated)", min_val=1.0, max_val=5)
+    archive_visualizer(self=self, archive=self.prediction_error_archive, prefix="error", name="Prediction Error Archive (percentual)", min_val=0, max_val=0.1)
 
     initial_seed = self.initial_seed
     domain = self.domain
@@ -132,7 +132,8 @@ def evaluate_predictions(self: SailRun):
     unevaluated_prediction_elites = sorted(self.pred_archive, key=lambda x: x.objective, reverse=True)[:self.pred_archive.stats.num_elites]
     unevaluated_prediction_elites = np.array([(elite.solution, elite.index, elite.objective, elite.measures) for elite in unevaluated_prediction_elites], dtype=[('solution', object), ('index', int), ('objective', float), ('behavior', object)])
     unevaluated_prediction_solutions = unevaluated_prediction_elites['solution']
-    eval_xfoil_loop(self, candidate_sol=unevaluated_prediction_solutions, evaluate_prediction_archive=True, candidate_acq_or_pred = unevaluated_prediction_elites['objective'])
+    unevaluated_prediction_measures = np.vstack(unevaluated_prediction_elites['behavior'])
+    eval_xfoil_loop(self, solution_batch=unevaluated_prediction_solutions, measures_batch=unevaluated_prediction_measures, evaluate_prediction_archive=True, candidate_targetvalues=unevaluated_prediction_elites['objective'])
 
     # Extract all elites from the evaluated predictions archive - (sorted by index for comparison)
     evaluated_prediction_elites = sorted(self.evaluated_predictions_archive, key=lambda x: x.index)[:self.evaluated_predictions_archive.stats.num_elites]
@@ -147,21 +148,23 @@ def evaluate_predictions(self: SailRun):
     converged_evaluated_prediction_elites = evaluated_prediction_elites
 
     prediction_error = converged_unevaluated_prediction_elites['objective'] - converged_evaluated_prediction_elites['objective']
+    percentual_error = np.abs(prediction_error)/converged_evaluated_prediction_elites['objective']
+    mean_percentual_error = np.mean(percentual_error)
     mae_error = np.mean(np.abs(prediction_error))
     mse_error = np.mean(np.square(prediction_error))
 
     self.evaluated_predictions_archive.add(np.vstack(converged_evaluated_prediction_elites['solution']), converged_evaluated_prediction_elites['objective'], np.vstack(converged_evaluated_prediction_elites['behavior']))
-    self.prediction_error_archive.add(np.vstack(converged_unevaluated_prediction_elites['solution']), np.abs(prediction_error), np.vstack(converged_unevaluated_prediction_elites['behavior']))
+    self.prediction_error_archive.add(np.vstack(converged_unevaluated_prediction_elites['solution']), percentual_error, np.vstack(converged_unevaluated_prediction_elites['behavior']))
 
-    pred_errors_greater_than_1 = np.sum(np.abs(prediction_error) > 1)
+    percentual_errors_greater_than_005 = np.sum(np.abs(prediction_error)/converged_evaluated_prediction_elites['objective'] > 0.05)
     error_str = f"Initial Seed: {self.initial_seed}  Domain: {self.domain}  MAE Error: {mae_error}  MSE Error: {mse_error} \nPrediction Errors: \n{np.array2string(prediction_error)}\n"
-    print("Absolute Prediction Errors Greater than 1: ", pred_errors_greater_than_1)
+    print("Percentual Errors Greater than 5%: ", percentual_errors_greater_than_005)
     with open("error_log", "a") as file: file.write(error_str)
 
     true_objective = np.vstack(converged_evaluated_prediction_elites['objective'])
     predicted_objective = np.vstack(converged_unevaluated_prediction_elites['objective'])
-    pprint(predicted_objective, true_objective, prediction_error)
-    print("\nMAE Error: ", mae_error, "\n", "MSE Error: ", mse_error)
+    pprint(predicted_objective, true_objective, percentual_error)
+    print("\nMAE Error: ", mae_error, "\n", "MSE Error: ", mse_error, "\n", "Mean Percentual Error: ", mean_percentual_error, "\n")
 
     os.makedirs("csv") if not os.path.exists("csv") else None
     subprocess.run("mv *.csv csv", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -183,8 +186,8 @@ if __name__ == "__main__":
         
         sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True,  hybrid_flag=True)
         sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, hybrid_flag=True)
-        # sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True,  greedy_flag=True)
-        # sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, greedy_flag=True)
+        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True,  greedy_flag=True)
+        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, greedy_flag=True)
         gc.collect()
 
         img_filenames = [f"imgs/final_heatmaps_{i}_{benchmark_domain}.png" for benchmark_domain in benchmark_domains]

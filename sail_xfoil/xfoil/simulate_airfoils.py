@@ -147,7 +147,7 @@ def calculate_obj_seed(drag, lift, surface_area):
 def calculate_obj(drag, lift):
 
     # for some reason the authors calculate logarithm of drag
-    obj = lift/drag
+    obj = -np.log(drag/lift)
     return obj
 
 
@@ -168,7 +168,7 @@ def capture_errors(process, queue, i):
 
     while True:
         try:
-            line = queue.get(timeout=0.7)
+            line = queue.get(timeout=0.9)
             #print(line.strip())
 
             if not line: # empty line

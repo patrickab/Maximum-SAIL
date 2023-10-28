@@ -57,7 +57,7 @@ def anytime_archive_visualizer(self, archive, obj_flag=False, acq_flag=False, pr
     os.chdir(f"imgs/{domain}/{initial_seed}/{prefix}")
 
     fig, ax = plt.subplots(figsize=(8, 8))
-    grid_archive_heatmap(archive, ax=ax, vmin=50, vmax=200)
+    grid_archive_heatmap(archive, ax=ax, vmin=1.0, vmax=5)
     plt.xlabel("X Up")
     plt.ylabel("Z Up")
 
@@ -130,7 +130,7 @@ def anytime_archive_visualizer(self, archive, obj_flag=False, acq_flag=False, pr
             # rename video b to avoid nameconflict then use combined_vid_b as output
             subprocess.run(f"mv {combined_file_b} {buffervid_b}", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-            ffmpeg_combine = [
+            ffmpeg_combine = [  
                 "ffmpeg",
                 "-i", combined_file_a,
                 "-i", buffervid_b,

@@ -119,11 +119,12 @@ class SailRun:
         print(f"Initialize Archive [...]")
         total_errors = 0
 
-        samples = create_sobol_samples(order=INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
-        samples = samples.T
-        scale_samples(samples) # sobol samples are between [0;1]
-        eval_xfoil_loop(self, candidate_sol=samples) # fill obj archive inside eval_xfoil_loop() & update+render acq_archive
-        print("[...] Terminate init_archive()\n")
+        solution_batch = create_sobol_samples(order=INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
+        solution_batch = solution_batch.T
+        measures_batch = solution_batch[:, 1:3]
+        scale_samples(solution_batch) # sobol samples are between [0;1]
+        eval_xfoil_loop(self, solution_batch=solution_batch, measures_batch=measures_batch, acq_flag=True) # fill obj archive inside eval_xfoil_loop() & update+render acq_archive
+        print("\n[...] Terminate init_archive()\n")
 
     
     def update_gp_data(self, new_solutions, new_objectives):
@@ -180,9 +181,6 @@ class SailRun:
             Option 1: Call with archive & archive flag
             Option 2: Call with candidate_sol, candidate_obj, candidate_bhv & archive flag
         """            
-
-        if np.sum([obj_flag, acq_flag, pred_flag, evaluate_prediction_archive]) != 1:
-            raise ValueError("Update Archive: Exactly one flag is supposed to be true - update archives seperately")
         
         if obj_flag:
 
@@ -199,19 +197,21 @@ class SailRun:
 
             return
         
+        if candidate_sol.shape[0] == 0:
+            return
+        
+        if candidate_obj is not None and (acq_flag or pred_flag):
+            raise ValueError("update_archive: candidate_obj != None and acq_flag or pred_flag")
+        
         if evaluate_prediction_archive:
             self.evaluated_predictions_archive.add(candidate_sol, candidate_obj, candidate_bhv)
             return
-        
-        if candidate_obj != None:
-            raise ValueError("Update Archive: candidate_obj is supposed to be None when updating acq/pred archive")
-
         if acq_flag:
-            candidate_acq = acq_ucb(genomes=candidate_sol, gp_model=self.gp_model) if candidate_sol.shape[0] != 0 else None
-            self.acq_archive.add(candidate_sol, candidate_acq, candidate_bhv) if candidate_sol.shape[0] != 0 else None
+            candidate_acq = acq_ucb(genomes=candidate_sol, gp_model=self.gp_model)
+            self.acq_archive.add(candidate_sol, candidate_acq, candidate_bhv)
         if pred_flag:
-            candidate_pred = predict_objective(genomes=candidate_sol, gp_model=self.gp_model) if candidate_sol.shape[0] != 0 else None
-            self.pred_archive.add(candidate_sol, candidate_pred, candidate_bhv) if candidate_sol.shape[0] != 0 else None
+            candidate_pred = predict_objective(genomes=candidate_sol, gp_model=self.gp_model)
+            self.pred_archive.add(candidate_sol, candidate_pred, candidate_bhv)
     
 
     def define_archives(self, seed):
@@ -221,7 +221,7 @@ class SailRun:
             dims=BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
-            threshold_min = 50
+            threshold_min = 1.0
         )
 
         acq_archive = GridArchive(
@@ -229,7 +229,7 @@ class SailRun:
             dims=BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
-            threshold_min = 50
+            threshold_min = 1.0
         )
 
         pred_archive = GridArchive(
@@ -237,7 +237,7 @@ class SailRun:
             dims=BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
-            threshold_min = 50
+            threshold_min = 1.0
         )
 
         # Used for visualizing new elites (improved + new bin discoveries)
@@ -246,7 +246,7 @@ class SailRun:
             dims=BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
-            threshold_min = 50
+            threshold_min = 1.0
         )
 
         # Used for evaluating quality of results
@@ -255,7 +255,7 @@ class SailRun:
             dims=BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
-            threshold_min = 50
+            threshold_min = 1.0
         )
 
         # Used for visualizing prediction errors

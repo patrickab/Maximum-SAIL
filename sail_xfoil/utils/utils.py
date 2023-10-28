@@ -19,7 +19,7 @@ BHV_DIMENSION = config.BHV_DIMENSION
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 
 
-def eval_xfoil_loop(self, candidate_sol, evaluate_prediction_archive=False, candidate_acq_or_pred=None):
+def eval_xfoil_loop(self, solution_batch, measures_batch, evaluate_prediction_archive=False, acq_flag=False, pred_flag=False, candidate_targetvalues=None):
     """
     Ensures that iter_samples <= BATCH_SIZE are evaluated
     
@@ -27,11 +27,18 @@ def eval_xfoil_loop(self, candidate_sol, evaluate_prediction_archive=False, cand
         Therefore, if n_samples != BATCH_SIZE, 
         samples need to be evaluated in a loop
 
-    Obj Elites are always stored & rendered in their archive
-    Subsequently the GP model is updated with new data
-
-    Finally, the acq/pred archives are updated with obj elites & new gp model
+    - Obj Elites are always stored & rendered in their archive
+    - Subsequently the GP model is updated with new data
+    - In case of acq/pred, the acq/pred archives are 
+        1. cleared 
+        2. updated with obj elites 
+        3. updated under new gp model
+            -> this is can be done in order to preserve elites, 
+               that remain performant even under a new gp model
     """
+
+    if acq_flag and pred_flag: 
+        raise ValueError(f'eval_xfoil_loop: acq_flag AND pred_flag')
 
     n_errors = 0
     iteration = 0
@@ -39,27 +46,31 @@ def eval_xfoil_loop(self, candidate_sol, evaluate_prediction_archive=False, cand
     new_objectives = np.empty((0, 1))
     new_solutions = np.empty((0, SOL_DIMENSION))
     new_behaviors = np.empty((0, BHV_DIMENSION))
-    remaining_samples = candidate_sol.shape[0]
+
+    remaining_samples = solution_batch.shape[0]
 
     old_obj_df = self.obj_archive.as_pandas()
     old_obj_solutions = old_obj_df.values[:,4:]
     old_obj_behavior = old_obj_df.values[:,1:3]
 
-    old_acq_df = self.acq_archive.as_pandas()
-    old_acq_solutions = old_acq_df.values[:,4:]
-    old_acq_behavior = old_acq_df.values[:,1:3]
-
-    old_pred_df = self.pred_archive.as_pandas()
-    old_pred_solutions = old_pred_df.values[:,4:]
-    old_pred_behavior = old_pred_df.values[:,1:3]
+    if acq_flag:
+        old_acq_df = self.acq_archive.as_pandas()
+        old_acq_solutions = old_acq_df.values[:,4:]
+        old_acq_behavior = old_acq_df.values[:,1:3]
+        target = "Acquisition"
+    if pred_flag:
+        old_pred_df = self.pred_archive.as_pandas()
+        old_pred_solutions = old_pred_df.values[:,4:]
+        old_pred_behavior = old_pred_df.values[:,1:3]
+        target = "Prediction"
 
     converged_acq_or_pred = np.empty((0, 1))
 
-    self.obj_t0 = self.obj_archive.stats.num_elites
+    obj_t0 = self.obj_archive.stats.num_elites
     while remaining_samples>0: # allows indices [0:10], [10:20], [20:22]
 
         sample_index = iteration*BATCH_SIZE
-        i_solutions = candidate_sol[sample_index:sample_index+BATCH_SIZE] # alows indices eg [20:22] to be sampled, if 2 samples are left
+        i_solutions = solution_batch[sample_index:sample_index+BATCH_SIZE] # alows indices eg [20:22] to be sampled, if 2 samples are left
         iteration += 1
 
         if i_solutions.shape[0] > BATCH_SIZE:
@@ -76,12 +87,12 @@ def eval_xfoil_loop(self, candidate_sol, evaluate_prediction_archive=False, cand
         _, success_indices, converged_obj = xfoil(i_candidates)
         success_indices = success_indices[:i_candidates]
         converged_sol = i_solutions[success_indices]
-        converged_bhv = i_solutions[:,1:3][success_indices] # ToDo: generalize calculate behavior
+        converged_bhv = measures_batch[sample_index:sample_index+BATCH_SIZE][success_indices] # ToDo: generalize calculate behavior
 
         # used for printing - in future this can be used for visualizing obj improvements in an archive
-        if candidate_acq_or_pred is not None:
-            i_converged_acq_or_pred = candidate_acq_or_pred[sample_index:sample_index+BATCH_SIZE][success_indices] if success_indices != [] else []
-            converged_acq_or_pred = np.vstack((converged_acq_or_pred, np.vstack(i_converged_acq_or_pred)))
+        # if candidate_targetvalues is not None:
+        #     i_converged_acq_or_pred = candidate_targetvalues[sample_index:sample_index+BATCH_SIZE][success_indices] if success_indices != [] else []
+        #     converged_acq_or_pred = np.vstack((converged_acq_or_pred, np.vstack(i_converged_acq_or_pred)))
 
         i_errors = i_candidates - len(success_indices)
         n_errors += i_errors
@@ -113,53 +124,48 @@ def eval_xfoil_loop(self, candidate_sol, evaluate_prediction_archive=False, cand
         new_obj = np.vstack(converged_obj)
         new_objectives = np.vstack((new_objectives, new_obj))
 
-    if candidate_acq_or_pred is not None:
-        if converged_acq_or_pred.shape[0] != 0:
-            print("\n\nObjective Evaluation Results and Corresponding Acquisitions/Predictions:")
-            target_objectives = np.vstack(converged_acq_or_pred)
-            true_objectives = np.vstack(new_objectives)
-            pprint(target_objectives, true_objectives)
-        else:
-            print("\n\nNo Converged Solutions")
+    # within initialization, no "target_values" are available
+    # if candidate_targetvalues is not None:
+    #     if candidate_targetvalues.shape[0] != 0:
+    #         print("\n\nObjective Evaluation Results and Corresponding Acquisitions/Predictions:")
+    #         target_objectives = np.vstack(candidate_targetvalues)
+    #         true_objectives = np.vstack(new_objectives)
+    #         pprint(target_objectives, true_objectives)
+    #     else:
+    #         print("\n\nNo Converged Solutions")
 
-    # evaluate candidates, then exit loop
     if evaluate_prediction_archive:
         return
 
+    # update GP model with new data
     self.update_gp_model()
 
-    # update GP model with new data
-    self.acq_archive.clear()
-    self.pred_archive.clear()
+    if acq_flag or pred_flag: # update acq/pred archives under new gp model
+            
+        self.acq_archive.clear() if acq_flag else self.pred_archive.clear()
+        old_target_solutions = old_acq_solutions if acq_flag else old_pred_solutions  
+        old_taget_behavior = old_acq_behavior if acq_flag else old_pred_behavior  
 
-    # Combine old_obj_solutions and old_(pred/acq)_solutions, then remove duplicates
-    old_acq_sol = np.concatenate((old_obj_solutions, old_acq_solutions), axis=0)
-    old_pred_sol = np.concatenate((old_obj_solutions, old_pred_solutions), axis=0)
+        old_sol = np.concatenate((old_obj_solutions, old_target_solutions), axis=0)
+        old_bhv = np.concatenate((old_obj_behavior, old_taget_behavior), axis=0)
+        self.update_archive(candidate_sol=old_sol, candidate_bhv=old_bhv, acq_flag=acq_flag, pred_flag=pred_flag)
 
-    old_acq_bhv = np.concatenate((old_obj_behavior, old_acq_behavior), axis=0)
-    old_pred_bhv = np.concatenate((old_obj_behavior, old_pred_behavior), axis=0)
-
-    if old_acq_sol.shape[0] != old_acq_bhv.shape[0] or old_pred_sol.shape[0] != old_pred_bhv.shape[0]:
-        raise ValueError(f'old_acq_solutions.shape[0] != old_acq_behavior.shape[0] or old_pred_solutions.shape[0] != old_pred_behavior.shape[0]')
-
-    self.update_archive(candidate_sol=old_acq_solutions, candidate_bhv=old_acq_behavior, acq_flag=True)
-    self.update_archive(candidate_sol=old_pred_solutions, candidate_bhv=old_pred_behavior, pred_flag=True)
-
-    sum = 0
+    sum = 0                   # update acq/pred archives with new obj elites ITERATIVELY to ensure that all videos are of equal length
     for i in range(n_new_sol.shape[0]):
         new_sol = new_solutions[sum:sum+n_new_sol[i]]
         new_bhv = new_behaviors[sum:sum+n_new_sol[i]]
         sum += n_new_sol[i]
 
         self.update_archive(candidate_sol=new_sol, candidate_bhv=new_bhv, acq_flag=True)
-        self.update_archive(candidate_sol=new_sol, candidate_bhv=new_bhv, pred_flag=True)
+        self.update_archive(candidate_sol=new_sol, candidate_bhv=new_bhv, pred_flag=True) if pred_flag else None
 
         self.visualize_archive(archive=self.acq_archive, acq_flag=True)
+        self.visualize_archive(archive=self.pred_archive, pred_flag=True)
 
-    self.obj_t1 = self.obj_archive.stats.num_elites
+    obj_t1 = self.obj_archive.stats.num_elites
     self.convergence_errors = n_errors
     gc.collect()
-    return
+    return obj_t0, obj_t1
 
 
 def scale_samples(samples, boundaries=SOL_VALUE_RANGE):
