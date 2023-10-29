@@ -161,7 +161,7 @@ def eval_xfoil_loop(self, solution_batch, measures_batch, evaluate_prediction_ar
         self.update_archive(candidate_sol=new_sol, candidate_bhv=new_bhv, pred_flag=True) if pred_flag else None
 
         self.visualize_archive(archive=self.acq_archive, acq_flag=True)
-        self.visualize_archive(archive=self.pred_archive, pred_flag=True)
+        self.visualize_archive(archive=self.pred_archive, pred_flag=True) # renders empty archive, until prediction verification is reached
 
     obj_t1 = self.obj_archive.stats.num_elites
     self.convergence_errors = n_errors

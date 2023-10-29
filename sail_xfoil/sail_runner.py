@@ -44,12 +44,13 @@ from xfoil.generate_airfoils import generate_parsec_coordinates
 from xfoil.simulate_airfoils import xfoil
 
 from acq_functions.acq_ucb import acq_ucb
+from acq_functions.acq_mes import acq_mes
 from gp.fit_gp_model import fit_gp_model
 from map_elites import map_elites
 
 class SailRun:
 
-    def __init__(self, initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, pred_verific_flag=False, greedy_flag=False, explore_flag=False, hybrid_flag=False):
+    def __init__(self, initial_seed, acq_ucb_flag=False, acq_mes_flag=False, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, pred_verific_flag=False, greedy_flag=False, explore_flag=False, hybrid_flag=False):
 
         """
         Initialize a SAIL Run.
@@ -90,6 +91,17 @@ class SailRun:
             raise ValueError("Greedy and Explore Flags cannot both be True")
         if pred_verific_flag and not (greedy_flag or explore_flag or hybrid_flag):
             raise ValueError("Prediction Verification Flag requires Greedy or Explore Flag to be True")
+
+        if acq_ucb_flag:
+            self.acq_ucb_flag = True
+            self.acq_mes_flag = False
+            self.acq_function = acq_ucb
+            self.domain = self.domain + "_ucb"
+        if acq_mes_flag:
+            self.acq_mes_flag = True
+            self.acq_ucb_flag = False
+            self.acq_function = acq_mes
+            self.domain = self.domain + "_mes"
 
         # stores new solutions from reevaluate_archive()
         self.new_sol = np.empty((0, SOL_DIMENSION))
@@ -170,7 +182,12 @@ class SailRun:
         return self.current_seed
 
     def visualize_archive(self, archive, obj_flag=False, acq_flag=False, pred_flag=False, new_flag=False):
-        anytime_archive_visualizer(self, archive=archive, obj_flag=obj_flag, acq_flag=acq_flag, pred_flag=pred_flag, new_flag=new_flag)
+
+        vmax = 5.0
+        if self.acq_mes_flag and acq_flag:
+            vmax = 0.6
+
+        anytime_archive_visualizer(self, archive=archive, obj_flag=obj_flag, acq_flag=acq_flag, pred_flag=pred_flag, new_flag=new_flag, vmax=vmax)
         if obj_flag:
             self.obj_current_iteration += 1
         if new_flag:
@@ -212,7 +229,7 @@ class SailRun:
             self.evaluated_predictions_archive.add(candidate_sol, candidate_obj, candidate_bhv)
             return
         if acq_flag:
-            candidate_acq = acq_ucb(genomes=candidate_sol, gp_model=self.gp_model)
+            candidate_acq = self.acq_function(genomes=candidate_sol, gp_model=self.gp_model)
             self.acq_archive.add(candidate_sol, candidate_acq, candidate_bhv)
         if pred_flag:
             candidate_pred = predict_objective(genomes=candidate_sol, gp_model=self.gp_model)
@@ -234,7 +251,7 @@ class SailRun:
             dims=BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
-            threshold_min = 1.0
+            threshold_min = 1.0 if self.acq_function == acq_ucb else 0
         )
 
         pred_archive = GridArchive(
@@ -292,8 +309,10 @@ def scale_samples(samples, boundaries=SOL_VALUE_RANGE):
 
 def store_final_data(self: SailRun):
 
+    acq_vmax = 5.0 if self.acq_ucb_flag else 1.0
+
     archive_visualizer(self=self, archive=self.obj_archive, prefix="obj", name="Objective Archive", min_val=1.0, max_val=5)
-    archive_visualizer(self=self, archive=self.acq_archive, prefix="acq", name="Acquisition Archive", min_val=1.0, max_val=5)
+    archive_visualizer(self=self, archive=self.acq_archive, prefix="acq", name="Acquisition Archive", min_val=1.0, max_val=acq_vmax)
     archive_visualizer(self=self, archive=self.pred_archive, prefix="pred", name="Prediction Archive (unevaluated)", min_val=1.0, max_val=5)
     archive_visualizer(self=self, archive=self.evaluated_predictions_archive, prefix="evaluted_pred", name="Prediction Archive (evaluated)", min_val=1.0, max_val=5)
     archive_visualizer(self=self, archive=self.prediction_error_archive, prefix="error", name="Prediction Error Archive (percentual)", min_val=0, max_val=0.1)
@@ -356,22 +375,40 @@ def evaluate_prediction_archive(self: SailRun):
 
     prediction_error = converged_unevaluated_prediction_elites['objective'] - converged_evaluated_prediction_elites['objective']
     percentual_error = np.abs(prediction_error)/converged_evaluated_prediction_elites['objective']
-    mean_percentual_error = np.mean(percentual_error)
+    mpe_error = np.mean(percentual_error)
     mae_error = np.mean(np.abs(prediction_error))
     mse_error = np.mean(np.square(prediction_error))
+
+    qd_obj = sum(self.obj_archive.as_pandas(include_solutions=True)['objective'].values)
+    qd_pred = sum(self.pred_archive.as_pandas(include_solutions=True)['objective'].values)
+    qd_pred_verified = sum(self.evaluated_predictions_archive.as_pandas(include_solutions=True)['objective'].values)
+    n_bins = np.prod(self.obj_archive.dims)
+
+    obj_qd_per_bin = round(qd_obj/n_bins, 1)
+    pred_qd_per_bin = round(qd_pred/n_bins, 1)
+    pred_verified_qd_per_bin = round(qd_pred_verified/n_bins, 1)
+    obj_qd_per_elite = round(qd_obj/self.obj_archive.stats.num_elites, 1)
+    pred_qd_per_elite = round(qd_pred/self.acq_archive.stats.num_elites, 1)
+    pred_verified_qd_per_elite = round(qd_pred_verified/self.evaluated_predictions_archive.stats.num_elites, 1)
 
     self.evaluated_predictions_archive.add(np.vstack(converged_evaluated_prediction_elites['solution']), converged_evaluated_prediction_elites['objective'], np.vstack(converged_evaluated_prediction_elites['behavior']))
     self.prediction_error_archive.add(np.vstack(converged_unevaluated_prediction_elites['solution']), percentual_error, np.vstack(converged_unevaluated_prediction_elites['behavior']))
 
     percentual_errors_greater_than_005 = np.sum(np.abs(prediction_error)/converged_evaluated_prediction_elites['objective'] > 0.05)
-    error_str = f"Initial Seed: {self.initial_seed}  Domain: {self.domain}  MAE Error: {mae_error}  MSE Error: {mse_error} \nPrediction Errors: \n{np.array2string(prediction_error)}\n"
+    id_string = f"\n\nInitial Seed: {self.initial_seed}  Domain: {self.domain}\n"
+    qd_string = f"Obj QD (per bin): {obj_qd_per_bin}  Pred QD (per bin / unverified): {pred_qd_per_bin}  Pred QD (per bin / verified): {pred_verified_qd_per_bin}\nObj QD (per elite): {obj_qd_per_elite}  Pred QD (per elite / unverified): {pred_qd_per_elite}  Pred QD (per elite / verified): {pred_verified_qd_per_elite}\n"
+    error_str = f"Initial Seed: {self.initial_seed}  Domain: {self.domain}\nMAE Error: {mae_error}  MSE Error: {mse_error}  MPE Error: {mse_error}\nPercentual Errors greater than 5%:  {percentual_errors_greater_than_005}\nPrediction Errors: \n{np.array2string(prediction_error)}\n"
     print("Percentual Errors Greater than 5%: ", percentual_errors_greater_than_005)
-    with open("error_log", "a") as file: file.write(error_str)
+    
+    with open("stats_log", "a") as file: 
+        file.write(id_string)
+        file.write(qd_string)
+        file.write(error_str)
 
     true_objective = np.vstack(converged_evaluated_prediction_elites['objective'])
     predicted_objective = np.vstack(converged_unevaluated_prediction_elites['objective'])
     pprint(predicted_objective, true_objective, percentual_error)
-    print("\nMAE Error: ", mae_error, "\n", "MSE Error: ", mse_error, "\n", "Mean Percentual Error: ", mean_percentual_error, "\n")
+    print("\nMAE Error: ", mae_error, "\n", "MSE Error: ", mse_error, "\n", "Mean Percentual Error: ", mpe_error, "\n")
 
     os.makedirs("csv") if not os.path.exists("csv") else None
     subprocess.run("mv *.csv csv", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

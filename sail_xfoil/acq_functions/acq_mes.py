@@ -1,33 +1,24 @@
-import torch
-import botorch
-from botorch.optim import optimize_acqf
+### Packages ###
+from torch import float64, cuda, device, tensor
+from botorch.acquisition import qMaxValueEntropy
 
+### Custom Scripts ###w
+from utils.pprint_nd import pprint
 
-def acquisition_mes(archive, gpModel, genome):
+###### Configurable Variables ######
+from config.config import Config
+config = Config('config/config.ini')
+SIGMA_UCB = config.SIGMA_UCB
 
-    X = torch.tensor(genome)                                                # Convert genome to tensor
-    acq_fitness  = botorch.acquisition.qMaxValueEntropy(gpModel, genome)    # Evaluate fitness using MES // qMaxValueEntropy supports "n x Dim" genomes
-    acq_fitness = acq_fitness.detach().numpy()                              # Convert fitness tensor to a numpy array (necessary once genome is "n x Dim" matrice)
+def acq_mes(genomes, gp_model):
 
-    # Define the BoTorch model using the fitness values
-    model = your_custom_model(X, fitness)
+    dev = device("cuda" if cuda.is_available() else "cpu")
 
-    # Fit the BoTorch model
-    mll = fit_gpytorch_model(model)
+    genomes = tensor(genomes, dtype=float64, device=dev)              # Shape: PARALLEL_BATCH_SIZE x SOL_DIMENSION
+    transformed_genomes = genomes.unsqueeze(1)                        # Shape: PARALLEL_BATCH_SIZE x 1 x SOL_DIMENSION
 
-    # Define the acquisition function
-    acq_function = qMaxValueEntropy(model)
+    MES = qMaxValueEntropy(gp_model, genomes)
+    mes_tensor = MES(transformed_genomes) 
+    mes_ndarray = mes_tensor.detach().numpy()
 
-    # Optimize the acquisition function to find the next query point
-    candidate, _ = optimize_acqf(
-        acq_function,
-        bounds=your_custom_bounds,  # Specify the bounds for each feature
-        q=1,  # Number of candidates to sample
-    )
-
-    # Convert the candidate tensor to a numpy array
-    candidate = candidate.detach().numpy()
-
-    acq_behavior = [drag[0], lift[0]]
-
-    return acq_fitness, acq_behavior
+    return mes_ndarray

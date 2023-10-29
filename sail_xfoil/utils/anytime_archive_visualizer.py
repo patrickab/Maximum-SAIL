@@ -27,10 +27,12 @@ else:
     PNG_BUFFERSIZE = int(PNG_BUFFERSIZE)
     print("PNG_BUFFERSIZE: ", PNG_BUFFERSIZE)
 
-def anytime_archive_visualizer(self, archive, obj_flag=False, acq_flag=False, pred_flag=False, new_flag=False):
+def anytime_archive_visualizer(self, archive, obj_flag=False, acq_flag=False, pred_flag=False, new_flag=False, vmax=5.0):
 
     domain = self.domain
     initial_seed = self.initial_seed
+
+    vmin = 0.0
 
     if obj_flag:
         prefix = "obj"
@@ -57,7 +59,7 @@ def anytime_archive_visualizer(self, archive, obj_flag=False, acq_flag=False, pr
     os.chdir(f"imgs/{domain}/{initial_seed}/{prefix}")
 
     fig, ax = plt.subplots(figsize=(8, 8))
-    grid_archive_heatmap(archive, ax=ax, vmin=1.0, vmax=5)
+    grid_archive_heatmap(archive, ax=ax, vmin=vmin, vmax=vmax) # acq_mes has numerically lower values than acq_ucb, therefore we need to plot it on a different scale 
     plt.xlabel("X Up")
     plt.ylabel("Z Up")
 

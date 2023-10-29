@@ -9,6 +9,7 @@ import numpy as np
 
 ##### Import custom scripts #####
 from xfoil.generate_airfoils import generate_parsec_coordinates
+from gp.predict_objective import predict_objective
 
 from config.config import Config
 config = Config('config/config.ini')
@@ -23,7 +24,7 @@ BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 ACQ_N_MAP_EVALS = config.ACQ_N_MAP_EVALS
 PREDICTION_VERIFICATIONS = config.PREDICTION_VERIFICATIONS
 
-def map_elites(self, target_function, acq_flag=False, pred_flag=False, new_elite_archive=None, pred_verific_flag=False):
+def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None, pred_verific_flag=False):
 
     """
     Perform MAP-Elites iterations.
@@ -66,6 +67,7 @@ def map_elites(self, target_function, acq_flag=False, pred_flag=False, new_elite
         
     if acq_flag:
         target = "Acq Archive"
+        target_function = self.acq_function
         target_archive = self.acq_archive
         if self.vanilla_flag:
             obj_df = self.obj_archive.as_pandas(include_solutions=True)
@@ -75,10 +77,12 @@ def map_elites(self, target_function, acq_flag=False, pred_flag=False, new_elite
         n_evals = ACQ_N_MAP_EVALS
     if pred_flag:
         target = "Pred Archive"
+        target_function = predict_objective
         target_archive = self.pred_archive
         if self.vanilla_flag:
+            obj_df = self.obj_archive.as_pandas(include_solutions=True)
             self.pred_archive.clear()
-            self.pred_archive.add(obj_df.solution_batch(), obj_df.solution_batch(), obj_df.solution_batch())
+            self.pred_archive.add(obj_df.solution_batch(), obj_df.objective_batch(), obj_df.measures_batch())
         size_t0 = self.pred_archive.stats.num_elites
         n_evals = PRED_N_EVALS if not self.pred_verific_flag else PRED_N_EVALS//(PREDICTION_VERIFICATIONS+1)
 

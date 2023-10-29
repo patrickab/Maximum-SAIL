@@ -35,13 +35,13 @@ benchmark_domains = []
 if (BATCH_SIZE%2)!=0 or ((MAX_PRED_VERIFICATION//PREDICTION_VERIFICATIONS)%2)!=0:
     raise ValueError("BATCH_SIZE and MAX_PRED_VERIFICATION//PEDICTION_VERIFICATION must be even numbers")
 
-def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, pred_verific_flag=False, greedy_flag=False, explore_flag=False, hybrid_flag=False):
+def sail(initial_seed, acq_ucb_flag=False, acq_mes_flag=False, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, pred_verific_flag=False, greedy_flag=False, explore_flag=False, hybrid_flag=False):
 
     """
     Note: Extra Evals are only used if pred_verific_flag is set to True resulting in more than ACQ_N_OBJ_EVALS. In this case the extra evaluations are counted, returned & also given to subsequent sail runs
     """
 
-    current_run = SailRun(initial_seed, sail_vanilla_flag=sail_vanilla_flag, sail_custom_flag=sail_custom_flag, sail_random_flag=sail_random_flag, pred_verific_flag=pred_verific_flag, greedy_flag=greedy_flag, explore_flag=explore_flag, hybrid_flag=hybrid_flag) 
+    current_run = SailRun(initial_seed, acq_ucb_flag=acq_ucb_flag, acq_mes_flag=acq_mes_flag, sail_vanilla_flag=sail_vanilla_flag, sail_custom_flag=sail_custom_flag, sail_random_flag=sail_random_flag, pred_verific_flag=pred_verific_flag, greedy_flag=greedy_flag, explore_flag=explore_flag, hybrid_flag=hybrid_flag) 
 
     print("\n ## Exit Initialization ##")
     print(" ## Enter Acquisition Loop ##\n\n")
@@ -76,6 +76,8 @@ def sail(initial_seed, sail_vanilla_flag=False, sail_custom_flag=False, sail_ran
         prediction_verification_loop(current_run)
     else:
         map_elites(current_run, target_function=predict_objective, pred_flag=True)
+        current_run.visualize_archive(archive=current_run.pred_archive, pred_flag=True)
+
 
     evaluate_prediction_archive(current_run)
     store_final_data(current_run)
@@ -97,10 +99,12 @@ if __name__ == "__main__":
 
         benchmark_domains = []
         
-        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True,  hybrid_flag=True)
-        sail(initial_seed=i, sail_vanilla_flag=True, pred_verific_flag=False)
-        #sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, hybrid_flag=True)
-        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True,  greedy_flag=True)
+        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True,  hybrid_flag=True, acq_mes_flag=True)
+        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True,  hybrid_flag=True, acq_ucb_flag=True)
+        sail(initial_seed=i, sail_vanilla_flag=True, pred_verific_flag=False, acq_ucb_flag=True)
+        #sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, hybrid_flag=True, acq_mes_flag=True)
+        #sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, hybrid_flag=True, acq_ucb_flag=True)
+        #sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True,  greedy_flag=True)
         #sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, greedy_flag=True)
         gc.collect()
 

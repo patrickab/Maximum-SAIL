@@ -67,20 +67,19 @@ def run_custom_sail(self: SailRun):
 
     while(current_eval_budget >= BATCH_SIZE):
 
-        if consumed_obj_evals % total_eval_budget//5:
-            if iteration != 1:
-                print("\nDECREASING CURIOSITY PARAMETER\n")
-                CURIOSITY -= 1
+        if consumed_obj_evals % (total_eval_budget//5) == 0 and consumed_obj_evals != 0:
+            print("\nDECREASING CURIOSITY PARAMETER\n")
+            CURIOSITY -= 1 if CURIOSITY > 0 else 1
 
         test_acq_t0 = self.acq_archive.stats.num_elites
-        new_acq_elites, acq_t0, acq_t1 = map_elites(self, target_function=acq_ucb, acq_flag=True)                          # Produce new acquisition elites
+        new_acq_elites, acq_t0, acq_t1 = map_elites(self, acq_flag=True)                          # Produce new acquisition elites
         test_acq_t1 = self.acq_archive.stats.num_elites
 
         if acq_t0 != test_acq_t0 or acq_t1 != test_acq_t1:
             raise ValueError("Acq Archive Size Mismatch")
 
         if new_acq_elites.stats.num_elites < BATCH_SIZE: ensure_n_new_elites(self=self, new_elite_archive=new_acq_elites, acq_flag=True)      # Sample until enough new acquisition elites are found
-        improved_elites, new_bin_elites = maximize_improvement(new_elite_archive=new_acq_elites, old_elite_archive=self.obj_archive)          # Split new elites into improved elites & new bin elites & calculate objective improvement
+        improved_elites, new_bin_elites = maximize_improvement(self=self, new_elite_archive=new_acq_elites, old_elite_archive=self.obj_archive)          # Split new elites into improved elites & new bin elites & calculate objective improvement
         candidate_solutions_df = select_samples(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, acq_flag=True, curiosity=CURIOSITY)          # Select samples based on exploration behavior defined in the class constructor
         solution_batch = candidate_solutions_df.solution_batch()
         objective_batch = candidate_solutions_df.objective_batch()
@@ -132,8 +131,8 @@ def run_custom_sail(self: SailRun):
 
         iteration += 1
 
-    if iteration % 20 == 0:
-        gc.collect()
+        if iteration % 20 == 0:
+            gc.collect()
 
     return
 
@@ -217,10 +216,8 @@ def ensure_n_new_elites(self: SailRun, new_elite_archive, acq_flag=False, pred_f
 
     if acq_flag:
         n_samples = BATCH_SIZE
-        target_function = acq_ucb
     if pred_flag and self.pred_verific_flag:
         n_samples = MAX_PRED_VERIFICATION//PREDICTION_VERIFICATIONS
-        target_function = predict_objective
     if pred_flag and not self.pred_verific_flag:
         raise ValueError("Maximize Improvement: Prediction Flag is True, but Prediction Verification Flag is False")
 
@@ -231,13 +228,13 @@ def ensure_n_new_elites(self: SailRun, new_elite_archive, acq_flag=False, pred_f
 
         print(f'\n\nNot enough {target} Improvements: Re-entering {target}')
         print(f'New {target} Elites (before): {new_elite_archive.stats.num_elites}')
-        new_elite_archive, _, _ = map_elites(self, target_function=target_function, new_elite_archive=new_elite_archive, acq_flag=acq_flag, pred_flag=pred_flag)
+        new_elite_archive, _, _ = map_elites(self, new_elite_archive=new_elite_archive, acq_flag=acq_flag, pred_flag=pred_flag)
         print(f'New {target} Elites (after):  {new_elite_archive.stats.num_elites}')
 
     return new_elite_archive
 
 
-def maximize_improvement(new_elite_archive: GridArchive, old_elite_archive: GridArchive):
+def maximize_improvement(self: SailRun, new_elite_archive: GridArchive, old_elite_archive: GridArchive, pred_flag=False):
     """
     - extracts all elites from new_elite_archive
     - splits them into improved elites and new bin elites
@@ -261,7 +258,12 @@ def maximize_improvement(new_elite_archive: GridArchive, old_elite_archive: Grid
 
     # Calculate objective improvement
     improved_old_elites = old_elite_df[is_improved_old_elite]
-    improved_elites = improved_elites.assign(objective_improvement = np.array(improved_elites['objective'] - np.array(improved_old_elites['objective']))).sort_values(by=['objective_improvement'], ascending=False)
+
+    if self.acq_mes_flag and not pred_flag:
+        improved_elites = improved_elites.assign(objective_improvement = np.array(improved_elites['objective'])).sort_values(by=['objective_improvement'], ascending=False)
+    if self.acq_ucb_flag or pred_flag:
+        improved_elites = improved_elites.assign(objective_improvement = np.array(improved_elites['objective'] - np.array(improved_old_elites['objective']))).sort_values(by=['objective_improvement'], ascending=False)
+    
     new_bin_elites = new_bin_elites.assign(objective_improvement = np.array(new_bin_elites['objective']))
 
     return improved_elites, new_bin_elites
@@ -336,11 +338,12 @@ def prediction_verification_loop(self: SailRun):
 
     while(current_eval_budget >= iter_evals):
 
-        new_pred_elites, pred_t0, pred_t1 = map_elites(self, target_function=predict_objective, pred_flag=True)                          # Produce new preduisition elites
+        new_pred_elites, pred_t0, pred_t1 = map_elites(self, pred_flag=True)                          # Produce new preduisition elites
 
         if new_pred_elites.stats.num_elites < BATCH_SIZE: ensure_n_new_elites(self=self, new_elite_archive=new_pred_elites, pred_flag=True)           # Sample until enough new preduisition elites are found
-        improved_elites, new_bin_elites = maximize_improvement(new_elite_archive=new_pred_elites, old_elite_archive=self.obj_archive)                 # Split new elites into improved elites & new bin elites & calculate objective improvement
-        candidate_solutions_df = select_samples(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, pred_flag=True)                 # Select samples based on exploration behavior defined in the class constructor
+
+        improved_elites, new_bin_elites = maximize_improvement(self=self, new_elite_archive=new_pred_elites, old_elite_archive=self.obj_archive, pred_flag=True)      # Split new elites into improved elites & new bin elites & calculate objective improvement
+        candidate_solutions_df = select_samples(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, pred_flag=True, curiosity=4)         # Select samples based on exploration behavior defined in the class constructor
         solution_batch = candidate_solutions_df.solution_batch()
         objective_batch = candidate_solutions_df.objective_batch()
         measures_batch = candidate_solutions_df.measures_batch()
@@ -371,8 +374,8 @@ def prediction_verification_loop(self: SailRun):
         percentage_new_pred_bins = (total_new_pred_bins/consumed_pred_evals)*100
         percentage_new_obj_elites = (total_new_obj_elites/consumed_obj_evals)*100
         percentage_new_pred_elites = (total_new_pred_elites/consumed_pred_evals)*100
-        percentage_obj_improvements   = (total_obj_improvements/consumed_obj_evals)*100
-        percentage_pred_improvements   = (total_pred_improvements/consumed_pred_evals)*100
+        percentage_obj_improvements = (total_obj_improvements/consumed_obj_evals)*100
+        percentage_pred_improvements = (total_pred_improvements/consumed_pred_evals)*100
 
         convergence_errors = self.convergence_errors
         total_convergence_errors += convergence_errors
@@ -392,12 +395,10 @@ def prediction_verification_loop(self: SailRun):
             
         iteration += 1
 
+        if iteration % 20 == 0:
+            gc.collect()
 
-
-    if iteration % 20 == 0:
-        gc.collect()
-
-    new_pred_elite_archive, pred_t0, pred_t1 = map_elites(self, target_function=predict_objective, pred_flag=True)
+    new_pred_elite_archive, pred_t0, pred_t1 = map_elites(self, pred_flag=True)
 
 
     return self.pred_archive
@@ -424,7 +425,7 @@ def run_vanilla_sail(self: SailRun):
 
     while(current_eval_budget >= BATCH_SIZE):
 
-        new_acq_elites, acq_t0, acq_t1 = map_elites(self, target_function=acq_ucb, acq_flag=True)                          # Produce new acquisition elites
+        new_acq_elites, acq_t0, acq_t1 = map_elites(self, acq_flag=True)                          # Produce new acquisition elites
 
         if new_acq_elites.stats.num_elites < BATCH_SIZE: ensure_n_new_elites(self=self, new_elite_archive=new_acq_elites, acq_flag=True)      # Sample until enough new acquisition elites are found
         candidate_solutions_df = self.acq_archive.sample_elites(n=BATCH_SIZE)                                                                 # Select samples based on exploration behavior defined in the class constructor
@@ -472,8 +473,8 @@ def run_vanilla_sail(self: SailRun):
 
         iteration += 1
 
-    if iteration % 20 == 0:
-        gc.collect()
+        if iteration % 20 == 0:
+            gc.collect()
 
     return
 
