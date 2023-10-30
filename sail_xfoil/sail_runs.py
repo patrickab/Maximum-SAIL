@@ -292,7 +292,7 @@ def select_samples(self: SailRun, improved_elites, new_bin_elites, acq_flag=Fals
         n_new_bin_samples = round((curiosity/10)*n_samples)
         n_improved_samples = n_samples - n_new_bin_samples
 
-        new_bin_elites = new_bin_elites.sort_values(by=['objective_improvement'], ascending=False)
+        new_bin_elites = new_bin_elites.sample(n=n_new_bin_samples, random_state=self.initial_seed)
         improved_elites = improved_elites.sort_values(by=['objective_improvement'], ascending=False)
 
         if n_new_bin_elites >= n_new_bin_samples and n_improved_elites >= n_improved_samples:
