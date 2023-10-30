@@ -238,12 +238,28 @@ class SailRun:
 
     def define_archives(self, seed):
 
+        # -log(x)=3 is equivalent to lift/drag ratio of 20 (in experimental set up to-be-defined as minimum for airfoil to be considered high quality)
+        # eg a boeing 747 or Airbus A380 have a lift/drag ratio of 17-20 (https://en.wikipedia.org/wiki/Lift-to-drag_ratio)
+        
+        # therefore, in order to produce qualitative results, it makes sense to set a minimum threshold
+        # in future work (for generalization), this threshold could be set as a hyperparameter or class attribute
+        # https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/lift-to-drag-ratio/
+
+        if self.acq_function == acq_ucb:
+            min_acq_threshhold = 3.0
+            min_obj_threshhold = 3.0
+            min_pred_threshhold = 3.0
+        if self.acq_function == acq_mes:
+            min_acq_threshhold = 0.0
+            min_obj_threshhold = 3.0
+            min_pred_threshhold = 3.0
+
         obj_archive = GridArchive(
             solution_dim=SOL_DIMENSION,
             dims=BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
-            threshold_min = 1.0
+            threshold_min = min_obj_threshhold
         )
 
         acq_archive = GridArchive(
@@ -251,7 +267,7 @@ class SailRun:
             dims=BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
-            threshold_min = 1.0 if self.acq_function == acq_ucb else 0
+            threshold_min = min_acq_threshhold 
         )
 
         pred_archive = GridArchive(
@@ -259,7 +275,7 @@ class SailRun:
             dims=BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
-            threshold_min = 1.0
+            threshold_min = min_pred_threshhold
         )
 
         # Used for visualizing new elites (improved + new bin discoveries)
@@ -268,7 +284,7 @@ class SailRun:
             dims=BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
-            threshold_min = 1.0
+            threshold_min = min_obj_threshhold
         )
 
         # Used for evaluating quality of results
@@ -277,7 +293,7 @@ class SailRun:
             dims=BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
-            threshold_min = 1.0
+            threshold_min = -1000 # low perfoming predictions shall be stored under any circumstances
         )
 
         # Used for visualizing prediction errors
@@ -395,10 +411,10 @@ def evaluate_prediction_archive(self: SailRun):
     self.prediction_error_archive.add(np.vstack(converged_unevaluated_prediction_elites['solution']), percentual_error, np.vstack(converged_unevaluated_prediction_elites['behavior']))
 
     percentual_errors_greater_than_005 = np.sum(np.abs(prediction_error)/converged_evaluated_prediction_elites['objective'] > 0.05)
-    id_string = f"\n\nInitial Seed: {self.initial_seed}  Domain: {self.domain}\n"
-    qd_string = f"Obj QD (per bin): {obj_qd_per_bin}  Pred QD (per bin / unverified): {pred_qd_per_bin}  Pred QD (per bin / verified): {pred_verified_qd_per_bin}\nObj QD (per elite): {obj_qd_per_elite}  Pred QD (per elite / unverified): {pred_qd_per_elite}  Pred QD (per elite / verified): {pred_verified_qd_per_elite}\n"
-    error_str = f"Initial Seed: {self.initial_seed}  Domain: {self.domain}\nMAE Error: {mae_error}  MSE Error: {mse_error}  MPE Error: {mse_error}\nPercentual Errors greater than 5%:  {percentual_errors_greater_than_005}\nPrediction Errors: \n{np.array2string(prediction_error)}\n"
-    print("Percentual Errors Greater than 5%: ", percentual_errors_greater_than_005)
+    id_string = f"Initial Seed: {self.initial_seed}  Domain: {self.domain}\n"
+    qd_string = f"Obj QD (per bin): {obj_qd_per_bin}\nPred QD (per bin / unverified): {pred_qd_per_bin}\nPred QD (per bin / verified): {pred_verified_qd_per_bin}\nObj QD (per elite): {obj_qd_per_elite}\nPred QD (per elite / unverified): {pred_qd_per_elite}\nPred QD (per elite / verified): {pred_verified_qd_per_elite}\n"
+    error_str = f"MAE Error: {mae_error}\nMSE Error: {mse_error}\nMPE Error: {mse_error}\nPercentual Errors greater than 5%:  {percentual_errors_greater_than_005}\nPrediction Errors: \n{np.array2string(prediction_error)}\nPercentual Errors: \n{np.array2string(percentual_error)}\n"
+    print("Percentual Errors Greater than 5%: ", percentual_errors_greater_than_005, "\n\n")
     
     with open("stats_log", "a") as file: 
         file.write(id_string)
