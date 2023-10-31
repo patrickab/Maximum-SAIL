@@ -75,7 +75,7 @@ def sail(initial_seed, acq_ucb_flag=False, acq_mes_flag=False, sail_vanilla_flag
     if current_run.pred_verific_flag:
         prediction_verification_loop(current_run)
     else:
-        map_elites(current_run, target_function=predict_objective, pred_flag=True)
+        map_elites(current_run, pred_flag=True)
         current_run.visualize_archive(archive=current_run.pred_archive, pred_flag=True)
 
 
@@ -99,13 +99,13 @@ if __name__ == "__main__":
 
         benchmark_domains = []
         
-        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True,  hybrid_flag=True, acq_mes_flag=True)
         sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True,  hybrid_flag=True, acq_ucb_flag=True)
         sail(initial_seed=i, sail_vanilla_flag=True, pred_verific_flag=False, acq_ucb_flag=True)
-        #sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, hybrid_flag=True, acq_mes_flag=True)
-        #sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, hybrid_flag=True, acq_ucb_flag=True)
-        #sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True,  greedy_flag=True)
-        #sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, greedy_flag=True)
+        # sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, hybrid_flag=True, acq_ucb_flag=True)
+        # sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True,  hybrid_flag=True, acq_mes_flag=True)
+        # sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, hybrid_flag=True, acq_mes_flag=True)
+        # sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True,  greedy_flag=True)
+        # sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, greedy_flag=True)
         gc.collect()
 
         img_filenames = [f"imgs/final_heatmaps_{i}_{benchmark_domain}.png" for benchmark_domain in benchmark_domains]
@@ -119,9 +119,9 @@ if __name__ == "__main__":
     current_time = datetime.datetime.now()
     timestamp = current_time.strftime("%Y%m%d%H%M")
     os.makedirs(timestamp)
-    subprocess.run("find . -type f -name '*_heatmaps.mp4' -exec mv -i '{}' . \;", shell=True)
     subprocess.run(f"cp config/config.ini {timestamp}/reproduction_info.txt", shell=True)
-    subprocess.run(f'mv csv *.csv *.mp4 imgs error_log {timestamp}', shell=True)
+    subprocess.run(f'mv *.csv csv', shell=True)
+    subprocess.run(f'mv csv *.mp4 imgs stats_log {timestamp}', shell=True)
     if not os.path.exists("benchmarks"): os.makedirs("benchmarks")
     subprocess.run(f"mv {timestamp} benchmarks", shell=True)
 

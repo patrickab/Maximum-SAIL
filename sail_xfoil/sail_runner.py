@@ -48,6 +48,11 @@ from acq_functions.acq_mes import acq_mes
 from gp.fit_gp_model import fit_gp_model
 from map_elites import map_elites
 
+MIN_THRESHHOLD = 2.5
+MIN_ACQ_UCB_THRESHHOLD = 2.5
+MIN_ACQ_MES_THRESHHOLD = 0.0
+MAX_RENDER_THRESHHOLD = 5.0
+
 class SailRun:
 
     def __init__(self, initial_seed, acq_ucb_flag=False, acq_mes_flag=False, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, pred_verific_flag=False, greedy_flag=False, explore_flag=False, hybrid_flag=False):
@@ -92,17 +97,6 @@ class SailRun:
         if pred_verific_flag and not (greedy_flag or explore_flag or hybrid_flag):
             raise ValueError("Prediction Verification Flag requires Greedy or Explore Flag to be True")
 
-        if acq_ucb_flag:
-            self.acq_ucb_flag = True
-            self.acq_mes_flag = False
-            self.acq_function = acq_ucb
-            self.domain = self.domain + "_ucb"
-        if acq_mes_flag:
-            self.acq_mes_flag = True
-            self.acq_ucb_flag = False
-            self.acq_function = acq_mes
-            self.domain = self.domain + "_mes"
-
         # stores new solutions from reevaluate_archive()
         self.new_sol = np.empty((0, SOL_DIMENSION))
         self.new_obj = np.empty((0, OBJ_DIMENSION))
@@ -125,7 +119,14 @@ class SailRun:
         self.sol_array = np.empty((0, SOL_DIMENSION))
         self.obj_array = np.empty((0, OBJ_DIMENSION))
 
-        self.obj_archive, self.acq_archive, self.pred_archive, self.new_archive, self.evaluated_predictions_archive, self.prediction_error_archive = self.define_archives(initial_seed)
+
+        # select Max Entropy Search for archive initialization
+        self.acq_function = acq_mes
+        self.acq_mes_flag = True
+        self.acq_ucb_flag = False
+
+        self.obj_archive, self.acq_archive, self.pred_archive, self.new_archive, self.evaluated_predictions_archive, self.prediction_error_archive =\
+            self.define_archives(initial_seed)
 
         print("\n\n\nInitialize SAIL Run")
         print(f"Domain: {self.domain}")
@@ -136,8 +137,30 @@ class SailRun:
         solution_batch = create_sobol_samples(order=INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
         solution_batch = solution_batch.T
         measures_batch = solution_batch[:, 1:3]
-        scale_samples(solution_batch) # sobol samples are between [0;1]
-        eval_xfoil_loop(self, solution_batch=solution_batch, measures_batch=measures_batch, acq_flag=True) # fill obj archive inside eval_xfoil_loop() & update+render acq_archive
+        scale_samples(solution_batch)
+
+        # initialize archive with random solutions
+        eval_xfoil_loop(self, solution_batch=solution_batch[:BATCH_SIZE], measures_batch=measures_batch[:BATCH_SIZE], acq_flag=False)
+
+        for i in range(0, INIT_N_EVALS-BATCH_SIZE, BATCH_SIZE):
+            eval_xfoil_loop(self, solution_batch=solution_batch[i:i+BATCH_SIZE], measures_batch=measures_batch[i:i+BATCH_SIZE], acq_flag=False)
+            map_elites(self=self, acq_flag=True)
+            fit_gp_model(self.sol_array, self.obj_array)
+
+        # select acquisition function based on class constructor
+        if acq_ucb_flag:
+            self.acq_ucb_flag = True
+            self.acq_mes_flag = False
+            self.acq_function = acq_ucb
+            self.acq_archive.threshold_min = MIN_ACQ_UCB_THRESHHOLD
+            self.domain = self.domain + "_ucb"
+        if acq_mes_flag:
+            self.acq_mes_flag = True
+            self.acq_ucb_flag = False
+            self.acq_function = acq_mes
+            self.acq_archive.threshold_min = MIN_ACQ_MES_THRESHHOLD
+            self.domain = self.domain + "_mes"
+
         print("\n[...] Terminate init_archive()\n")
 
     
@@ -183,11 +206,14 @@ class SailRun:
 
     def visualize_archive(self, archive, obj_flag=False, acq_flag=False, pred_flag=False, new_flag=False):
 
-        vmax = 5.0
+        vmin = MIN_THRESHHOLD
+        vmax = MAX_RENDER_THRESHHOLD
+
         if self.acq_mes_flag and acq_flag:
+            vmin = 0.0
             vmax = 0.6
 
-        anytime_archive_visualizer(self, archive=archive, obj_flag=obj_flag, acq_flag=acq_flag, pred_flag=pred_flag, new_flag=new_flag, vmax=vmax)
+        anytime_archive_visualizer(self, archive=archive, obj_flag=obj_flag, acq_flag=acq_flag, pred_flag=pred_flag, new_flag=new_flag, vmin=vmin, vmax=vmax)
         if obj_flag:
             self.obj_current_iteration += 1
         if new_flag:
@@ -238,21 +264,20 @@ class SailRun:
 
     def define_archives(self, seed):
 
-        # -log(x)=3 is equivalent to lift/drag ratio of 20 (in experimental set up to-be-defined as minimum for airfoil to be considered high quality)
+        # -log(x)=2.5 is equivalent to lift/drag ratio of 12.18
         # eg a boeing 747 or Airbus A380 have a lift/drag ratio of 17-20 (https://en.wikipedia.org/wiki/Lift-to-drag_ratio)
-        
-        # therefore, in order to produce qualitative results, it makes sense to set a minimum threshold
-        # in future work (for generalization), this threshold could be set as a hyperparameter or class attribute
         # https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/lift-to-drag-ratio/
 
+        # therefore, in order to produce qualitative results, it makes sense to set a minimum threshold
+        # in future work (for generalization), this threshold could be set as a hyperparameter or class attribute
+
+        min_obj_threshhold = MIN_THRESHHOLD
+        min_pred_threshhold = MIN_THRESHHOLD
+
         if self.acq_function == acq_ucb:
-            min_acq_threshhold = 3.0
-            min_obj_threshhold = 3.0
-            min_pred_threshhold = 3.0
+            min_acq_threshhold = MIN_ACQ_UCB_THRESHHOLD
         if self.acq_function == acq_mes:
-            min_acq_threshhold = 0.0
-            min_obj_threshhold = 3.0
-            min_pred_threshhold = 3.0
+            min_acq_threshhold = MIN_ACQ_MES_THRESHHOLD
 
         obj_archive = GridArchive(
             solution_dim=SOL_DIMENSION,
@@ -302,7 +327,7 @@ class SailRun:
             dims=BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
-            threshold_min = 0
+            threshold_min = 0 # percentual errors are always positive
         )
 
         return obj_archive, acq_archive, pred_archive, new_archive, evaluated_predictions_archive, prediction_error_archive
@@ -321,17 +346,23 @@ def scale_samples(samples, boundaries=SOL_VALUE_RANGE):
     return samples
 
 
-
-
 def store_final_data(self: SailRun):
 
-    acq_vmax = 5.0 if self.acq_ucb_flag else 1.0
+    max_acq_threshhold = 5.0 if self.acq_ucb_flag else 1.0
+    
+    min_obj_threshhold = MIN_THRESHHOLD
+    min_pred_threshhold = MIN_THRESHHOLD
 
-    archive_visualizer(self=self, archive=self.obj_archive, prefix="obj", name="Objective Archive", min_val=1.0, max_val=5)
-    archive_visualizer(self=self, archive=self.acq_archive, prefix="acq", name="Acquisition Archive", min_val=1.0, max_val=acq_vmax)
-    archive_visualizer(self=self, archive=self.pred_archive, prefix="pred", name="Prediction Archive (unevaluated)", min_val=1.0, max_val=5)
-    archive_visualizer(self=self, archive=self.evaluated_predictions_archive, prefix="evaluted_pred", name="Prediction Archive (evaluated)", min_val=1.0, max_val=5)
-    archive_visualizer(self=self, archive=self.prediction_error_archive, prefix="error", name="Prediction Error Archive (percentual)", min_val=0, max_val=0.1)
+    if self.acq_function == acq_ucb:
+        min_acq_threshhold = MIN_ACQ_UCB_THRESHHOLD
+    if self.acq_function == acq_mes:
+        min_acq_threshhold = MIN_ACQ_MES_THRESHHOLD
+
+    archive_visualizer(self=self, archive=self.obj_archive, prefix="obj", name="Objective Archive", min_val=min_obj_threshhold, max_val=MAX_RENDER_THRESHHOLD)
+    archive_visualizer(self=self, archive=self.acq_archive, prefix="acq", name="Acquisition Archive", min_val=min_acq_threshhold, max_val=max_acq_threshhold)
+    archive_visualizer(self=self, archive=self.pred_archive, prefix="pred", name="Prediction Archive (unevaluated)", min_val=min_pred_threshhold, max_val=MAX_RENDER_THRESHHOLD)
+    archive_visualizer(self=self, archive=self.evaluated_predictions_archive, prefix="evaluted_pred", name="Prediction Archive (evaluated)", min_val=min_pred_threshhold, max_val=MAX_RENDER_THRESHHOLD)
+    archive_visualizer(self=self, archive=self.prediction_error_archive, prefix="error", name="Prediction Error Archive (percentual)", min_val=0, max_val=0.10) # render maximum of 10% error (for better visualization) - errors above 10% are stored in stats_log
 
     initial_seed = self.initial_seed
     domain = self.domain
@@ -410,11 +441,11 @@ def evaluate_prediction_archive(self: SailRun):
     self.evaluated_predictions_archive.add(np.vstack(converged_evaluated_prediction_elites['solution']), converged_evaluated_prediction_elites['objective'], np.vstack(converged_evaluated_prediction_elites['behavior']))
     self.prediction_error_archive.add(np.vstack(converged_unevaluated_prediction_elites['solution']), percentual_error, np.vstack(converged_unevaluated_prediction_elites['behavior']))
 
-    percentual_errors_greater_than_005 = np.sum(np.abs(prediction_error)/converged_evaluated_prediction_elites['objective'] > 0.05)
+    percentual_errors_greater_than_10 = np.sum(np.abs(prediction_error)/converged_evaluated_prediction_elites['objective'] > 0.1)
     id_string = f"Initial Seed: {self.initial_seed}  Domain: {self.domain}\n"
     qd_string = f"Obj QD (per bin): {obj_qd_per_bin}\nPred QD (per bin / unverified): {pred_qd_per_bin}\nPred QD (per bin / verified): {pred_verified_qd_per_bin}\nObj QD (per elite): {obj_qd_per_elite}\nPred QD (per elite / unverified): {pred_qd_per_elite}\nPred QD (per elite / verified): {pred_verified_qd_per_elite}\n"
-    error_str = f"MAE Error: {mae_error}\nMSE Error: {mse_error}\nMPE Error: {mse_error}\nPercentual Errors greater than 5%:  {percentual_errors_greater_than_005}\nPrediction Errors: \n{np.array2string(prediction_error)}\nPercentual Errors: \n{np.array2string(percentual_error)}\n"
-    print("Percentual Errors Greater than 5%: ", percentual_errors_greater_than_005, "\n\n")
+    error_str = f"MAE Error: {mae_error}\nMSE Error: {mse_error}\nMPE Error: {mse_error}\nPercentual Errors greater than 5%:  {percentual_errors_greater_than_10}\nPrediction Errors: \n{np.array2string(prediction_error)}\nPercentual Errors: \n{np.array2string(percentual_error)}\n"
+    print("Percentual Errors Greater than 10%: ", percentual_errors_greater_than_10, "\n\n")
     
     with open("stats_log", "a") as file: 
         file.write(id_string)

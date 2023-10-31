@@ -74,7 +74,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None, pr
             self.acq_archive.clear()
             self.acq_archive.add(obj_df.solution_batch(), obj_df.objective_batch(), obj_df.measures_batch())
         size_t0 = self.acq_archive.stats.num_elites
-        n_evals = ACQ_N_MAP_EVALS
+        n_evals = ACQ_N_MAP_EVALS # reduce number of acquisition evaluations for MES
     if pred_flag:
         target = "Pred Archive"
         target_function = predict_objective

@@ -44,7 +44,7 @@ def run_custom_sail(self: SailRun):
         if not eval_pred_flag, extra_evals = 0
     """
 
-    CURIOSITY = 7 # For Hybrid Approach: 'CURIOSITY//BATCH_SIZE' new bin elites are to be sampled
+    CURIOSITY = 6 # For Hybrid Approach: 'CURIOSITY//BATCH_SIZE' new bin elites are to be sampled
 
 
     iteration = 1
@@ -67,9 +67,9 @@ def run_custom_sail(self: SailRun):
 
     while(current_eval_budget >= BATCH_SIZE):
 
-        if consumed_obj_evals % (total_eval_budget//5) == 0 and consumed_obj_evals != 0:
+        if consumed_obj_evals % (total_eval_budget//2) == 0 and consumed_obj_evals != 0:
             print("\nDECREASING CURIOSITY PARAMETER\n")
-            CURIOSITY -= 1 if CURIOSITY > 0 else 1
+            CURIOSITY -= 2
 
         test_acq_t0 = self.acq_archive.stats.num_elites
         new_acq_elites, acq_t0, acq_t1 = map_elites(self, acq_flag=True)                          # Produce new acquisition elites
@@ -292,13 +292,15 @@ def select_samples(self: SailRun, improved_elites, new_bin_elites, acq_flag=Fals
         n_new_bin_samples = round((curiosity/10)*n_samples)
         n_improved_samples = n_samples - n_new_bin_samples
 
-        new_bin_elites = new_bin_elites.sample(n=n_new_bin_samples, random_state=self.initial_seed)
+        new_bin_elites = new_bin_elites.sort_values(by=['objective_improvement'], ascending=False)
         improved_elites = improved_elites.sort_values(by=['objective_improvement'], ascending=False)
 
         if n_new_bin_elites >= n_new_bin_samples and n_improved_elites >= n_improved_samples:
+            new_bin_elites = new_bin_elites.sample(n=n_new_bin_samples, random_state=self.initial_seed)
             candidate_elite_df = pandas.concat([new_bin_elites.head(n_new_bin_samples), improved_elites.head(n_improved_samples)])
         else:
             if n_new_bin_elites < n_new_bin_samples:
+                new_bin_elites = new_bin_elites.sample(n=n_new_bin_elites, random_state=self.initial_seed)
                 candidate_elite_df = pandas.concat([new_bin_elites, improved_elites.head(n_samples - n_new_bin_elites)])
             else:
                 candidate_elite_df = pandas.concat([new_bin_elites.head(n_samples - n_improved_elites), improved_elites])
@@ -348,6 +350,8 @@ def prediction_verification_loop(self: SailRun):
         objective_batch = candidate_solutions_df.objective_batch()
         measures_batch = candidate_solutions_df.measures_batch()
         obj_t0, obj_t1 = eval_xfoil_loop(self, solution_batch=solution_batch, measures_batch=measures_batch, candidate_targetvalues=objective_batch, pred_flag=True)     # Evaluate Acquisition Elites & Update Acq Archive under resulting GP Model
+
+        self.visualize_archive(self.pred_archive, pred_flag=True)
 
         current_eval_budget -= iter_evals
         current_pred_eval_budget -= PRED_N_EVALS//(MAX_PRED_VERIFICATION+1) # +1 because after the last prediction verification we predict once more

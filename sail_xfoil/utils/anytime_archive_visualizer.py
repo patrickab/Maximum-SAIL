@@ -27,12 +27,10 @@ else:
     PNG_BUFFERSIZE = int(PNG_BUFFERSIZE)
     print("PNG_BUFFERSIZE: ", PNG_BUFFERSIZE)
 
-def anytime_archive_visualizer(self, archive, obj_flag=False, acq_flag=False, pred_flag=False, new_flag=False, vmax=5.0):
+def anytime_archive_visualizer(self, archive, vmin, vmax, obj_flag=False, acq_flag=False, pred_flag=False, new_flag=False):
 
     domain = self.domain
     initial_seed = self.initial_seed
-
-    vmin = 0.0
 
     if obj_flag:
         prefix = "obj"
