@@ -46,7 +46,7 @@ def xfoil(iterations):
     results = [future.result() for future in futures]
 
     success_indices = []
-    for i in range(len(results)):
+    for i in range(iterations):
         if results[i]:
             if i not in success_indices:
                 success_indices.append(i)
@@ -168,7 +168,7 @@ def capture_errors(process, queue, i):
 
     while True:
         try:
-            line = queue.get(timeout=0.9)
+            line = queue.get(timeout=1.2)
             #print(line.strip())
 
             if not line: # empty line

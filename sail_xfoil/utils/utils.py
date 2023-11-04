@@ -40,10 +40,9 @@ def eval_xfoil_loop(self, solution_batch, measures_batch, evaluate_prediction_ar
 
     n_errors = 0
     iteration = 0
-    n_new_sol = np.array([])
     new_objectives = np.empty((0, 1))
-    new_solutions = np.empty((0, SOL_DIMENSION))
-    new_behaviors = np.empty((0, BHV_DIMENSION))
+
+    n_new_obj_elites = 0 # counter for newly discovered objective elites
 
     remaining_samples = solution_batch.shape[0]
 
@@ -60,6 +59,8 @@ def eval_xfoil_loop(self, solution_batch, measures_batch, evaluate_prediction_ar
         old_pred_df = self.pred_archive.as_pandas()
         old_pred_solutions = old_pred_df.values[:,4:]
         old_pred_behavior = old_pred_df.values[:,1:3]
+        target = "Prediction"
+    if evaluate_prediction_archive:
         target = "Prediction"
 
     converged_acq_or_pred = np.empty((0, 1))
@@ -87,81 +88,90 @@ def eval_xfoil_loop(self, solution_batch, measures_batch, evaluate_prediction_ar
         converged_sol = i_solutions[success_indices]
         converged_bhv = measures_batch[sample_index:sample_index+BATCH_SIZE][success_indices] # ToDo: generalize calculate behavior
 
-        # used for printing - in future this can be used for visualizing obj improvements in an archive
-        # if candidate_targetvalues is not None:
-        #     i_converged_acq_or_pred = candidate_targetvalues[sample_index:sample_index+BATCH_SIZE][success_indices] if success_indices != [] else []
-        #     converged_acq_or_pred = np.vstack((converged_acq_or_pred, np.vstack(i_converged_acq_or_pred)))
-
         i_errors = i_candidates - len(success_indices)
         n_errors += i_errors
+
+        # Insert -1000 for non_converged samples
+        objective_values = np.full(i_candidates, -1, dtype=float)
+        objective_values[success_indices] = converged_obj
+
+        new_objectives = np.vstack((new_objectives, np.vstack(objective_values))) if new_objectives.shape[0] != 0 else np.vstack(objective_values)
 
         if i_errors < 0:
             raise ValueError(f'eval_xfoil_loop: i_errors < 0')
         
-        # iteratively store new data
+        # store new data
         if not evaluate_prediction_archive:
+
+            if converged_sol.shape[0] != np.unique(converged_sol, axis=0).shape[0]:
+                raise ValueError(f'eval_xfoil_loop: converged_sol contains duplicates')
+
             self.update_gp_data(new_solutions=converged_sol, new_objectives=converged_obj)
             self.update_archive(candidate_sol=converged_sol, candidate_obj=converged_obj, candidate_bhv=converged_bhv, obj_flag=True)
 
             self.visualize_archive(self.new_archive, new_flag=True)
             self.visualize_archive(self.obj_archive, obj_flag=True)
+
+            n_new_obj_elites += self.n_new_obj_elites # if eval_xfoil_loop is called with more than BATCH_SIZE samples, increment iteratively
+
         else:
             self.update_archive(candidate_sol=converged_sol, candidate_obj=converged_obj, candidate_bhv=converged_bhv, evaluate_prediction_archive=True)
 
-        # --- All following steps are only performed in this manner to ensure that all rendered videos are of equal length ---
-        # ---        New elites are iteratively stored to later iteratively update archives with up2date gp model          ---
-        i_new_sol = converged_obj.shape[0]
-        n_new_sol = np.array(np.append(n_new_sol, i_new_sol), dtype=int)
-
-        if i_new_sol == 0:
-            continue
-        
-        new_sol = converged_sol
-        new_solutions = np.vstack((new_solutions, new_sol))
-
-        new_bhv = converged_bhv
-        new_behaviors = np.vstack((new_behaviors, new_bhv))
-
-        new_obj = np.vstack(converged_obj)
-        new_objectives = np.vstack((new_objectives, new_obj))
-
-    if evaluate_prediction_archive:
-        return
 
     # within initialization, no "target_values" are available
     if candidate_targetvalues is not None:
         if candidate_targetvalues.shape[0] != 0:
-            print("\n\nObjective Evaluation Results and Corresponding Acquisitions/Predictions:")
-            target_objectives = np.vstack(candidate_targetvalues)
+            print(f"\n\nObjective Evaluation Results and Corresponding {target} Values:")
+
+            # ToDo: check target value shape
+            target_objectives = np.vstack(np.hstack(candidate_targetvalues))
             true_objectives = np.vstack(new_objectives)
             pprint(target_objectives, true_objectives)
         else:
             print("\n\nNo Converged Solutions")
 
-    # update GP model with new data
-    self.update_gp_model()
 
-    if acq_flag or pred_flag: # update acq/pred archives under new gp model
-            
-        self.acq_archive.clear() if acq_flag else self.pred_archive.clear()
-        old_target_solutions = old_acq_solutions if acq_flag else old_pred_solutions  
-        old_taget_behavior = old_acq_behavior if acq_flag else old_pred_behavior  
+    if (not evaluate_prediction_archive) and (not self.random_flag):
+        self.update_gp_model()
+
+
+    # update acquisition elites under new gp model
+    if acq_flag and not self.random_flag:
+
+        self.acq_archive.clear()
+
+        if self.acq_mes_flag:
+
+            # determine all acquisition elites, that have not been evaluated
+            unevaluated_solution_mask = ~np.isin(old_acq_solutions, self.sol_array).all(1)
+
+            # select only unevaluated acquisition elites
+            old_sol = old_acq_solutions[unevaluated_solution_mask]
+            old_bhv = old_acq_behavior[unevaluated_solution_mask]
+
+        if self.acq_ucb_flag: 
+            # preserve all acquisition elites, & add all objective elites
+            old_sol = np.concatenate((old_obj_solutions, old_acq_solutions), axis=0)
+            old_bhv = np.concatenate((old_obj_behavior, old_acq_behavior), axis=0)
+
+        # update unevaluated elites under new GP
+        self.update_archive(candidate_sol=old_sol, candidate_bhv=old_bhv, acq_flag=True)
+    
+
+    # update prediction elites under new gp model
+    if pred_flag:
+
+        self.pred_archive.clear() if acq_flag else self.pred_archive.clear()
+        old_target_solutions = old_pred_solutions
+        old_taget_behavior = old_pred_behavior
 
         old_sol = np.concatenate((old_obj_solutions, old_target_solutions), axis=0)
         old_bhv = np.concatenate((old_obj_behavior, old_taget_behavior), axis=0)
-        self.update_archive(candidate_sol=old_sol, candidate_bhv=old_bhv, acq_flag=acq_flag, pred_flag=pred_flag)
 
-    sum = 0                   # update acq/pred archives with new obj elites ITERATIVELY to ensure that all videos are of equal length
-    for i in range(n_new_sol.shape[0]):
-        new_sol = new_solutions[sum:sum+n_new_sol[i]]
-        new_bhv = new_behaviors[sum:sum+n_new_sol[i]]
-        sum += n_new_sol[i]
-
-        self.update_archive(candidate_sol=new_sol, candidate_bhv=new_bhv, acq_flag=True)
-
-        self.visualize_archive(archive=self.acq_archive, acq_flag=True)
+        # update prediction elites under new GP
+        self.update_archive(candidate_sol=old_sol, candidate_bhv=old_bhv, pred_flag=True)
 
     obj_t1 = self.obj_archive.stats.num_elites
     self.convergence_errors = n_errors
     gc.collect()
-    return obj_t0, obj_t1
+    return obj_t0, obj_t1, n_new_obj_elites

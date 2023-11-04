@@ -1,15 +1,12 @@
 ###### Import Foreign Scripts ######
 from chaospy import create_sobol_samples
 from ribs.archives import GridArchive
-from gp.predict_objective import predict_objective
 import gc
 import numpy as np
 import logging
 import os
-
 import subprocess
 import PIL
-from utils.anytime_archive_visualizer import archive_visualizer
 
 ### Configurable Variables ###
 from config.config import Config
@@ -17,36 +14,24 @@ config = Config(os.path.join(os.path.dirname(__file__), 'config', 'config.ini'))
 TEST_RUNS = config.TEST_RUNS
 BATCH_SIZE = config.BATCH_SIZE
 INIT_N_EVALS = config.INIT_N_EVALS
-PRED_N_EVALS = config.PRED_N_EVALS
-SIGMA_EMITTER = config.SIGMA_EMITTER
 SOL_DIMENSION = config.SOL_DIMENSION
 OBJ_DIMENSION = config.OBJ_DIMENSION
 BHV_DIMENSION = config.BHV_DIMENSION
-ACQ_N_OBJ_EVALS = config.ACQ_N_OBJ_EVALS
-ACQ_N_MAP_EVALS = config.ACQ_N_MAP_EVALS
 BHV_NUMBER_BINS = config.BHV_NUMBER_BINS
 BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
-SIGMA_PRED_EMITTER = config.SIGMA_PRED_EMITTER
-
-MAX_PRED_VERIFICATION = config.MAX_PRED_VERIFICATION
-PREDICTION_VERIFICATIONS = config.PREDICTION_VERIFICATIONS
-
-total_obj_evals = INIT_N_EVALS + ACQ_N_OBJ_EVALS + MAX_PRED_VERIFICATION
+INIT_N_MES_EVALS = config.INIT_N_MES_EVALS
 
 ###### Import Custom Scripts ######
-
+from utils.anytime_archive_visualizer import anytime_archive_visualizer, archive_visualizer
 from utils.utils import eval_xfoil_loop
-from utils.anytime_archive_visualizer import anytime_archive_visualizer
 from utils.pprint_nd import pprint
-
-from xfoil.generate_airfoils import generate_parsec_coordinates
-from xfoil.simulate_airfoils import xfoil
-
 from acq_functions.acq_ucb import acq_ucb
 from acq_functions.acq_mes import acq_mes
+from gp.predict_objective import predict_objective
 from gp.fit_gp_model import fit_gp_model
 from map_elites import map_elites
+import numpy as np
 
 MIN_THRESHHOLD = 2.5
 MIN_ACQ_UCB_THRESHHOLD = 2.5
@@ -55,7 +40,7 @@ MAX_RENDER_THRESHHOLD = 5.0
 
 class SailRun:
 
-    def __init__(self, initial_seed, acq_ucb_flag=False, acq_mes_flag=False, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, pred_verific_flag=False, greedy_flag=False, explore_flag=False, hybrid_flag=False):
+    def __init__(self, initial_seed, acq_ucb_flag=False, acq_mes_flag=False, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, pred_verific_flag=False, greedy_flag=False, hybrid_flag=False, random_init=False, mes_init=False):
 
         """
         Initialize a SAIL Run.
@@ -78,24 +63,25 @@ class SailRun:
         self.acq_current_iteration = 1
         self.pred_current_iteration = 1
 
-        if sail_custom_flag:
-            self.domain = "custom"
+
+        if hybrid_flag:
+            self.domain = "hybrid"
+        if greedy_flag:
+            self.domain = "greedy"
         if sail_random_flag:
             self.domain = "random"
         if sail_vanilla_flag:
             self.domain = "vanilla"
-        if greedy_flag:
-            self.domain = self.domain + "_greedy"
-        if explore_flag:
-            self.domain = self.domain + "_explore"
-        if hybrid_flag:
-            self.domain = self.domain + "_hybrid"
         if pred_verific_flag:
             self.domain = self.domain + "_verification"
-        if greedy_flag and explore_flag:
-            raise ValueError("Greedy and Explore Flags cannot both be True")
-        if pred_verific_flag and not (greedy_flag or explore_flag or hybrid_flag):
-            raise ValueError("Prediction Verification Flag requires Greedy or Explore Flag to be True")
+        if mes_init:
+            self.domain = self.domain + "_mes_init"
+        if random_init:
+            self.domain = self.domain + "_random_init"
+        if acq_ucb_flag:
+            self.domain = self.domain + "_ucb"
+        if acq_mes_flag:
+            self.domain = self.domain + "_mes"
 
         # stores new solutions from reevaluate_archive()
         self.new_sol = np.empty((0, SOL_DIMENSION))
@@ -110,9 +96,9 @@ class SailRun:
         self.custom_flag = sail_custom_flag
         self.vanilla_flag = sail_vanilla_flag
         self.random_flag = sail_random_flag
+        self.random_init_flag = random_init
 
         self.greedy_flag = greedy_flag
-        self.explore_flag = explore_flag
         self.hybrid_flag = hybrid_flag
         self.pred_verific_flag = pred_verific_flag
 
@@ -132,34 +118,93 @@ class SailRun:
         print(f"Domain: {self.domain}")
         print(f"Initial Seed: {self.initial_seed}")    
         print(f"Initialize Archive [...]")
-        total_errors = 0
 
-        solution_batch = create_sobol_samples(order=INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
-        solution_batch = solution_batch.T
-        measures_batch = solution_batch[:, 1:3]
-        scale_samples(solution_batch)
+        if sail_vanilla_flag or sail_random_flag or random_init:
 
-        # initialize archive with random solutions
-        eval_xfoil_loop(self, solution_batch=solution_batch[:BATCH_SIZE], measures_batch=measures_batch[:BATCH_SIZE], acq_flag=False)
+            solution_batch = create_sobol_samples(order=INIT_N_EVALS*2, dim=len(SOL_VALUE_RANGE), seed=self.current_seed)
+            solution_batch = solution_batch.T
+            solution_batch = scale_samples(solution_batch)
+            measures_batch = solution_batch[:, 1:3]
 
-        for i in range(0, INIT_N_EVALS-BATCH_SIZE, BATCH_SIZE):
-            eval_xfoil_loop(self, solution_batch=solution_batch[i:i+BATCH_SIZE], measures_batch=measures_batch[i:i+BATCH_SIZE], acq_flag=False)
-            map_elites(self=self, acq_flag=True)
-            fit_gp_model(self.sol_array, self.obj_array)
+            eval_xfoil_loop(self, solution_batch=solution_batch[0::2], measures_batch=measures_batch[0::2], acq_flag=False)
+
+            # initialize acq archive with evaluated & unevaluated sobol samples
+            if not sail_random_flag:
+                self.update_archive(candidate_sol=solution_batch, candidate_bhv=measures_batch, acq_flag=True)
+
+            # visualize empty acquisition archive
+            for i in range(0, INIT_N_EVALS, BATCH_SIZE):
+                self.visualize_archive(self.acq_archive, acq_flag=True)
+
+        if sail_custom_flag and not random_init:
+
+            solution_batch = create_sobol_samples(order=INIT_N_EVALS*2, dim=len(SOL_VALUE_RANGE), seed=self.current_seed)
+            solution_batch = solution_batch.T
+            solution_batch = scale_samples(solution_batch)
+            measures_batch = solution_batch[:, 1:3]
+
+            # visualize empty acquisition archive
+            for i in range(0, INIT_N_EVALS, BATCH_SIZE):
+                self.visualize_archive(self.acq_archive, acq_flag=True)
+
+            # initialize archives with random solutions (threshhold set to 0)
+            eval_xfoil_loop(self, solution_batch=solution_batch[0::2], measures_batch=measures_batch[::2], acq_flag=False)      # evaluate sobol samples & store in objective archive (GP is updated in eval_xfoil_loop())
+            self.update_archive(candidate_sol=solution_batch[1::2], candidate_bhv=measures_batch[1::2], acq_flag=True)          # initialize acq_archive with remaining sobol samples
+
+            threshold_min = 0
+            remaining_evals = INIT_N_MES_EVALS
+
+            while remaining_evals > 0:
+
+                # calculate MES Acquisition Elites
+                map_elites(self=self, acq_flag=True)
+                self.visualize_archive(archive=self.acq_archive, acq_flag=True)
+                acq_elites = self.acq_archive.as_pandas(include_solutions=True)
+
+                if np.any(np.isin(acq_elites, self.sol_array).all(1)):
+                    raise ValueError("Duplicate Solution Error: New Solutions already exist in GP Data")
+
+                # select up to 200 best acquisition elites from acq_archive
+                n_elites = acq_elites.shape[0]
+                acq_elites = acq_elites.sort_values(by=['objective'], ascending=False).head(200) if n_elites >= 200 else acq_elites.sort_values(by=['objective'], ascending=False)
+
+                # always select BATCH_SIZE//2 best acquisition elites for evaluation
+                best_elites = acq_elites.head(BATCH_SIZE)
+
+                # remove best elites from acq_elites & sample from remaining elites
+                # acq_elites = acq_elites.drop(best_elites.index)
+                # samples_elites = acq_elites.sample(n=BATCH_SIZE//2, replace=False)
+
+                # combine best elites with random samples
+                best_elite_objectives = np.vstack(best_elites.objective_batch())   #, samples_elites.objective_batch()))
+                best_elite_solutions = np.vstack(best_elites.solution_batch())   #, samples_elites.solution_batch()))
+                best_elite_measures = np.vstack(best_elites.measures_batch())   #, samples_elites.measures_batch()))
+
+                # if best elite solutions contains duplicate rows within itself, raise an error
+                if np.unique(best_elite_solutions, axis=1).shape[0] != best_elite_solutions.shape[0]:
+                    raise ValueError("Duplicate Solution Error: New Solutions appear twice in best_elite_solutions")
+
+                # evaluate elites & increment threshhold up to defined maximum
+                threshold_min += (0.001/((INIT_N_EVALS//BATCH_SIZE)-1)) # substract 1 from initial sobol evaluations
+                self.acq_archive.set_threshhold(threshold_min = threshold_min)
+
+                eval_xfoil_loop(self, solution_batch=best_elite_solutions, measures_batch=best_elite_measures, acq_flag=True, candidate_targetvalues=np.vstack(best_elite_objectives))
+                print(f"Best Objective: {self.obj_archive.best_elite.objective}")
+                print(f"Threshhold: {threshold_min}")
+
+                remaining_evals -= BATCH_SIZE
 
         # select acquisition function based on class constructor
         if acq_ucb_flag:
             self.acq_ucb_flag = True
             self.acq_mes_flag = False
             self.acq_function = acq_ucb
-            self.acq_archive.threshold_min = MIN_ACQ_UCB_THRESHHOLD
-            self.domain = self.domain + "_ucb"
+            self.acq_archive.set_threshhold(threshold_min = MIN_ACQ_UCB_THRESHHOLD)
         if acq_mes_flag:
             self.acq_mes_flag = True
             self.acq_ucb_flag = False
             self.acq_function = acq_mes
-            self.acq_archive.threshold_min = MIN_ACQ_MES_THRESHHOLD
-            self.domain = self.domain + "_mes"
+            self.acq_archive.set_threshhold(threshold_min = MIN_ACQ_MES_THRESHHOLD)
 
         print("\n[...] Terminate init_archive()\n")
 
@@ -168,12 +213,11 @@ class SailRun:
 
         if new_solutions.shape[0] == 0:
             return
-
+        
         print(f"Update GP Data [...]\n")
         n_new = new_solutions.shape[0]
         n_old = self.sol_array.shape[0]
         n_expected = n_old + n_new 
-        # np.vstack x and y for bulletproof functionality
         new_solutions = np.vstack(new_solutions) if new_solutions.shape[0] != 0 else new_solutions
         new_objectives = np.vstack(new_objectives) if new_solutions.shape[0] != 0 else new_objectives
         self.sol_array = np.vstack((self.sol_array, new_solutions))
@@ -183,26 +227,18 @@ class SailRun:
         if n_resulted != n_expected:
             raise ValueError("GP Data Update Error")
 
+
     def update_gp_model(self, new_solutions=None, new_objectives=None):
 
-        if new_solutions is None and new_objectives is None:
-            self.gp_model = fit_gp_model(self.sol_array, self.obj_array)
-            return
-
-        # np.vstack x and y for bulletproof functionality
-        new_solutions = np.vstack(new_solutions) if new_solutions.shape[0] != 0 else new_solutions
-        new_objectives = np.vstack(new_objectives) if new_solutions.shape[0] != 0 else new_objectives
-
-        self.sol_array = np.vstack((self.sol_array, new_solutions))
-        self.obj_array = np.vstack((self.obj_array, new_objectives))
-        print("sol array shape" + str(self.sol_array.shape))
-        print("obj array shape" + str(self.obj_array.shape))
-
         self.gp_model = fit_gp_model(self.sol_array, self.obj_array)
+        return
+
 
     def update_seed(self):
+
         self.current_seed += TEST_RUNS
         return self.current_seed
+
 
     def visualize_archive(self, archive, obj_flag=False, acq_flag=False, pred_flag=False, new_flag=False):
 
@@ -211,7 +247,9 @@ class SailRun:
 
         if self.acq_mes_flag and acq_flag:
             vmin = 0.0
-            vmax = 0.6
+            vmax = 0.8
+
+        # all visualisations of the acquisition archive represent the state of the archive, which candidate solutions are sampled from for objective evaluations
 
         anytime_archive_visualizer(self, archive=archive, obj_flag=obj_flag, acq_flag=acq_flag, pred_flag=pred_flag, new_flag=new_flag, vmin=vmin, vmax=vmax)
         if obj_flag:
@@ -245,6 +283,7 @@ class SailRun:
 
             self.new_archive.clear()
             self.new_archive.add(self.new_sol, self.new_obj, self.new_bhv)
+            self.n_new_obj_elites = self.new_archive.stats.num_elites
 
             return
         
@@ -279,7 +318,11 @@ class SailRun:
         if self.acq_function == acq_mes:
             min_acq_threshhold = MIN_ACQ_MES_THRESHHOLD
 
-        obj_archive = GridArchive(
+        class _GridArchive(GridArchive):
+            def set_threshhold(self, threshold_min):
+                self._threshold_min = threshold_min
+
+        obj_archive = _GridArchive(
             solution_dim=SOL_DIMENSION,
             dims=BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
@@ -287,7 +330,7 @@ class SailRun:
             threshold_min = min_obj_threshhold
         )
 
-        acq_archive = GridArchive(
+        acq_archive = _GridArchive(
             solution_dim=SOL_DIMENSION,
             dims=BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
@@ -295,7 +338,7 @@ class SailRun:
             threshold_min = min_acq_threshhold 
         )
 
-        pred_archive = GridArchive(
+        pred_archive = _GridArchive(
             solution_dim=SOL_DIMENSION,
             dims=BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
@@ -304,7 +347,7 @@ class SailRun:
         )
 
         # Used for visualizing new elites (improved + new bin discoveries)
-        new_archive = GridArchive(
+        new_archive = _GridArchive(
             solution_dim=SOL_DIMENSION,
             dims=BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
@@ -313,7 +356,7 @@ class SailRun:
         )
 
         # Used for evaluating quality of results
-        evaluated_predictions_archive = GridArchive(
+        evaluated_predictions_archive = _GridArchive(
             solution_dim=SOL_DIMENSION,
             dims=BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
@@ -322,7 +365,7 @@ class SailRun:
         )
 
         # Used for visualizing prediction errors
-        prediction_error_archive = GridArchive(
+        prediction_error_archive = _GridArchive(
             solution_dim=SOL_DIMENSION,
             dims=BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
@@ -332,7 +375,6 @@ class SailRun:
 
         return obj_archive, acq_archive, pred_archive, new_archive, evaluated_predictions_archive, prediction_error_archive
     
-
 
 def scale_samples(samples, boundaries=SOL_VALUE_RANGE):
     """Scales Samples to boundaries"""
@@ -348,7 +390,7 @@ def scale_samples(samples, boundaries=SOL_VALUE_RANGE):
 
 def store_final_data(self: SailRun):
 
-    max_acq_threshhold = 5.0 if self.acq_ucb_flag else 1.0
+    max_acq_threshhold = 5.0 if self.acq_ucb_flag else 0.8
     
     min_obj_threshhold = MIN_THRESHHOLD
     min_pred_threshhold = MIN_THRESHHOLD
@@ -402,26 +444,29 @@ def evaluate_prediction_archive(self: SailRun):
     print("Evaluate Prediction Archive")
 
     # Extract all elites from the prediction archive - (sorted by objective for nice visual effect during evaluation)
-    unevaluated_prediction_elites = sorted(self.pred_archive, key=lambda x: x.objective, reverse=True)[:self.pred_archive.stats.num_elites]
-    unevaluated_prediction_elites = np.array([(elite.solution, elite.index, elite.objective, elite.measures) for elite in unevaluated_prediction_elites], dtype=[('solution', object), ('index', int), ('objective', float), ('behavior', object)])
-    unevaluated_prediction_solutions = unevaluated_prediction_elites['solution']
-    unevaluated_prediction_measures = np.vstack(unevaluated_prediction_elites['behavior'])
-    eval_xfoil_loop(self, solution_batch=unevaluated_prediction_solutions, measures_batch=unevaluated_prediction_measures, evaluate_prediction_archive=True, candidate_targetvalues=unevaluated_prediction_elites['objective'])
+    unevaluated_prediction_elites = self.pred_archive.as_pandas(include_solutions=True).sort_values(by=['objective'], ascending=False)
+
+    unevaluated_prediction_objectives = unevaluated_prediction_elites.objective_batch()
+    unevaluated_prediction_solutions = unevaluated_prediction_elites.solution_batch()
+    unevaluated_prediction_measures = unevaluated_prediction_elites.measures_batch()
+    eval_xfoil_loop(self, solution_batch=unevaluated_prediction_solutions, measures_batch=unevaluated_prediction_measures, evaluate_prediction_archive=True, candidate_targetvalues=unevaluated_prediction_objectives)
 
     # Extract all elites from the evaluated predictions archive - (sorted by index for comparison)
-    evaluated_prediction_elites = sorted(self.evaluated_predictions_archive, key=lambda x: x.index)[:self.evaluated_predictions_archive.stats.num_elites]
-    evaluated_prediction_elites = np.array([(elite.solution, elite.index, elite.objective, elite.measures) for elite in evaluated_prediction_elites], dtype=[('solution', object), ('index', int), ('objective', float), ('behavior', object)])
-    unevaluated_prediction_elites = unevaluated_prediction_elites[np.argsort(unevaluated_prediction_elites['index'])]
+    evaluated_prediction_elites = self.evaluated_predictions_archive.as_pandas(include_solutions=True)
+    evaluated_prediction_elites = evaluated_prediction_elites.sort_values(by=['index'], ascending=True)
+    unevaluated_prediction_elites = unevaluated_prediction_elites.sort_values(by=['index'], ascending=True)
 
     # Calculate mask for converged prediction elites
-    is_converged_prediction_elite = np.isin(unevaluated_prediction_elites['index'], evaluated_prediction_elites['index'])
+    evaluated_solution_batch = evaluated_prediction_elites.solution_batch()
+    unevaluated_solution_batch = unevaluated_prediction_elites.solution_batch()
+    is_converged_prediction_elite = np.isin(unevaluated_solution_batch, evaluated_solution_batch).all(1)
 
     # Extract converged prediction elites
-    converged_unevaluated_prediction_elites = unevaluated_prediction_elites[is_converged_prediction_elite]
-    converged_evaluated_prediction_elites = evaluated_prediction_elites
+    unevaluated_predictions = unevaluated_prediction_elites[is_converged_prediction_elite]
+    evaluated_predictions = evaluated_prediction_elites
 
-    prediction_error = converged_unevaluated_prediction_elites['objective'] - converged_evaluated_prediction_elites['objective']
-    percentual_error = np.abs(prediction_error)/converged_evaluated_prediction_elites['objective']
+    prediction_error = unevaluated_predictions.objective_batch() - evaluated_predictions.objective_batch()
+    percentual_error = np.abs(prediction_error)/evaluated_predictions.objective_batch()
     mpe_error = np.mean(percentual_error)
     mae_error = np.mean(np.abs(prediction_error))
     mse_error = np.mean(np.square(prediction_error))
@@ -438,10 +483,9 @@ def evaluate_prediction_archive(self: SailRun):
     pred_qd_per_elite = round(qd_pred/self.acq_archive.stats.num_elites, 1)
     pred_verified_qd_per_elite = round(qd_pred_verified/self.evaluated_predictions_archive.stats.num_elites, 1)
 
-    self.evaluated_predictions_archive.add(np.vstack(converged_evaluated_prediction_elites['solution']), converged_evaluated_prediction_elites['objective'], np.vstack(converged_evaluated_prediction_elites['behavior']))
-    self.prediction_error_archive.add(np.vstack(converged_unevaluated_prediction_elites['solution']), percentual_error, np.vstack(converged_unevaluated_prediction_elites['behavior']))
+    self.prediction_error_archive.add(evaluated_prediction_elites.solution_batch(), percentual_error, evaluated_prediction_elites.measures_batch())
 
-    percentual_errors_greater_than_10 = np.sum(np.abs(prediction_error)/converged_evaluated_prediction_elites['objective'] > 0.1)
+    percentual_errors_greater_than_10 = np.sum(np.abs(prediction_error)/evaluated_prediction_elites.objective_batch() > 0.1)
     id_string = f"Initial Seed: {self.initial_seed}  Domain: {self.domain}\n"
     qd_string = f"Obj QD (per bin): {obj_qd_per_bin}\nPred QD (per bin / unverified): {pred_qd_per_bin}\nPred QD (per bin / verified): {pred_verified_qd_per_bin}\nObj QD (per elite): {obj_qd_per_elite}\nPred QD (per elite / unverified): {pred_qd_per_elite}\nPred QD (per elite / verified): {pred_verified_qd_per_elite}\n"
     error_str = f"MAE Error: {mae_error}\nMSE Error: {mse_error}\nMPE Error: {mse_error}\nPercentual Errors greater than 5%:  {percentual_errors_greater_than_10}\nPrediction Errors: \n{np.array2string(prediction_error)}\nPercentual Errors: \n{np.array2string(percentual_error)}\n"
@@ -452,8 +496,8 @@ def evaluate_prediction_archive(self: SailRun):
         file.write(qd_string)
         file.write(error_str)
 
-    true_objective = np.vstack(converged_evaluated_prediction_elites['objective'])
-    predicted_objective = np.vstack(converged_unevaluated_prediction_elites['objective'])
+    true_objective = evaluated_prediction_elites.objective_batch()
+    predicted_objective = unevaluated_prediction_elites.objective_batch()
     pprint(predicted_objective, true_objective, percentual_error)
     print("\nMAE Error: ", mae_error, "\n", "MSE Error: ", mse_error, "\n", "Mean Percentual Error: ", mpe_error, "\n")
 

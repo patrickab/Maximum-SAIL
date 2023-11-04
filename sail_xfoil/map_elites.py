@@ -6,6 +6,7 @@ from ribs.emitters._emitter_base import EmitterBase
 from tqdm import tqdm
 import subprocess
 import numpy as np
+import pandas as pd
 
 ##### Import custom scripts #####
 from xfoil.generate_airfoils import generate_parsec_coordinates
@@ -15,16 +16,16 @@ from config.config import Config
 config = Config('config/config.ini')
 TEST_RUNS = config.TEST_RUNS
 BATCH_SIZE = config.BATCH_SIZE
-PRED_N_EVALS = config.PRED_N_EVALS
 SIGMA_EMITTER = config.SIGMA_EMITTER
 SOL_DIMENSION = config.SOL_DIMENSION
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 BHV_NUMBER_BINS = config.BHV_NUMBER_BINS
 BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 ACQ_N_MAP_EVALS = config.ACQ_N_MAP_EVALS
+PRED_N_MAP_EVALS = config.PRED_N_MAP_EVALS
 PREDICTION_VERIFICATIONS = config.PREDICTION_VERIFICATIONS
 
-def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None, pred_verific_flag=False):
+def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_elite_archive=None):
 
     """
     Perform MAP-Elites iterations.
@@ -62,35 +63,29 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None, pr
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
             threshold_min = -1,)
-
-    subprocess.run("rm *.dat", shell=True, stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
         
     if acq_flag:
         target = "Acq Archive"
         target_function = self.acq_function
         target_archive = self.acq_archive
-        if self.vanilla_flag:
-            obj_df = self.obj_archive.as_pandas(include_solutions=True)
-            self.acq_archive.clear()
-            self.acq_archive.add(obj_df.solution_batch(), obj_df.objective_batch(), obj_df.measures_batch())
-        size_t0 = self.acq_archive.stats.num_elites
-        n_evals = ACQ_N_MAP_EVALS # reduce number of acquisition evaluations for MES
+        if self.acq_mes_flag:
+            n_evals = ACQ_N_MAP_EVALS//1.5 # reduce number of acquisition evaluations for MES
+        else:
+            n_evals = ACQ_N_MAP_EVALS
+
     if pred_flag:
         target = "Pred Archive"
         target_function = predict_objective
         target_archive = self.pred_archive
-        if self.vanilla_flag:
-            obj_df = self.obj_archive.as_pandas(include_solutions=True)
-            self.pred_archive.clear()
-            self.pred_archive.add(obj_df.solution_batch(), obj_df.objective_batch(), obj_df.measures_batch())
-        size_t0 = self.pred_archive.stats.num_elites
-        n_evals = PRED_N_EVALS if not self.pred_verific_flag else PRED_N_EVALS//(PREDICTION_VERIFICATIONS+1)
+        n_evals = PRED_N_MAP_EVALS if not self.pred_verific_flag else PRED_N_MAP_EVALS//(PREDICTION_VERIFICATIONS+1)
 
     remaining_evals = n_evals
     total_iterations = remaining_evals // BATCH_SIZE
-    obj_t0 = self.obj_archive.stats.num_elites
+
+    size_t0 = target_archive.stats.num_elites
     print(f"{target} Size: ", str(size_t0))
-        
+
+
     with tqdm(total=total_iterations) as progress:
         while((remaining_evals-BATCH_SIZE >= 0)):
 
@@ -130,23 +125,48 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None, pr
             scheduler.tell(scheduler_obj, scheduler_bhv)
             remaining_evals -= BATCH_SIZE
 
-    obj_t1 = self.obj_archive.stats.num_elites
-    size_t1 = self.acq_archive.stats.num_elites if acq_flag else self.pred_archive.stats.num_elites
-    target_size_t1 = target_archive.stats.num_elites
-
+    # calculate anytime stats
+    size_t1 = target_archive.stats.num_elites
     print(f"{target} Size: ", str(size_t1))
-    if acq_flag and pred_flag:
-        raise ValueError("MAP-Elites:  acq_flag and pred_flag both True   -   debug this!")
-    if obj_t0 != obj_t1:
-        raise ValueError("MAP-Elites:  obj_t0 != obj_t1   -   debug this!")
-    if size_t0 > size_t1:
-        raise ValueError("MAP-Elites:  size_t0 < size_t1   -   debug this!")
-    if target_size_t1 != size_t1:
-        raise ValueError("MAP-Elites:  target_size_t1 != size_t1   -   debug this!")
+
+
+    # remove all acquisition elites, that are contained in the objective archive
+    if self.acq_mes_flag and acq_flag:
+
+        acq_elites_df = self.acq_archive.as_pandas(include_solutions=True)
+
+        acq_elites_solutions = acq_elites_df.solution_batch()
+        acq_elites_objectives = acq_elites_df.objective_batch()
+        acq_elites_measures = acq_elites_df.measures_batch()
+
+        new_solution_mask = ~np.isin(acq_elites_solutions, self.sol_array).all(1)
+
+        acq_elites_solutions = acq_elites_solutions[new_solution_mask]
+        acq_elites_objectives = acq_elites_objectives[new_solution_mask]
+        acq_elites_measures = acq_elites_measures[new_solution_mask]
+
+        self.acq_archive.clear()
+        self.acq_archive.add(acq_elites_solutions, acq_elites_objectives, acq_elites_measures)
+
+        new_elite_archive.clear()
+        new_elite_archive.add(acq_elites_solutions, acq_elites_objectives, acq_elites_measures)
+
+        size_t1 = self.acq_archive.stats.num_elites
+        print(f"{target} Size: ", str(size_t1))
+
+
+    # clear all target elites, & refill only with obj elites, if vanilla sail is used
+    if self.vanilla_flag:
+        obj_df = self.obj_archive.as_pandas(include_solutions=True)
+        obj_solutions = obj_df.solution_batch()
+        obj_objectives = obj_df.objective_batch()
+        obj_measures = obj_df.measures_batch()
+
+        target_archive.clear()
+        target_archive.add(obj_solutions, obj_objectives, obj_measures)
 
 
     print("[...] End Map-Elites\n\n")
-
     return new_elite_archive, size_t0, size_t1
 
 

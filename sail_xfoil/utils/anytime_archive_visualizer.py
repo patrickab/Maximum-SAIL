@@ -11,14 +11,15 @@ from config.config import Config
 config = Config('config/config.ini')
 
 BATCH_SIZE = config.BATCH_SIZE
-ACQ_N_OBJ_EVALS = config.ACQ_N_OBJ_EVALS
 INIT_N_EVALS = config.INIT_N_EVALS
-MAX_PRED_VERIFICATION = config.MAX_PRED_VERIFICATION
+ACQ_N_OBJ_EVALS = config.ACQ_N_OBJ_EVALS
+PRED_N_OBJ_EVALS = config.PRED_N_OBJ_EVALS
+INIT_N_MES_EVALS = config.INIT_N_MES_EVALS
 
 
 # eg for n_obj_evals=1280, and BATCH_SIZE=10, we buffer 128/(2^3) = 16 pngs
 # for rendering all videos correctly, n_obj_evals must be contained in [BATCH_SIZE * 2^(n+3)]
-n_obj_evals = INIT_N_EVALS + ACQ_N_OBJ_EVALS + MAX_PRED_VERIFICATION
+n_obj_evals = INIT_N_EVALS + ACQ_N_OBJ_EVALS + PRED_N_OBJ_EVALS + INIT_N_MES_EVALS
 PNG_BUFFERSIZE = (n_obj_evals/BATCH_SIZE) / 8
 
 if not PNG_BUFFERSIZE.is_integer():
@@ -144,7 +145,7 @@ def anytime_archive_visualizer(self, archive, vmin, vmax, obj_flag=False, acq_fl
             gc.collect()
 
         # if the last iteration is reached & all videos are buffered
-        if acq_flag and (iteration == n_obj_evals//BATCH_SIZE):
+        if obj_flag and (iteration == n_obj_evals//BATCH_SIZE):
 
             # go to the parent directory & move all contents from all subdirectories to parent directory
             os.chdir("..")

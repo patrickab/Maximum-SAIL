@@ -1,4 +1,3 @@
-###### Import Foreign Packages #####
 import numpy as np
 import subprocess
 import datetime
@@ -8,19 +7,17 @@ import gc
 import os
 
 ###### Import Custom Scripts ######
-from sail_runs import run_custom_sail, run_vanilla_sail, prediction_verification_loop
+from sail_runs import run_custom_sail, run_vanilla_sail, run_random_sail
 from sail_runner import SailRun, evaluate_prediction_archive, store_final_data
-from gp.predict_objective import predict_objective
 from map_elites import map_elites
 
 ###### Configurable Variables ######
 from config.config import Config
 config = Config('config/config.ini')
 PREDICTION_VERIFICATIONS = config.PREDICTION_VERIFICATIONS
-MAX_PRED_VERIFICATION = config.MAX_PRED_VERIFICATION
+PRED_N_OBJ_EVALS = config.PRED_N_OBJ_EVALS
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 SIGMA_EMITTER = config.SIGMA_EMITTER
-PRED_N_EVALS = config.PRED_N_EVALS
 BATCH_SIZE = config.BATCH_SIZE
 TEST_RUNS = config.TEST_RUNS
 
@@ -32,16 +29,16 @@ np.set_printoptions(precision=4, suppress=True, floatmode='fixed', linewidth=120
 # global variable used for building dynamic folder structure for benchmarks
 benchmark_domains = []
 
-if (BATCH_SIZE%2)!=0 or ((MAX_PRED_VERIFICATION//PREDICTION_VERIFICATIONS)%2)!=0:
+if (BATCH_SIZE%2)!=0 or ((PRED_N_OBJ_EVALS//PREDICTION_VERIFICATIONS)%2)!=0:
     raise ValueError("BATCH_SIZE and MAX_PRED_VERIFICATION//PEDICTION_VERIFICATION must be even numbers")
 
-def sail(initial_seed, acq_ucb_flag=False, acq_mes_flag=False, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, pred_verific_flag=False, greedy_flag=False, explore_flag=False, hybrid_flag=False):
+def sail(initial_seed, acq_ucb_flag=False, acq_mes_flag=False, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, pred_verific_flag=False, greedy_flag=False, hybrid_flag=False, random_init=False, mes_init=False):
 
     """
     Note: Extra Evals are only used if pred_verific_flag is set to True resulting in more than ACQ_N_OBJ_EVALS. In this case the extra evaluations are counted, returned & also given to subsequent sail runs
     """
 
-    current_run = SailRun(initial_seed, acq_ucb_flag=acq_ucb_flag, acq_mes_flag=acq_mes_flag, sail_vanilla_flag=sail_vanilla_flag, sail_custom_flag=sail_custom_flag, sail_random_flag=sail_random_flag, pred_verific_flag=pred_verific_flag, greedy_flag=greedy_flag, explore_flag=explore_flag, hybrid_flag=hybrid_flag) 
+    current_run = SailRun(initial_seed, acq_ucb_flag=acq_ucb_flag, acq_mes_flag=acq_mes_flag, sail_vanilla_flag=sail_vanilla_flag, sail_custom_flag=sail_custom_flag, sail_random_flag=sail_random_flag, pred_verific_flag=pred_verific_flag, greedy_flag=greedy_flag, hybrid_flag=hybrid_flag, random_init=random_init, mes_init=mes_init) 
 
     print("\n ## Exit Initialization ##")
     print(" ## Enter Acquisition Loop ##\n\n")
@@ -51,12 +48,12 @@ def sail(initial_seed, acq_ucb_flag=False, acq_mes_flag=False, sail_vanilla_flag
         gc.collect()
 
     if sail_custom_flag:
-        run_custom_sail(current_run)
+        run_custom_sail(current_run, acq_loop=True)
         gc.collect()
 
-    # if sail_random_flag:
-    #     run_random_sail(current_run)
-    #     gc.collect()
+    if sail_random_flag:
+        run_random_sail(current_run)
+        gc.collect()
 
     global benchmark_domains
     benchmark_domains.append(current_run.domain)
@@ -69,15 +66,17 @@ def sail(initial_seed, acq_ucb_flag=False, acq_mes_flag=False, sail_vanilla_flag
     acq_elites_solutions = acq_elites_df.solution_batch()
     acq_elites_measures = acq_elites_df.measures_batch()
 
-    current_run.pred_archive.clear()
+    obj_elites_df = current_run.obj_archive.as_pandas(include_solutions=True)
+    obj_elites_solutions = obj_elites_df.solution_batch()
+    obj_elites_measures = obj_elites_df.measures_batch()
+
     current_run.update_archive(candidate_sol=acq_elites_solutions, candidate_bhv=acq_elites_measures, pred_flag=True)
+    current_run.update_archive(candidate_sol=obj_elites_solutions, candidate_bhv=obj_elites_measures, pred_flag=True)
 
     if current_run.pred_verific_flag:
-        prediction_verification_loop(current_run)
+        run_custom_sail(current_run, pred_loop=True)
     else:
         map_elites(current_run, pred_flag=True)
-        current_run.visualize_archive(archive=current_run.pred_archive, pred_flag=True)
-
 
     evaluate_prediction_archive(current_run)
     store_final_data(current_run)
@@ -99,13 +98,10 @@ if __name__ == "__main__":
 
         benchmark_domains = []
         
-        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True,  hybrid_flag=True, acq_ucb_flag=True)
-        sail(initial_seed=i, sail_vanilla_flag=True, pred_verific_flag=False, acq_ucb_flag=True)
-        # sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, hybrid_flag=True, acq_ucb_flag=True)
-        # sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True,  hybrid_flag=True, acq_mes_flag=True)
-        # sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, hybrid_flag=True, acq_mes_flag=True)
-        # sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True,  greedy_flag=True)
-        # sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, greedy_flag=True)
+        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, greedy_flag=True, acq_mes_flag=True)
+        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, hybrid_flag=True, acq_ucb_flag=True, mes_init=True)
+        #sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, hybrid_flag=True, acq_ucb_flag=True, random_init=True)
+        #sail(initial_seed=i, sail_vanilla_flag=True, acq_ucb_flag=True)
         gc.collect()
 
         img_filenames = [f"imgs/final_heatmaps_{i}_{benchmark_domain}.png" for benchmark_domain in benchmark_domains]
