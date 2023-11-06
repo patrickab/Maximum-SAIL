@@ -247,7 +247,7 @@ class SailRun:
 
         if self.acq_mes_flag and acq_flag:
             vmin = 0.0
-            vmax = 0.8
+            vmax = 8
 
         # all visualisations of the acquisition archive represent the state of the archive, which candidate solutions are sampled from for objective evaluations
 
