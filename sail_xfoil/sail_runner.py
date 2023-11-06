@@ -45,13 +45,26 @@ class SailRun:
         """
         Initialize a SAIL Run.
 
-        Args:
-            initial_seed (int): The initial seed value.
-            vanilla_flag (bool): Flag for vanilla SAIL.
-            custom_flag (bool): Flag for custom SAIL.
-            random_flag (bool): Flag for random SAIL.
-            pred_verific_flag (bool): Flag for prediction verification.
-            extra_evals (int): The number of extra evaluations.
+        Parameters
+    
+            initial_seed : used for seeding - among each benchmark iteration, all algorithms are seeded with the same value. This value is incremented by the number of TEST_RUNS, to ensure a unique sequence of seeds for each benchmark iteration, identical across all benchmarked algorithms.
+        
+            acq_ucb_flag : boolean flag for running SAIL with UCB acquisition function
+            acq_mes_flag : boolean flag for running SAIL with MES acquisition function
+        
+            greedy_flag: boolean flag for sampling only highest performing solutions from new elites archive (100% exploitation)
+            hybrid_flag: boolean flag for sampling certain percentage of highest performing solutions, certain percentage of new bin solutions (xx.xx% exploitation, 100-xx.xx% exploration)
+        
+            random_init: boolean flag for initializing target archive with quasi-random sobol samples
+            mes_init: boolean flag for initializing target archive with MES samples
+        
+            sail_vanilla_flag : boolean flag for running SAIL with vanilla behavior
+                - before each MAP-Loop, initialize target archive with objective elites
+            sail_custom_flag : boolean flag for running SAIL with custom behavior 
+                - before each MAP-Loop, initialize target archive with objective elites & updated target elites
+                - requires selection of: (greedy_flag or hybrid_flag) and (random_init or mes_init)
+                - offers possibility of using pred_verific_flag
+            sail_random_flag : boolean flag for running SAIL with uniform random solutions
         """
 
         # read into logger & use properly for DEBUG, INFO, WARNING, ERROR, CRITICAL
@@ -121,7 +134,7 @@ class SailRun:
 
         if sail_vanilla_flag or sail_random_flag or random_init:
 
-            solution_batch = create_sobol_samples(order=INIT_N_EVALS*2, dim=len(SOL_VALUE_RANGE), seed=self.current_seed)
+            solution_batch = create_sobol_samples(order=INIT_N_EVALS*2, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
             solution_batch = solution_batch.T
             solution_batch = scale_samples(solution_batch)
             measures_batch = solution_batch[:, 1:3]

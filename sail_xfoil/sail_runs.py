@@ -36,11 +36,6 @@ from sail_runner import SailRun
 
 
 def run_random_sail(self: SailRun):
-    """
-    Extra evaluations are given if eval_pred_flag is True (see sail.py)
-        if not eval_pred_flag, extra_evals = 0
-    """
-
 
     ranges = np.array(SOL_VALUE_RANGE)
 
@@ -72,8 +67,8 @@ def run_vanilla_sail(self: SailRun):
         # Produce new acquisition elites
         target_t0 = self.acq_archive.stats.num_elites
         new_acq_elites, _, _ = map_elites(self, acq_flag=True)
-        if new_acq_elites.stats.num_elites < BATCH_SIZE: ensure_n_new_elites(self=self, new_elite_archive=new_acq_elites, acq_flag=True)      # Sample until enough new acquisition elites are found
-        candidate_solutions_df = self.acq_archive.as_pandas(include_solutions=True).sample(n=BATCH_SIZE, random_state=self.initial_seed, replace=False) # IMPORTANT: sobol sample in seed paper
+        if new_acq_elites.stats.num_elites < BATCH_SIZE: ensure_n_new_elites(self=self, new_elite_archive=new_acq_elites, acq_flag=True)                  # Sample until enough new acquisition elites are found
+        candidate_solutions_df = self.acq_archive.as_pandas(include_solutions=True).sample(n=BATCH_SIZE, random_state=self.initial_seed, replace=False)   # IMPORTANT ToDo: sobol sample in seed paper
         target_t1 = self.acq_archive.stats.num_elites
 
         self.visualize_archive(archive=self.acq_archive, acq_flag=True)
@@ -174,7 +169,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
 def ensure_n_new_elites(self: SailRun, new_elite_archive, acq_flag=False, pred_flag=False):
 
     """
-    - Ensures that the appropiate number of candidate solutions are availible for evaluation
+    - Ensures that the appropiate number of candidate solutions is availible for evaluation
     - After 3 extra MAP-Loops, the function returns the best elites found so far to avoid infinite loops
 
     Inputs:
@@ -208,7 +203,9 @@ def prepare_sample_elites(self: SailRun, new_elite_archive: GridArchive, old_eli
     """
     - extracts all elites from new_elite_archive
     - splits them into improved elites and new bin elites
-    - orders them by objective improvement
+        - (if) ucb or pred is calculated: calculates objective improvement for improved elites
+        - (else) objective improvement = objective
+    - orders solutions by objective improvement
 
     Inputs:
         Old Elite Archive
@@ -233,13 +230,16 @@ def prepare_sample_elites(self: SailRun, new_elite_archive: GridArchive, old_eli
     improved_old_elites = improved_old_elites.sort_values(by=['index'])
 
     new_bin_elites = new_bin_elites.assign(objective_improvement = np.array(new_bin_elites['objective'])).sort_values(by=['objective_improvement'], ascending=False)
-    improved_elites = improved_elites.assign(objective_improvement = np.array(improved_elites['objective'] - np.array(improved_old_elites['objective']))).sort_values(by=['objective_improvement'], ascending=False)
-
-    # ToDo: Implement in more elegant manner 
-    if self.acq_mes_flag: # Dont calculate objective improvement for MES
-        improved_elites = improved_elites.assign(objective_improvement = np.array(improved_elites['objective'])).sort_values(by=['objective_improvement'], ascending=False)
-    if self.acq_mes_flag and pred_flag:
+    
+    if self.acq_ucb_flag:
         improved_elites = improved_elites.assign(objective_improvement = np.array(improved_elites['objective'] - np.array(improved_old_elites['objective']))).sort_values(by=['objective_improvement'], ascending=False)
+
+    if self.acq_mes_flag: # Dont calculate objective improvement for MES
+        if pred_flag:
+            improved_elites = improved_elites.assign(objective_improvement = np.array(improved_elites['objective'] - np.array(improved_old_elites['objective']))).sort_values(by=['objective_improvement'], ascending=False)
+        else:
+            improved_elites = improved_elites.assign(objective_improvement = np.array(improved_elites['objective'])).sort_values(by=['objective_improvement'], ascending=False)
+
 
     return improved_elites, new_bin_elites
 

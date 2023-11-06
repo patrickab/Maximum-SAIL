@@ -10,6 +10,7 @@ from config.config import Config
 config = Config('config/config.ini')
 SIGMA_UCB = config.SIGMA_UCB
 
+
 def acq_mes(genomes, gp_model):
 
     dev = device("cuda" if cuda.is_available() else "cpu")
