@@ -43,7 +43,6 @@ import pandas as pd
 
 ##### Import custom scripts #####
 from xfoil.generate_airfoils import generate_parsec_coordinates
-from acq_functions.acq_mes import mes_sobol_cellgrid
 from gp.predict_objective import predict_objective
 
 from config.config import Config
@@ -70,14 +69,14 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
             threshold_min = -1,)
-        
+
     if acq_flag:
         target = "Acq Archive"
         target_function = self.acq_function
         target_archive = self.acq_archive
         if self.acq_mes_flag:
-            self.bhv_cellgrid, self.mes_cellgrid = mes_sobol_cellgrid(self)   # update mes cellgrid
-            n_evals = ACQ_N_MAP_EVALS//20                                     # reduce number of acquisition evaluations for MES
+            self.update_cellgrids()
+            n_evals = ACQ_N_MAP_EVALS//20   # reduce number of acquisition evaluations for MES
         else:
             n_evals = ACQ_N_MAP_EVALS
 

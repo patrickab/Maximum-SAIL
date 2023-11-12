@@ -155,7 +155,7 @@ class SailRun:
             self.acq_mes_flag = True
             self.acq_ucb_flag = False
 
-            self.bhv_sobol_cellgrid, self.mes_sobol_cellgrid = mes_sobol_cellgrid(self)
+            self.update_cellgrids()
 
             solution_batch = create_sobol_samples(order=2*INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
             solution_batch = solution_batch.T
@@ -251,7 +251,12 @@ class SailRun:
 
         self.gp_model = fit_gp_model(self.sol_array, self.obj_array)
         return
+    
 
+    def update_cellgrids(self):
+
+        self.bhv_sobol_cellgrids, self.mes_sobol_cellgrid = mes_sobol_cellgrids(self)
+        return
 
     def update_seed(self):
 
@@ -491,11 +496,11 @@ def evaluate_prediction_archive(self: SailRun):
     qd_obj = sum(self.obj_archive.as_pandas(include_solutions=True)['objective'].values)
     qd_pred = sum(self.pred_archive.as_pandas(include_solutions=True)['objective'].values)
     qd_pred_verified = sum(self.evaluated_predictions_archive.as_pandas(include_solutions=True)['objective'].values)
-    n_bins = np.prod(self.obj_archive.dims)
+    n_cells = np.prod(self.obj_archive.dims)
 
-    obj_qd_per_bin = round(qd_obj/n_bins, 1)
-    pred_qd_per_bin = round(qd_pred/n_bins, 1)
-    pred_verified_qd_per_bin = round(qd_pred_verified/n_bins, 1)
+    obj_qd_per_bin = round(qd_obj/n_cells, 1)
+    pred_qd_per_bin = round(qd_pred/n_cells, 1)
+    pred_verified_qd_per_bin = round(qd_pred_verified/n_cells, 1)
     obj_qd_per_elite = round(qd_obj/self.obj_archive.stats.num_elites, 1)
     pred_qd_per_elite = round(qd_pred/self.acq_archive.stats.num_elites, 1)
     pred_verified_qd_per_elite = round(qd_pred_verified/self.evaluated_predictions_archive.stats.num_elites, 1)
@@ -525,7 +530,7 @@ def evaluate_prediction_archive(self: SailRun):
     return
 
 
-def mes_sobol_cellgrid(self):
+def mes_sobol_cellgrids(self):
 
     """
     Creates a Sobol Cellgrid that can be used for all cells
@@ -537,18 +542,70 @@ def mes_sobol_cellgrid(self):
 
         Seperation of bhv_cellgrids and mes_cellgrids allows us to
         scale the behavior space independently from the solution space,
-        which accelerates calculation significantly.
+        which accelerates calculation, while reducing also reducing
+        memory consumption significantly.
 
-        ###link to github###
+        Mes/Bhv Cellgrids can be accessed from outside.
+        Mes Cellgrid is constant across all bins.
+        Bhv Cellgrid can be accessed by index.
+
+        Therefore, we can rapidly assamble the final cellgrid
+        for each sample within the MAP-Loop
+
+    Returns:
+
+        bhv_cellgrids : 625 bins x 10000 samples x 2 dimensions
+        mes_cellgrid  :   1      x 10000 samples x 11 dimensions
+
+    # how does the naive approach work? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.pdf
+    # why would this approach be naive? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.mp4
     """
 
-    sobol_cellgrid = create_sobol_samples(order=10000, dim=SOL_DIMENSION, seed=self.current_seed).T    
+    sobol_cellgrid = create_sobol_samples(order=10000, dim=SOL_DIMENSION, seed=self.current_seed).T
 
-    bhv_cellgrid = sobol_cellgrid[:, 1:3]
+    archive = self.obj_archive
+    n_cells = np.prod(archive.dims)
+
+    archive_indices = range(n_cells)
+    idx = archive.int_to_grid_index(archive_indices)
 
     lower_bounds = np.array(SOL_VALUE_RANGE)[:, 0]
     upper_bounds = np.array(SOL_VALUE_RANGE)[:, 1]
 
+    bhv_cellgrid = sobol_cellgrid[:, 1:3]
     mes_cellgrid = sobol_cellgrid * (upper_bounds - lower_bounds) + lower_bounds
 
-    return bhv_cellgrid, mes_cellgrid
+    boundaries_0 = archive.boundaries[0]
+    boundaries_1 = archive.boundaries[1]
+
+    # 625 bins, 10000 samples, 2 dimensions
+    bhv_cellgrids = np.empty((n_cells, 10000, BHV_DIMENSION))
+
+    for i in range(n_cells):
+
+        measure_0_idx, measure_1_idx = idx[i]
+
+        cell_bounds_0 = (boundaries_0[measure_0_idx], boundaries_0[measure_0_idx+1])
+        cell_bounds_1 = (boundaries_1[measure_1_idx], boundaries_1[measure_1_idx+1])
+
+        cell_bounds_i = np.array([cell_bounds_0, cell_bounds_1])
+
+        lower_bounds = cell_bounds_i[:, 0]
+        upper_bounds = cell_bounds_i[:, 1]
+        cell_bound_ranges = upper_bounds - lower_bounds
+
+        bhv_cellgrid_i = bhv_cellgrid.copy()        
+        bhv_cellgrid_i = bhv_cellgrid_i * cell_bound_ranges.T + lower_bounds   # scale sobol cellgrid to cellbounds
+        bhv_cellgrids[i] = bhv_cellgrid_i                                      # insert bhv cellgrid into mes cellgrid
+
+        verification = self.obj_archive.index_of(bhv_cellgrid_i)
+
+        # verify if all samples are in the same cell
+        if np.unique(verification).shape[0] != 1:
+            raise ValueError("MES Sobol Cellgrid Error")
+        
+        # verify if all samples are in the correct cell
+        if verification[0] != i:
+            raise ValueError("MES Sobol Cellgrid Error")
+
+    return bhv_cellgrids, mes_cellgrid
