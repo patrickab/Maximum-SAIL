@@ -3,6 +3,7 @@ from torch import float64, cuda, device, tensor
 from botorch.acquisition import qMaxValueEntropy
 from chaospy import create_sobol_samples
 import numpy as np
+import gc
 
 ### Custom Scripts ###w
 from utils.pprint_nd import pprint
@@ -19,21 +20,37 @@ SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 def acq_mes(self, genomes):
 
     dev = device("cuda" if cuda.is_available() else "cpu")
-
-    genomes = tensor(genomes, dtype=float64, device=dev)     # Shape: PARALLEL_BATCH_SIZE x SOL_DIMENSION
-    transformed_genomes = genomes.unsqueeze(1)               # Shape: PARALLEL_BATCH_SIZE x 1 x SOL_DIMENSION
-
-    acq_entropy_tensor = tensor(np.zeros((len(genomes), 1)), dtype=float64, device=dev)   # Shape: PARALLEL_BATCH_SIZE x 1
+    rng = np.random.default_rng(self.current_seed)
+    cell_indices = self.obj_archive.index_of(genomes[:,1:3])
+    cellbounds = self.bhv_cellbounds[cell_indices]
+    solutionbounds = np.array(SOL_VALUE_RANGE)
+    cell_solutionbounds = np.repeat(solutionbounds[np.newaxis,:,:], len(genomes), axis=0)    # create 8 copies of solutionbounds
+    cell_solutionbounds[:, 1:3] = cellbounds                                                 # insert niche-specific cellbounds
+ 
+    # mutate each genome 150 times using gaussian noise scaled to cell_solutionbounds
+    genomes = np.repeat(genomes, 150, axis=0).reshape(len(genomes), 150, SOL_DIMENSION)   
     for i in range(len(genomes)):
+        scaled_noise = rng.normal(scale=np.abs(0.2*(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), size=(150, SOL_DIMENSION))
+        genomes[i] = np.clip(genomes[i] + scaled_noise, cell_solutionbounds[i,:,0], cell_solutionbounds[i,:,1])
 
-        cellgrid = assamble_cellgrid(self, genomes[i])
+    genomes_tensor = tensor(genomes, dtype=float64, device=dev)     # Shape: 8 x BATCH_SIZE x SOL_DIMENSION
+    transformed_genomes = genomes_tensor.unsqueeze(1)               # Shape: 1 x BATCH_SIZE x 1 x SOL_DIMENSION
 
+    # calculate MES for each mutant batch & select best mutant
+    acq_solution_tensor = tensor(np.zeros((len(genomes), SOL_DIMENSION)), dtype=float64, device=dev)     # Shape: PARALLEL_BATCH_SIZE x 1
+    acq_entropy_tensor = tensor(np.zeros((len(genomes), 1)), dtype=float64, device=dev)   # Shape: PARALLEL_BATCH_SIZE x 1
+    for i in range(genomes.shape[0]):
+
+        cellgrid = assamble_cellgrid(self, genomes_tensor[i,0])
         cellgrid = tensor(cellgrid, dtype=float64, device=dev)   # Shape: 10000 x SOL_DIMENSION
-        MES = qMaxValueEntropy(self.gp_model, cellgrid)
+        MES = qMaxValueEntropy(model=self.gp_model, candidate_set=cellgrid, num_y_samples=256)
+        acq_entropy = MES(transformed_genomes[i].permute(1, 0, 2))
+        
+        elite_index = acq_entropy.argmax()
+        acq_entropy_tensor[i] = acq_entropy[elite_index]
+        acq_solution_tensor[i] = genomes_tensor[i,elite_index]
 
-        acq_entropy = MES(transformed_genomes[i])
-        acq_entropy_tensor[i] = acq_entropy
-
+    self.mes_elites = acq_solution_tensor.detach().numpy()
     mes_ndarray = acq_entropy_tensor.detach().numpy()
 
     return np.hstack(mes_ndarray)
@@ -79,8 +96,9 @@ def mes_sobol_cellgrids(self):
 
     Returns:
 
-        bhv_cellgrids : 625 bins x 10000 samples x 2 dimensions
-        mes_cellgrid  :   1      x 10000 samples x 11 dimensions
+        bhv_cellbounds : 625 bins x 2  dimensions x 2 boundaries
+        bhv_cellgrids  : 625 bins x 10000 samples x 2 dimensions
+        mes_cellgrid   :   1      x 10000 samples x 11 dimensions
 
     # how does the naive approach work? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.pdf
     # why would this approach be naive? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.mp4
@@ -105,6 +123,7 @@ def mes_sobol_cellgrids(self):
 
     # 625 bins, 10000 samples, 2 dimensions
     bhv_cellgrids = np.empty((n_cells, 10000, BHV_DIMENSION))
+    bhv_cellbounds = np.empty((n_cells, BHV_DIMENSION, 2))
 
     for i in range(n_cells):
 
@@ -114,6 +133,7 @@ def mes_sobol_cellgrids(self):
         cell_bounds_1 = (boundaries_1[measure_1_idx], boundaries_1[measure_1_idx+1])
 
         cell_bounds_i = np.array([cell_bounds_0, cell_bounds_1])
+        bhv_cellbounds[i] = cell_bounds_i
 
         lower_bounds = cell_bounds_i[:, 0]
         upper_bounds = cell_bounds_i[:, 1]
@@ -133,4 +153,4 @@ def mes_sobol_cellgrids(self):
         if verification[0] != i:
             raise ValueError("MES Sobol Cellgrid Error")
 
-    return bhv_cellgrids, mes_cellgrid
+    return bhv_cellbounds, bhv_cellgrids, mes_cellgrid
