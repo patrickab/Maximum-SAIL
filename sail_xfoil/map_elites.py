@@ -77,7 +77,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
         target_archive = self.acq_archive
         if self.acq_mes_flag:
             self.update_cellgrids()
-            n_evals = ACQ_N_MAP_EVALS//8   # reduce number of acquisition evaluations for MES
+            n_evals = ACQ_N_MAP_EVALS//6   # reduce number of acquisition evaluations for MES
         else:
             n_evals = ACQ_N_MAP_EVALS
 
@@ -95,6 +95,27 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
 
     with tqdm(total=total_iterations) as progress:
         while((remaining_evals-BATCH_SIZE >= 0)):
+
+            # store only the best elites, initially with high selection pressure, decreasing over time
+            if self.acq_mes_flag and acq_flag and remaining_evals > n_evals*0.2:
+
+                n_elites = self.acq_archive.stats.num_elites
+
+                if n_elites > 200:
+                    percent = 0.5
+                elif n_elites > 100:
+                    percent = 0.6
+                elif n_elites > 50:
+                    percent = 0.7
+                elif n_elites > 25:
+                    percent = 0.9
+                else:
+                    percent = 1
+
+                iter_elites = self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).head(int(n_elites*percent))                
+
+                self.acq_archive.clear()
+                self.acq_archive.add(iter_elites.solution_batch(), iter_elites.objective_batch(), iter_elites.measures_batch())
 
             progress.update(1)
             valid_indices = np.empty(0, dtype=int) 

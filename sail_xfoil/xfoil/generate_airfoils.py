@@ -56,7 +56,7 @@ def export_parsec_coordinates(upper_xy, lower_xy, io_flag):
 
             valid_indices.append(index)
             stacked_xy = np.vstack((upper_xy[index], lower_xy[index][::-1]))
-            np.savetxt(f'airfoil_{index}.dat', stacked_xy, fmt='%f', delimiter=' ', newline='\n', header=f'airfoil_{index}\n', comments='') if io_flag else None
+            np.savetxt(f'airfoil_{index}.dat', stacked_xy, fmt='%f', delimiter=' ', newline='\n', header=f'airfoil_{index}', comments='') if io_flag else None
 
             # Calculate the surface area using the trapezoidal rule in a vectorized manner
             dx = 1/N_XY_COORDINATES
