@@ -22,11 +22,8 @@ INIT_N_MES_EVALS = config.INIT_N_MES_EVALS
 n_obj_evals = INIT_N_EVALS + ACQ_N_OBJ_EVALS + PRED_N_OBJ_EVALS + INIT_N_MES_EVALS
 PNG_BUFFERSIZE = (n_obj_evals/BATCH_SIZE) / 8
 
-if not PNG_BUFFERSIZE.is_integer():
-    raise ValueError("Total Obj Evals must be divisible by 8*BATCH_SIZE")
-else:
-    PNG_BUFFERSIZE = int(PNG_BUFFERSIZE)
-    print("PNG_BUFFERSIZE: ", PNG_BUFFERSIZE)
+PNG_BUFFERSIZE = int(PNG_BUFFERSIZE)
+print("PNG_BUFFERSIZE: ", PNG_BUFFERSIZE)
 
 def anytime_archive_visualizer(self, archive, vmin, vmax, obj_flag=False, acq_flag=False, pred_flag=False, new_flag=False):
 

@@ -100,6 +100,7 @@ class SailRun:
         self.new_sol = np.empty((0, SOL_DIMENSION))
         self.new_obj = np.empty((0, OBJ_DIMENSION))
         self.new_bhv = np.empty((0, BHV_DIMENSION))
+        self.mes_elites = np.empty((0, SOL_DIMENSION))
 
         self.initial_seed = initial_seed
         self.current_seed = initial_seed
@@ -118,7 +119,7 @@ class SailRun:
         self.sol_array = np.empty((0, SOL_DIMENSION))
         self.obj_array = np.empty((0, OBJ_DIMENSION))
 
-        # select Max Entropy Search for archive initialization
+        #### Can be used in future to initialize archives with different threshholds ####
         self.acq_function = acq_ucb
         self.acq_mes_flag = False
         self.acq_ucb_flag = True
@@ -131,6 +132,7 @@ class SailRun:
         print(f"Initial Seed: {self.initial_seed}")    
         print(f"Initialize Archive [...]")
 
+        # for vanilla sail, random sail & random init just draw sobol samples
         if sail_vanilla_flag or sail_random_flag or random_init:
 
             solution_batch = create_sobol_samples(order=2*INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
@@ -150,11 +152,6 @@ class SailRun:
 
         if sail_custom_flag and not random_init:
 
-            # select Max Entropy Search for archive initialization
-            self.acq_function = acq_mes
-            self.acq_mes_flag = True
-            self.acq_ucb_flag = False
-
             self.update_cellgrids()
 
             solution_batch = create_sobol_samples(order=2*INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
@@ -170,7 +167,10 @@ class SailRun:
             eval_xfoil_loop(self, solution_batch=solution_batch[0::2], measures_batch=measures_batch[::2], acq_flag=False)      # evaluate sobol samples & store in objective archive (GP is updated in eval_xfoil_loop())
             self.update_archive(candidate_sol=solution_batch[1::2], candidate_bhv=measures_batch[1::2], acq_flag=True)          # initialize acq_archive with remaining sobol samples
 
-            threshold_min = 0
+            self.acq_function = acq_mes            # switch to mes acquisition function
+            self.acq_mes_flag = True
+            self.acq_ucb_flag = False
+
             remaining_evals = INIT_N_MES_EVALS
 
             while remaining_evals > 0:
@@ -178,38 +178,24 @@ class SailRun:
                 # calculate MES Acquisition Elites
                 map_elites(self=self, acq_flag=True)
                 self.visualize_archive(archive=self.acq_archive, acq_flag=True)
-                acq_elites = self.acq_archive.as_pandas(include_solutions=True)
+                acq_elites = self.acq_archive.as_pandas(include_solutions=True).sort_values(by="objective", ascending=False)
 
                 if np.any(np.isin(acq_elites, self.sol_array).all(1)):
                     raise ValueError("Duplicate Solution Error: New Solutions already exist in GP Data")
 
-                # select up to 200 best acquisition elites from acq_archive
-                n_elites = acq_elites.shape[0]
-                acq_elites = acq_elites.sort_values(by=['objective'], ascending=False).head(200) if n_elites >= 200 else acq_elites.sort_values(by=['objective'], ascending=False)
-
-                # always select BATCH_SIZE//2 best acquisition elites for evaluation
                 best_elites = acq_elites.head(BATCH_SIZE)
 
-                # remove best elites from acq_elites & sample from remaining elites
-                # acq_elites = acq_elites.drop(best_elites.index)
-                # samples_elites = acq_elites.sample(n=BATCH_SIZE//2, replace=False)
-
                 # combine best elites with random samples
-                best_elite_objectives = np.vstack(best_elites.objective_batch())   #, samples_elites.objective_batch()))
-                best_elite_solutions = np.vstack(best_elites.solution_batch())   #, samples_elites.solution_batch()))
-                best_elite_measures = np.vstack(best_elites.measures_batch())   #, samples_elites.measures_batch()))
+                best_elite_objectives = np.vstack(best_elites.objective_batch())
+                best_elite_solutions = np.vstack(best_elites.solution_batch())
+                best_elite_measures = np.vstack(best_elites.measures_batch())
 
                 # if best elite solutions contains duplicate rows within itself, raise an error
                 if np.unique(best_elite_solutions, axis=1).shape[0] != best_elite_solutions.shape[0]:
                     raise ValueError("Duplicate Solution Error: New Solutions appear twice in best_elite_solutions")
 
-                # # evaluate elites & increment threshhold up to defined maximum
-                # threshold_min += (0.001/((INIT_N_EVALS//BATCH_SIZE)-1)) # substract 1 from initial sobol evaluations
-                # self.acq_archive.set_threshhold(threshold_min = threshold_min)
-
                 eval_xfoil_loop(self, solution_batch=best_elite_solutions, measures_batch=best_elite_measures, acq_flag=True, candidate_targetvalues=np.vstack(best_elite_objectives))
                 print(f"Best Objective: {self.obj_archive.best_elite.objective}")
-                print(f"Threshhold: {threshold_min}")
 
                 remaining_evals -= BATCH_SIZE
 
@@ -255,7 +241,7 @@ class SailRun:
 
     def update_cellgrids(self):
 
-        self.bhv_sobol_cellgrids, self.mes_sobol_cellgrid = mes_sobol_cellgrids(self)
+        self.bhv_cellbounds, self.bhv_sobol_cellgrids, self.mes_sobol_cellgrid = mes_sobol_cellgrids(self)
         return
 
     def update_seed(self):
@@ -271,7 +257,7 @@ class SailRun:
 
         if self.acq_mes_flag and acq_flag:
             vmin = 0.0
-            vmax = 0.8
+            vmax = 0.25
 
         # all visualisations of the acquisition archive represent the state of the archive, which candidate solutions are sampled from for objective evaluations
 
@@ -412,7 +398,7 @@ def scale_samples(samples, boundaries=SOL_VALUE_RANGE):
 
 def store_final_data(self: SailRun):
 
-    max_acq_threshhold = 5.0 if self.acq_ucb_flag else 0.4
+    max_acq_threshhold = 5.0 if self.acq_ucb_flag else 0.25
     
     min_obj_threshhold = MIN_THRESHHOLD
     min_pred_threshhold = MIN_THRESHHOLD
@@ -535,7 +521,7 @@ def mes_sobol_cellgrids(self):
     """
     Creates a Sobol Cellgrid that can be used for all cells
 
-        This function is only called once inside each MAP-Elites-Loop.
+        This function is called once before every MAP-Elites-Loop.
     
         Among non-measure dimensions, all sobol samples are equal.
         Therefore we need to draw only one sobol sample for all grids.
@@ -545,7 +531,7 @@ def mes_sobol_cellgrids(self):
         which accelerates calculation, while reducing also reducing
         memory consumption significantly.
 
-        Mes/Bhv Cellgrids can be accessed from outside.
+        Mes/Bhv Cellgrids are stored within the SailRunner class.
         Mes Cellgrid is constant across all bins.
         Bhv Cellgrid can be accessed by index.
 
@@ -554,13 +540,14 @@ def mes_sobol_cellgrids(self):
 
     Returns:
 
-        bhv_cellgrids : 625 bins x 10000 samples x 2 dimensions
-        mes_cellgrid  :   1      x 10000 samples x 11 dimensions
+        bhv_cellbounds : 625 bins x 2  dimensions x 2 boundaries
+        bhv_cellgrids  : 625 bins x 10000 samples x 2 dimensions
+        mes_cellgrid   :   1      x 10000 samples x 11 dimensions
 
     # how does the naive approach work? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.pdf
     # why would this approach be naive? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.mp4
-    """
 
+    """
     sobol_cellgrid = create_sobol_samples(order=10000, dim=SOL_DIMENSION, seed=self.current_seed).T
 
     archive = self.obj_archive
@@ -580,6 +567,7 @@ def mes_sobol_cellgrids(self):
 
     # 625 bins, 10000 samples, 2 dimensions
     bhv_cellgrids = np.empty((n_cells, 10000, BHV_DIMENSION))
+    bhv_cellbounds = np.empty((n_cells, BHV_DIMENSION, 2))
 
     for i in range(n_cells):
 
@@ -589,6 +577,7 @@ def mes_sobol_cellgrids(self):
         cell_bounds_1 = (boundaries_1[measure_1_idx], boundaries_1[measure_1_idx+1])
 
         cell_bounds_i = np.array([cell_bounds_0, cell_bounds_1])
+        bhv_cellbounds[i] = cell_bounds_i
 
         lower_bounds = cell_bounds_i[:, 0]
         upper_bounds = cell_bounds_i[:, 1]
@@ -608,4 +597,4 @@ def mes_sobol_cellgrids(self):
         if verification[0] != i:
             raise ValueError("MES Sobol Cellgrid Error")
 
-    return bhv_cellgrids, mes_cellgrid
+    return bhv_cellbounds, bhv_cellgrids, mes_cellgrid

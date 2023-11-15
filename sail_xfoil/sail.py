@@ -120,11 +120,9 @@ if __name__ == "__main__":
 
         benchmark_domains = []
         
-        #sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, greedy_flag=True, acq_mes_flag=True)
+        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, hybrid_flag=True, acq_mes_flag=True, mes_init=True)
         sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, hybrid_flag=True, acq_ucb_flag=True, mes_init=True)
         sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, hybrid_flag=True, acq_ucb_flag=True, mes_init=False)
-        #sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, hybrid_flag=True, acq_ucb_flag=True, random_init=True)
-        #sail(initial_seed=i, sail_vanilla_flag=True, acq_ucb_flag=True)
         gc.collect()
 
         img_filenames = [f"imgs/final_heatmaps_{i}_{benchmark_domain}.png" for benchmark_domain in benchmark_domains]

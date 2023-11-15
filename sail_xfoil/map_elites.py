@@ -44,6 +44,7 @@ import pandas as pd
 ##### Import custom scripts #####
 from xfoil.generate_airfoils import generate_parsec_coordinates
 from gp.predict_objective import predict_objective
+from utils.pprint_nd import pprint
 
 from config.config import Config
 config = Config('config/config.ini')
@@ -76,7 +77,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
         target_archive = self.acq_archive
         if self.acq_mes_flag:
             self.update_cellgrids()
-            n_evals = ACQ_N_MAP_EVALS//20   # reduce number of acquisition evaluations for MES
+            n_evals = ACQ_N_MAP_EVALS//8   # reduce number of acquisition evaluations for MES
         else:
             n_evals = ACQ_N_MAP_EVALS
 
@@ -111,6 +112,9 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
             candidate_sol = samples[valid_indices]
             candidate_obj = target_function(self=self, genomes=candidate_sol)
             candidate_bhv = scheduler_bhv[valid_indices]
+
+            if self.acq_mes_flag and acq_flag:
+                candidate_sol = self.mes_elites
 
             status_vector, _ = target_archive.add(solution_batch=candidate_sol, objective_batch=candidate_obj, measures_batch=candidate_bhv)
             # store newly discovered elites

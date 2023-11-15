@@ -110,7 +110,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
     consumed_obj_evals = anytime_metric_kwargs['consumed_obj_evals']
 
     if self.acq_mes_flag:
-        threshold_min = 0.001
+        threshold_min = 0
         self.acq_archive.set_threshhold(threshold_min = threshold_min)
 
     if acq_loop:
@@ -264,18 +264,14 @@ def select_samples(self: SailRun, improved_elites, new_bin_elites, acq_flag=Fals
         n_new_bin_samples = round((curiosity/10)*n_samples)
         n_improved_samples = n_samples - n_new_bin_samples
         if n_new_bin_elites >= n_new_bin_samples and n_improved_elites >= n_improved_samples:
-            new_bin_elites = new_bin_elites.sample(n=n_new_bin_samples, random_state=self.initial_seed)
+            new_bin_elites = new_bin_elites.head(n_new_bin_samples)
             candidate_elite_df = pandas.concat([new_bin_elites.head(n_new_bin_samples), improved_elites.head(n_improved_samples)])
         else:
             if n_new_bin_elites < n_new_bin_samples:
-                new_bin_elites = new_bin_elites.sample(n=n_new_bin_elites, random_state=self.initial_seed)
+                new_bin_elites = new_bin_elites.head(n_new_bin_elites)
                 candidate_elite_df = pandas.concat([new_bin_elites, improved_elites.head(n_samples - n_new_bin_elites)])
             else:
                 candidate_elite_df = pandas.concat([new_bin_elites.head(n_samples - n_improved_elites), improved_elites])
-
-    if pred_flag:
-        lala = 5
-        fufu = 5
 
     print(f"\n\n{target} Values for upcoming Objective Evaluations:\n")
     target_objective = candidate_elite_df['objective'].to_numpy()

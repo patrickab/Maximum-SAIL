@@ -16,7 +16,6 @@ SOL_DIMENSION = config.SOL_DIMENSION
 BHV_DIMENSION = config.BHV_DIMENSION
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 
-
 def eval_xfoil_loop(self, solution_batch, measures_batch, evaluate_prediction_archive=False, acq_flag=False, pred_flag=False, candidate_targetvalues=None):
     """
     Ensures that iter_samples <= BATCH_SIZE are evaluated
@@ -51,7 +50,10 @@ def eval_xfoil_loop(self, solution_batch, measures_batch, evaluate_prediction_ar
     old_obj_behavior = old_obj_df.values[:,1:3]
 
     if acq_flag:
-        old_acq_df = self.acq_archive.as_pandas()
+        old_acq_df = self.acq_archive.as_pandas().sort_values(by=['objective'], ascending=False)
+        if self.acq_mes_flag:
+            n = int(self.acq_archive.stats.num_elites*0.3) if self.acq_archive.stats.num_elites*0.3 > 10 else 10
+            old_acq_df = old_acq_df.head(n)
         old_acq_solutions = old_acq_df.values[:,4:]
         old_acq_behavior = old_acq_df.values[:,1:3]
         target = "Acquisition"
@@ -155,7 +157,8 @@ def eval_xfoil_loop(self, solution_batch, measures_batch, evaluate_prediction_ar
             old_bhv = np.concatenate((old_obj_behavior, old_acq_behavior), axis=0)
 
         # update unevaluated elites under new GP
-        self.update_archive(candidate_sol=old_sol, candidate_bhv=old_bhv, acq_flag=True)
+        for i in range(0, old_sol.shape[0], 10):
+            self.update_archive(candidate_sol=old_sol[i:10], candidate_bhv=old_bhv[i:10], acq_flag=True)
     
 
     # update prediction elites under new gp model
