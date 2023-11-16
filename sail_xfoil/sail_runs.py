@@ -11,7 +11,7 @@ import os
 from config.config import Config
 config = Config(os.path.join(os.path.dirname(__file__), 'config', 'config.ini'))
 PREDICTION_VERIFICATIONS = config.PREDICTION_VERIFICATIONS
-INIT_N_MES_EVALS = config.INIT_N_MES_EVALS
+INIT_N_ACQ_EVALS = config.INIT_N_ACQ_EVALS
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 ACQ_N_OBJ_EVALS = config.ACQ_N_OBJ_EVALS
 ACQ_N_MAP_EVALS = config.ACQ_N_MAP_EVALS
@@ -21,7 +21,7 @@ SOL_DIMENSION = config.SOL_DIMENSION
 INIT_N_EVALS = config.INIT_N_EVALS
 BATCH_SIZE = config.BATCH_SIZE
 
-n_obj_evals = INIT_N_EVALS + ACQ_N_OBJ_EVALS + PRED_N_OBJ_EVALS + INIT_N_MES_EVALS
+n_obj_evals = INIT_N_EVALS + ACQ_N_OBJ_EVALS + PRED_N_OBJ_EVALS + INIT_N_ACQ_EVALS
 CSV_BUFFERSIZE = (n_obj_evals/BATCH_SIZE) / 8
 
 ###### Import Custom Scripts ######

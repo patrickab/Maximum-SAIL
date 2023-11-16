@@ -30,6 +30,7 @@ function and the codeblock checking for validity can be
 removed.
 """
 
+
 ###### Import packages #####
 from ribs.schedulers import Scheduler
 from ribs.archives import GridArchive
@@ -47,6 +48,7 @@ from gp.predict_objective import predict_objective
 from utils.pprint_nd import pprint
 
 from config.config import Config
+import numpy as np
 config = Config('config/config.ini')
 TEST_RUNS = config.TEST_RUNS
 BATCH_SIZE = config.BATCH_SIZE
@@ -60,7 +62,7 @@ PRED_N_MAP_EVALS = config.PRED_N_MAP_EVALS
 PREDICTION_VERIFICATIONS = config.PREDICTION_VERIFICATIONS
 
 def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_elite_archive=None):
-    
+
     print("\n\nInitialize Map-Elites [...]")
 
     if new_elite_archive is None:
@@ -75,9 +77,10 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
         target = "Acq Archive"
         target_function = self.acq_function
         target_archive = self.acq_archive
-        if self.acq_mes_flag:
+        if self.acq_mes_flag: # reduce number of acquisition evaluations for MES
             self.update_cellgrids()
-            n_evals = ACQ_N_MAP_EVALS//6   # reduce number of acquisition evaluations for MES
+            n_evals = ACQ_N_MAP_EVALS//6
+            mes_flag = self.acq_mes_flag
         else:
             n_evals = ACQ_N_MAP_EVALS
 
@@ -96,27 +99,6 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
     with tqdm(total=total_iterations) as progress:
         while((remaining_evals-BATCH_SIZE >= 0)):
 
-            # store only the best elites, initially with high selection pressure, decreasing over time
-            if self.acq_mes_flag and acq_flag and remaining_evals > n_evals*0.2:
-
-                n_elites = self.acq_archive.stats.num_elites
-
-                if n_elites > 200:
-                    percent = 0.5
-                elif n_elites > 100:
-                    percent = 0.6
-                elif n_elites > 50:
-                    percent = 0.7
-                elif n_elites > 25:
-                    percent = 0.9
-                else:
-                    percent = 1
-
-                iter_elites = self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).head(int(n_elites*percent))                
-
-                self.acq_archive.clear()
-                self.acq_archive.add(iter_elites.solution_batch(), iter_elites.objective_batch(), iter_elites.measures_batch())
-
             progress.update(1)
             valid_indices = np.empty(0, dtype=int) 
 
@@ -129,12 +111,14 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
             # Generate Parsec Coordinates & remove Invalid Samples
             valid_indices, surface_batch = generate_parsec_coordinates(samples, io_flag=False)
             
+            # Calculate Acquisitions/Predictions
             scheduler_bhv = samples[:,1:3]  # ToDO: generalize calculate_behavior()
             candidate_sol = samples[valid_indices]
             candidate_obj = target_function(self=self, genomes=candidate_sol)
             candidate_bhv = scheduler_bhv[valid_indices]
 
-            if self.acq_mes_flag and acq_flag:
+            # Load Updated Candidate Solutions  - (more details in acq_mes.py)
+            if mes_flag and acq_flag:
                 candidate_sol = self.mes_elites
 
             status_vector, _ = target_archive.add(solution_batch=candidate_sol, objective_batch=candidate_obj, measures_batch=candidate_bhv)
@@ -159,48 +143,8 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
     # calculate anytime stats
     size_t1 = target_archive.stats.num_elites
     print(f"{target} Size: ", str(size_t1))
-
-
-    # remove all acquisition elites, that are contained in the objective archive
-    if self.acq_mes_flag and acq_flag:
-
-        acq_elites_df = self.acq_archive.as_pandas(include_solutions=True)
-
-        acq_elites_solutions = acq_elites_df.solution_batch()
-        acq_elites_objectives = acq_elites_df.objective_batch()
-        acq_elites_measures = acq_elites_df.measures_batch()
-
-        new_solution_mask = ~np.isin(acq_elites_solutions, self.sol_array).all(1)
-
-        acq_elites_solutions = acq_elites_solutions[new_solution_mask]
-        acq_elites_objectives = acq_elites_objectives[new_solution_mask]
-        acq_elites_measures = acq_elites_measures[new_solution_mask]
-
-        self.acq_archive.clear()
-        self.acq_archive.add(acq_elites_solutions, acq_elites_objectives, acq_elites_measures)
-
-        new_elite_archive.clear()
-        new_elite_archive.add(acq_elites_solutions, acq_elites_objectives, acq_elites_measures)
-
-        # Set null reference in order to free RAM
-        self.mes_sobol_cellgrids = None
-
-        size_t1 = self.acq_archive.stats.num_elites
-        print(f"{target} Size: ", str(size_t1))
-
-
-    # clear all target elites, & refill only with obj elites, if vanilla sail is used
-    if self.vanilla_flag:
-        obj_df = self.obj_archive.as_pandas(include_solutions=True)
-        obj_solutions = obj_df.solution_batch()
-        obj_objectives = obj_df.objective_batch()
-        obj_measures = obj_df.measures_batch()
-
-        target_archive.clear()
-        target_archive.add(obj_solutions, obj_objectives, obj_measures)
-
-
     print("[...] End Map-Elites\n\n")
+    if self.acq_mes_flag and acq_flag: self.mes_sobol_cellgrids = None # free RAM
     return new_elite_archive, size_t0, size_t1
 
 

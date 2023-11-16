@@ -20,7 +20,9 @@ BHV_DIMENSION = config.BHV_DIMENSION
 BHV_NUMBER_BINS = config.BHV_NUMBER_BINS
 BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
-INIT_N_MES_EVALS = config.INIT_N_MES_EVALS
+INIT_N_ACQ_EVALS = config.INIT_N_ACQ_EVALS
+ACQ_MES_MIN_THRESHHOLD = config.ACQ_MES_MIN_THRESHHOLD
+ACQ_UCB_MIN_THRESHHOLD = config.ACQ_UCB_MIN_THRESHHOLD
 
 ###### Import Custom Scripts ######
 from utils.anytime_archive_visualizer import anytime_archive_visualizer, archive_visualizer
@@ -35,12 +37,12 @@ import numpy as np
 
 MIN_THRESHHOLD = 2.5
 MIN_ACQ_UCB_THRESHHOLD = 2.5
-MIN_ACQ_MES_THRESHHOLD = 0.0
 MAX_RENDER_THRESHHOLD = 5.0
+
 
 class SailRun:
 
-    def __init__(self, initial_seed, acq_ucb_flag=False, acq_mes_flag=False, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, pred_verific_flag=False, greedy_flag=False, hybrid_flag=False, random_init=False, mes_init=False):
+    def __init__(self, initial_seed, acq_ucb_flag=False, acq_mes_flag=False, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, pred_verific_flag=False, greedy_flag=False, hybrid_flag=False, random_init=False, mes_init=False, ucb_init=False):
 
         """
         Initialize a SAIL Run.
@@ -87,6 +89,8 @@ class SailRun:
             self.domain = "vanilla"
         if pred_verific_flag:
             self.domain = self.domain + "_verification"
+        if ucb_init:
+            self.domain = self.domain + "_ucb_init"
         if mes_init:
             self.domain = self.domain + "_mes_init"
         if random_init:
@@ -119,10 +123,9 @@ class SailRun:
         self.sol_array = np.empty((0, SOL_DIMENSION))
         self.obj_array = np.empty((0, OBJ_DIMENSION))
 
-        #### Can be used in future to initialize archives with different threshholds ####
-        self.acq_function = acq_ucb
-        self.acq_mes_flag = False
-        self.acq_ucb_flag = True
+        self.acq_function = acq_mes
+        self.acq_mes_flag = True
+        self.acq_ucb_flag = False
 
         self.obj_archive, self.acq_archive, self.pred_archive, self.new_archive, self.evaluated_predictions_archive, self.prediction_error_archive =\
             self.define_archives(initial_seed)
@@ -150,8 +153,14 @@ class SailRun:
             for i in range(0, INIT_N_EVALS, BATCH_SIZE):
                 self.visualize_archive(self.acq_archive, acq_flag=True)
 
-        if sail_custom_flag and not random_init:
+        # use MES to fill obj archive
+        if sail_custom_flag and mes_init:
 
+            self.acq_archive.set_threshhold(threshold_min = ACQ_MES_MIN_THRESHHOLD)
+            self.acq_function = acq_mes
+            self.acq_mes_flag = True
+            self.acq_ucb_flag = False
+            
             self.update_cellgrids()
 
             solution_batch = create_sobol_samples(order=2*INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
@@ -167,11 +176,60 @@ class SailRun:
             eval_xfoil_loop(self, solution_batch=solution_batch[0::2], measures_batch=measures_batch[::2], acq_flag=False)      # evaluate sobol samples & store in objective archive (GP is updated in eval_xfoil_loop())
             self.update_archive(candidate_sol=solution_batch[1::2], candidate_bhv=measures_batch[1::2], acq_flag=True)          # initialize acq_archive with remaining sobol samples
 
-            self.acq_function = acq_mes            # switch to mes acquisition function
-            self.acq_mes_flag = True
-            self.acq_ucb_flag = False
+            remaining_evals = INIT_N_ACQ_EVALS
 
-            remaining_evals = INIT_N_MES_EVALS
+            while remaining_evals > 0:
+
+                # calculate MES Acquisition Elites
+                map_elites(self=self, acq_flag=True)
+                self.visualize_archive(archive=self.acq_archive, acq_flag=True)
+                acq_elites = self.acq_archive.as_pandas(include_solutions=True).sort_values(by="objective", ascending=False)
+
+                if np.any(np.isin(acq_elites, self.sol_array).all(1)):
+                    raise ValueError("Duplicate Solution Error: New Solutions already exist in GP Data")
+
+                best_elites = acq_elites.head(BATCH_SIZE)
+
+                # combine best elites with random samples
+                best_elite_objectives = np.vstack(best_elites.objective_batch())
+                best_elite_solutions = np.vstack(best_elites.solution_batch())
+                best_elite_measures = np.vstack(best_elites.measures_batch())
+
+                # if best elite solutions contains duplicate rows within itself, raise an error
+                if np.unique(best_elite_solutions, axis=1).shape[0] != best_elite_solutions.shape[0]:
+                    raise ValueError("Duplicate Solution Error: New Solutions appear twice in best_elite_solutions")
+
+                eval_xfoil_loop(self, solution_batch=best_elite_solutions, measures_batch=best_elite_measures, acq_flag=True, candidate_targetvalues=np.vstack(best_elite_objectives))
+                print(f"Best Objective: {self.obj_archive.best_elite.objective}")
+
+                remaining_evals -= BATCH_SIZE
+            
+        # use UCB to fill obj archive
+        if sail_custom_flag and ucb_init:
+
+            self.acq_archive.set_threshhold(threshold_min = ACQ_UCB_MIN_THRESHHOLD)
+            self.acq_function = acq_ucb
+            self.acq_mes_flag = False
+            self.acq_ucb_flag = True
+
+            solution_batch = create_sobol_samples(order=2*INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
+            solution_batch = solution_batch.T
+            solution_batch = scale_samples(solution_batch)
+            measures_batch = solution_batch[:, 1:3]
+
+            # visualize empty acquisition archive
+            for i in range(0, INIT_N_EVALS, BATCH_SIZE):
+                self.visualize_archive(self.acq_archive, acq_flag=True)
+
+            # initialize archives with random solutions (threshhold set to 0)
+            eval_xfoil_loop(self, solution_batch=solution_batch[0::2], measures_batch=measures_batch[::2], acq_flag=False)      # evaluate sobol samples & store in objective archive (GP is updated in eval_xfoil_loop())
+            self.update_archive(candidate_sol=solution_batch[1::2], candidate_bhv=measures_batch[1::2], acq_flag=True)          # initialize acq_archive with remaining sobol samples
+
+            self.acq_function = acq_ucb            # switch to ucb acquisition function
+            self.acq_mes_flag = False
+            self.acq_ucb_flag = True
+
+            remaining_evals = INIT_N_ACQ_EVALS
 
             while remaining_evals > 0:
 
@@ -204,16 +262,16 @@ class SailRun:
             self.acq_ucb_flag = True
             self.acq_mes_flag = False
             self.acq_function = acq_ucb
-            self.acq_archive.set_threshhold(threshold_min = MIN_ACQ_UCB_THRESHHOLD)
+            self.acq_archive.set_threshhold(threshold_min = ACQ_MES_MIN_THRESHHOLD)
         if acq_mes_flag:
             self.acq_mes_flag = True
             self.acq_ucb_flag = False
             self.acq_function = acq_mes
-            self.acq_archive.set_threshhold(threshold_min = MIN_ACQ_MES_THRESHHOLD)
+            self.acq_archive.set_threshhold(threshold_min = ACQ_MES_MIN_THRESHHOLD)
 
         print("\n[...] Terminate init_archive()\n")
 
-    
+
     def update_gp_data(self, new_solutions, new_objectives):
 
         if new_solutions.shape[0] == 0:
@@ -305,7 +363,11 @@ class SailRun:
             return
         if acq_flag:
             candidate_acq = self.acq_function(self=self, genomes=candidate_sol)
-            self.acq_archive.add(candidate_sol, candidate_acq, candidate_bhv)
+            if self.acq_ucb_flag:
+                self.acq_archive.add(candidate_sol, candidate_acq, candidate_bhv)
+            elif self.acq_mes_flag:
+                self.acq_archive.add(self.mes_elites, candidate_acq, candidate_bhv)
+
         if pred_flag:
             candidate_pred = predict_objective(self=self, genomes=candidate_sol)
             self.pred_archive.add(candidate_sol, candidate_pred, candidate_bhv)
@@ -324,9 +386,9 @@ class SailRun:
         min_pred_threshhold = MIN_THRESHHOLD
 
         if self.acq_function == acq_ucb:
-            min_acq_threshhold = MIN_ACQ_UCB_THRESHHOLD
+            min_acq_threshhold = ACQ_UCB_MIN_THRESHHOLD
         if self.acq_function == acq_mes:
-            min_acq_threshhold = 0
+            min_acq_threshhold = ACQ_MES_MIN_THRESHHOLD
 
         class _GridArchive(GridArchive):
             def set_threshhold(self, threshold_min):
@@ -345,7 +407,7 @@ class SailRun:
             dims=BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
-            threshold_min = 0 
+            threshold_min = min_acq_threshhold
         )
 
         pred_archive = _GridArchive(
@@ -406,7 +468,7 @@ def store_final_data(self: SailRun):
     if self.acq_function == acq_ucb:
         min_acq_threshhold = MIN_ACQ_UCB_THRESHHOLD
     if self.acq_function == acq_mes:
-        min_acq_threshhold = MIN_ACQ_MES_THRESHHOLD
+        min_acq_threshhold = 0
 
     archive_visualizer(self=self, archive=self.obj_archive, prefix="obj", name="Objective Archive", min_val=min_obj_threshhold, max_val=MAX_RENDER_THRESHHOLD)
     archive_visualizer(self=self, archive=self.acq_archive, prefix="acq", name="Acquisition Archive", min_val=min_acq_threshhold, max_val=max_acq_threshhold)

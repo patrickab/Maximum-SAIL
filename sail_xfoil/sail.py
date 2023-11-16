@@ -32,7 +32,7 @@ benchmark_domains = []
 if (BATCH_SIZE%2)!=0 or ((PRED_N_OBJ_EVALS//PREDICTION_VERIFICATIONS)%2)!=0:
     raise ValueError("BATCH_SIZE and MAX_PRED_VERIFICATION//PEDICTION_VERIFICATION must be even numbers")
 
-def sail(initial_seed, acq_ucb_flag=False, acq_mes_flag=False, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, pred_verific_flag=False, greedy_flag=False, hybrid_flag=False, random_init=False, mes_init=False):
+def sail(initial_seed, acq_ucb_flag=False, acq_mes_flag=False, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, pred_verific_flag=False, greedy_flag=False, hybrid_flag=False, random_init=False, mes_init=False, ucb_init=False):
 
     """
     Main function for running SAIL. This function is used for controlling behavior of SailRun objects.
@@ -60,7 +60,7 @@ def sail(initial_seed, acq_ucb_flag=False, acq_mes_flag=False, sail_vanilla_flag
 
     """
 
-    current_run = SailRun(initial_seed, acq_ucb_flag=acq_ucb_flag, acq_mes_flag=acq_mes_flag, sail_vanilla_flag=sail_vanilla_flag, sail_custom_flag=sail_custom_flag, sail_random_flag=sail_random_flag, pred_verific_flag=pred_verific_flag, greedy_flag=greedy_flag, hybrid_flag=hybrid_flag, random_init=random_init, mes_init=mes_init) 
+    current_run = SailRun(initial_seed, acq_ucb_flag=acq_ucb_flag, acq_mes_flag=acq_mes_flag, sail_vanilla_flag=sail_vanilla_flag, sail_custom_flag=sail_custom_flag, sail_random_flag=sail_random_flag, pred_verific_flag=pred_verific_flag, greedy_flag=greedy_flag, hybrid_flag=hybrid_flag, random_init=random_init, mes_init=mes_init, ucb_init=ucb_init) 
 
     print("\n ## Exit Initialization ##")
     print(" ## Enter Acquisition Loop ##\n\n")
@@ -120,10 +120,10 @@ if __name__ == "__main__":
 
         benchmark_domains = []
         
-        # sail(initial_seed=i, sail_vanilla_flag=True, pred_verific_flag=False, hybrid_flag=False, acq_mes_flag=False, mes_init=False)
-        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, hybrid_flag=True, acq_mes_flag=True, mes_init=True)
-        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, hybrid_flag=True, acq_ucb_flag=True, mes_init=True)
-        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, hybrid_flag=True, acq_ucb_flag=True, random_init=True)
+        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, greedy_flag=True, acq_mes_flag=True, mes_init=True)        
+        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, greedy_flag=True, acq_mes_flag=True, ucb_init=True)
+        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, custom_flag=True, acq_ucb_flag=True, mes_init=True)
+        sail(initial_seed=i, sail_vanilla_flag=True, pred_verific_flag=False, hybrid_flag=False, acq_mes_flag=False, mes_init=False)
         gc.collect()
 
         img_filenames = [f"imgs/final_heatmaps_{i}_{benchmark_domain}.png" for benchmark_domain in benchmark_domains]
