@@ -121,6 +121,8 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
             if mes_flag and acq_flag:
                 candidate_sol = self.mes_elites
                 target_archive.as_pandas(include_solutions=False).sort_values(by="objective", ascending=False).head(0.8)
+                target_archive.clear()
+                target_archive.add(solution_batch=candidate_sol, objective_batch=candidate_obj, measures_batch=candidate_bhv)
 
             status_vector, _ = target_archive.add(solution_batch=candidate_sol, objective_batch=candidate_obj, measures_batch=candidate_bhv)
             # store newly discovered elites
@@ -140,6 +142,15 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
 
             scheduler.tell(scheduler_obj, scheduler_bhv)
             remaining_evals -= BATCH_SIZE
+
+    # Remove all variables from RAM and Cache, except for new_elite_archive 
+    for var in dir():
+        if var != "new_elite_archive" and var!="self" and not var.startswith("__") and not var.startswith("_"):
+            # print the variable names, that are deleted
+            print(f"Delete Variable from RAM/Cache: {var}") 
+            del globals()[var]
+            del locals()[var]
+            lala = "fufu"
 
     # calculate anytime stats
     size_t1 = target_archive.stats.num_elites

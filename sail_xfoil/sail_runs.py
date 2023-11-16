@@ -101,7 +101,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
         pred_loop:  If True, will enter prediction verification loop
     """
 
-    CURIOSITY = 6 # For Hybrid Approach: 'CURIOSITY//BATCH_SIZE' new bin elites are to be sampled
+    CURIOSITY = 4 # For Hybrid Approach: 'CURIOSITY//BATCH_SIZE' new bin elites are to be sampled
 
     anytime_metric_kwargs = initialize_anytime_metrics(self=self, acq_flag=acq_loop, pred_flag=pred_loop)
 
@@ -122,9 +122,9 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
 
     while(current_eval_budget >= i_obj_evals):
 
-        if consumed_obj_evals % (total_eval_budget//2) == 0 and consumed_obj_evals != 0:
+        if consumed_obj_evals == total_eval_budget//3:
             print("\nDECREASING CURIOSITY PARAMETER\n")
-            CURIOSITY -= 2
+            CURIOSITY = 3
 
         # Produce new acquisition elites
         target_t0 = target_archive.stats.num_elites
