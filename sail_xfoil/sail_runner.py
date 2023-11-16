@@ -479,7 +479,7 @@ class SailRun:
         )
 
         return obj_archive, acq_archive, pred_archive, new_archive, evaluated_predictions_archive, prediction_error_archive
-    
+
 
 def scale_samples(samples, boundaries=SOL_VALUE_RANGE):
     """Scales Samples to boundaries"""

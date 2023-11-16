@@ -33,6 +33,7 @@ from xfoil.generate_airfoils import generate_parsec_coordinates
 
 from map_elites import map_elites
 from sail_runner import SailRun
+from chaospy import create_sobol_samples
 
 
 def run_random_sail(self: SailRun):
@@ -125,6 +126,16 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
         if consumed_obj_evals == total_eval_budget//3:
             print("\nDECREASING CURIOSITY PARAMETER\n")
             CURIOSITY = 3
+
+        if consumed_obj_evals % 200:
+            # initialize acq archive with sobol samples
+            solution_batch = create_sobol_samples(order=1500, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
+            solution_batch = solution_batch.T
+            solution_batch = scale_samples(solution_batch)
+            measures_batch = solution_batch[:, 1:3]
+            for i in range(0, 200, BATCH_SIZE):
+                self.update_archive(candidate_sol=solution_batch[i:i+BATCH_SIZE], candidate_bhv=measures_batch[i:i+BATCH_SIZE], acq_flag=True)
+                print(f"iteration: {i}")
 
         # Produce new acquisition elites
         target_t0 = target_archive.stats.num_elites
@@ -279,3 +290,13 @@ def select_samples(self: SailRun, improved_elites, new_bin_elites, acq_flag=Fals
     pprint(target_objective, target_objective_improvement)
 
     return candidate_elite_df
+
+
+def scale_samples(samples, boundaries=SOL_VALUE_RANGE):
+    """Scales Samples to boundaries"""
+
+    lower_bounds = np.array([boundaries[i][0] for i in range(len(boundaries))])
+    upper_bounds = np.array([boundaries[i][1] for i in range(len(boundaries))])
+
+    samples = samples * (upper_bounds - lower_bounds) + lower_bounds    
+    return samples

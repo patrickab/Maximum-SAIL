@@ -79,7 +79,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
         target_archive = self.acq_archive
         if self.acq_mes_flag: # reduce number of acquisition evaluations for MES
             self.update_cellgrids()
-            n_evals = ACQ_N_MAP_EVALS//6
+            n_evals = ACQ_N_MAP_EVALS//16
             mes_flag = self.acq_mes_flag
         else:
             n_evals = ACQ_N_MAP_EVALS
@@ -110,7 +110,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
 
             # Generate Parsec Coordinates & remove Invalid Samples
             valid_indices, surface_batch = generate_parsec_coordinates(samples, io_flag=False)
-            
+
             # Calculate Acquisitions/Predictions
             scheduler_bhv = samples[:,1:3]  # ToDO: generalize calculate_behavior()
             candidate_sol = samples[valid_indices]
@@ -120,9 +120,13 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
             # Load Updated Candidate Solutions  - (more details in acq_mes.py)
             if mes_flag and acq_flag:
                 candidate_sol = self.mes_elites
-                target_archive.as_pandas(include_solutions=False).sort_values(by="objective", ascending=False).head(0.8)
-                target_archive.clear()
                 target_archive.add(solution_batch=candidate_sol, objective_batch=candidate_obj, measures_batch=candidate_bhv)
+
+                # Add Selection Pressure to Acq Archive by removing 20% of elites
+                target_elites = target_archive.as_pandas(include_solutions=True).sort_values(by="objective", ascending=False).head(int(0.9*self.acq_archive.stats.num_elites))
+                target_archive.clear()
+                if target_elites.shape[0] != 0:
+                    target_archive.add(target_elites.solution_batch(), target_elites.objective_batch(), target_elites.measures_batch())
 
             status_vector, _ = target_archive.add(solution_batch=candidate_sol, objective_batch=candidate_obj, measures_batch=candidate_bhv)
             # store newly discovered elites
@@ -143,14 +147,8 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
             scheduler.tell(scheduler_obj, scheduler_bhv)
             remaining_evals -= BATCH_SIZE
 
-    # Remove all variables from RAM and Cache, except for new_elite_archive 
-    for var in dir():
-        if var != "new_elite_archive" and var!="self" and not var.startswith("__") and not var.startswith("_"):
-            # print the variable names, that are deleted
-            print(f"Delete Variable from RAM/Cache: {var}") 
-            del globals()[var]
-            del locals()[var]
-            lala = "fufu"
+
+    del candidate_bhv, candidate_obj, candidate_sol, emitter, mes_flag, n_evals, new_bhv, new_obj, new_sol, non_0_status_indices, progress, remaining_evals, samples, scheduler, scheduler_bhv, scheduler_obj, status_vector, surface_batch, target_function, total_iterations, valid_indices
 
     # calculate anytime stats
     size_t1 = target_archive.stats.num_elites

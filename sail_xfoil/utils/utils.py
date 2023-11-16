@@ -121,7 +121,6 @@ def eval_xfoil_loop(self, solution_batch, measures_batch, evaluate_prediction_ar
 
         if self.acq_mes_flag:
             obj_elite_df = obj_elite_df.head(40)
-            acq_elite_df = acq_elite_df[acq_elite_df.objective_batch() > 0.008]
 
         acq_elites_solutions = acq_elite_df.solution_batch()
         acq_elites_measures = acq_elite_df.measures_batch()
@@ -145,17 +144,11 @@ def eval_xfoil_loop(self, solution_batch, measures_batch, evaluate_prediction_ar
         self.pred_archive.add(obj_elite_df.solution_batch(), obj_elite_df.objective_batch(), obj_elite_df.measures_batch())
         self.update_archive(candidate_sol=pred_elite_df.solution_batch(), candidate_bhv=pred_elite_df.measures_batch(), pred_flag=True)
 
-    # Remove all variables from RAM and Cache, except for new_elite_archive 
-    # Remove all variables from RAM and Cache, except for new_elite_archive 
-    for var in dir():
-        if var != "new_elite_archive" and var!="self" and not var.startswith("__") and not var.startswith("_"):
-            # print the variable names, that are deleted
-            print(f"Delete Variable from RAM/Cache: {var}") 
-            del globals()[var]
-            del locals()[var]
-            lala = "fufu"
+    # Remove all variables from RAM and Cache, that are not needed anymore 
+    # list all variables in dir() on console
+    del candidate_targetvalues, converged_bhv, converged_obj, converged_sol, i_errors, iteration, n_solutions, remaining_samples, sample_index, success_indices, target, objective_values, new_objectives
+    gc.collect()
 
     obj_t1 = self.obj_archive.stats.num_elites
     self.convergence_errors = n_errors
-    gc.collect()
     return obj_t0, obj_t1, n_new_obj_elites
