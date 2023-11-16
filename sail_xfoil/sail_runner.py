@@ -130,7 +130,7 @@ class SailRun:
 
         self.obj_archive, self.acq_archive, self.pred_archive, self.new_archive, self.evaluated_predictions_archive, self.prediction_error_archive =\
             self.define_archives(initial_seed)
-
+        
         print("\n\n\nInitialize SAIL Run")
         print(f"Domain: {self.domain}")
         print(f"Initial Seed: {self.initial_seed}")    
@@ -139,12 +139,21 @@ class SailRun:
         # for vanilla sail, random sail & random init just draw sobol samples
         if sail_vanilla_flag or sail_random_flag or random_init:
 
-            solution_batch = create_sobol_samples(order=2*INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
+            # initialize obj archive with sobol samples
+            solution_batch = create_sobol_samples(order=INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
             solution_batch = solution_batch.T
             solution_batch = scale_samples(solution_batch)
             measures_batch = solution_batch[:, 1:3]
+            eval_xfoil_loop(self, solution_batch=solution_batch, measures_batch=measures_batch, acq_flag=False)
 
-            eval_xfoil_loop(self, solution_batch=solution_batch[0::2], measures_batch=measures_batch[0::2], acq_flag=False)
+            # initialize acq archive with sobol samples
+            solution_batch = create_sobol_samples(order=200, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
+            solution_batch = solution_batch.T
+            solution_batch = scale_samples(solution_batch)
+            measures_batch = solution_batch[:, 1:3]
+            for i in range(0, 200, BATCH_SIZE):
+                self.update_archive(candidate_sol=solution_batch[i:i+BATCH_SIZE], candidate_bhv=measures_batch[i:i+BATCH_SIZE], acq_flag=True)
+                print(f"iteration: {i}")
 
             # initialize acq archive with evaluated & unevaluated sobol samples
             if not sail_random_flag:
@@ -157,6 +166,10 @@ class SailRun:
         # use MES to fill obj archive
         if sail_custom_flag and mes_init:
 
+            # visualize empty acquisition archive
+            for i in range(0, INIT_N_EVALS, BATCH_SIZE):
+                self.visualize_archive(self.acq_archive, acq_flag=True)
+
             self.acq_archive.set_threshhold(threshold_min = ACQ_MES_MIN_THRESHHOLD)
             self.acq_function = acq_mes
             self.acq_mes_flag = True
@@ -164,21 +177,23 @@ class SailRun:
             
             self.update_cellgrids()
 
-            solution_batch = create_sobol_samples(order=2*INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
+            # initialize obj archive with sobol samples
+            solution_batch = create_sobol_samples(order=INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
             solution_batch = solution_batch.T
             solution_batch = scale_samples(solution_batch)
             measures_batch = solution_batch[:, 1:3]
+            eval_xfoil_loop(self, solution_batch=solution_batch, measures_batch=measures_batch, acq_flag=False)
 
-            # visualize empty acquisition archive
-            for i in range(0, INIT_N_EVALS, BATCH_SIZE):
-                self.visualize_archive(self.acq_archive, acq_flag=True)
-
-            # initialize archives with random solutions (threshhold set to 0)
-            eval_xfoil_loop(self, solution_batch=solution_batch[0::2], measures_batch=measures_batch[::2], acq_flag=False)      # evaluate sobol samples & store in objective archive (GP is updated in eval_xfoil_loop())
-            self.update_archive(candidate_sol=solution_batch[1::2], candidate_bhv=measures_batch[1::2], acq_flag=True)          # initialize acq_archive with remaining sobol samples
+            # initialize acq archive with sobol samples
+            solution_batch = create_sobol_samples(order=200, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
+            solution_batch = solution_batch.T
+            solution_batch = scale_samples(solution_batch)
+            measures_batch = solution_batch[:, 1:3]
+            for i in range(0, 200, BATCH_SIZE):
+                self.update_archive(candidate_sol=solution_batch[i:i+BATCH_SIZE], candidate_bhv=measures_batch[i:i+BATCH_SIZE], acq_flag=True)
+                print(f"Initialize Acq Archive: {i+10}")
 
             remaining_evals = INIT_N_ACQ_EVALS
-
             while remaining_evals > 0:
 
                 # calculate MES Acquisition Elites
@@ -213,25 +228,29 @@ class SailRun:
             self.acq_mes_flag = False
             self.acq_ucb_flag = True
 
-            solution_batch = create_sobol_samples(order=2*INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
-            solution_batch = solution_batch.T
-            solution_batch = scale_samples(solution_batch)
-            measures_batch = solution_batch[:, 1:3]
-
             # visualize empty acquisition archive
             for i in range(0, INIT_N_EVALS, BATCH_SIZE):
                 self.visualize_archive(self.acq_archive, acq_flag=True)
 
-            # initialize archives with random solutions (threshhold set to 0)
-            eval_xfoil_loop(self, solution_batch=solution_batch[0::2], measures_batch=measures_batch[::2], acq_flag=False)      # evaluate sobol samples & store in objective archive (GP is updated in eval_xfoil_loop())
-            self.update_archive(candidate_sol=solution_batch[1::2], candidate_bhv=measures_batch[1::2], acq_flag=True)          # initialize acq_archive with remaining sobol samples
+            # initialize obj archive with sobol samples
+            solution_batch = create_sobol_samples(order=INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
+            solution_batch = solution_batch.T
+            solution_batch = scale_samples(solution_batch)
+            measures_batch = solution_batch[:, 1:3]
+            eval_xfoil_loop(self, solution_batch=solution_batch, measures_batch=measures_batch, acq_flag=False)
+
+            # initialize acq archive with sobol samples
+            solution_batch = create_sobol_samples(order=50000, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
+            solution_batch = solution_batch.T
+            solution_batch = scale_samples(solution_batch)
+            measures_batch = solution_batch[:, 1:3]
+            self.update_archive(candidate_sol=solution_batch, candidate_bhv=measures_batch, acq_flag=True)          # initialize acq_archive with remaining sobol samples
 
             self.acq_function = acq_ucb            # switch to ucb acquisition function
             self.acq_mes_flag = False
             self.acq_ucb_flag = True
 
             remaining_evals = INIT_N_ACQ_EVALS
-
             while remaining_evals > 0:
 
                 # calculate MES Acquisition Elites
@@ -362,12 +381,25 @@ class SailRun:
         if evaluate_prediction_archive:
             self.evaluated_predictions_archive.add(candidate_sol, candidate_obj, candidate_bhv)
             return
+
         if acq_flag:
-            candidate_acq = self.acq_function(self=self, genomes=candidate_sol)
-            if self.acq_ucb_flag:
-                self.acq_archive.add(candidate_sol, candidate_acq, candidate_bhv)
-            elif self.acq_mes_flag:
-                self.acq_archive.add(self.mes_elites, candidate_acq, candidate_bhv)
+            for i in range(0, candidate_sol.shape[0], 10):
+                if self.acq_ucb_flag:
+                    i_candidate_sol = candidate_sol[i:i+BATCH_SIZE]
+                    i_candidate_bhv = candidate_bhv[i:i+BATCH_SIZE]
+                    i_candidate_acq = self.acq_function(self=self, genomes=i_candidate_sol)
+                    self.acq_archive.add(candidate_sol=i_candidate_sol, candidate_acq=i_candidate_acq, candidate_bhv=np.hstack(i_candidate_bhv))
+                elif self.acq_mes_flag:
+                    i_candidate_sol = candidate_sol[i:i+BATCH_SIZE]
+                    i_candidate_acq = self.acq_function(self=self, genomes=i_candidate_sol)
+
+                    if i_candidate_sol.shape[0] != 0:
+                        i_candidate_sol = self.mes_elites                 
+                    else:
+                        break
+
+                    i_candidate_bhv = candidate_bhv[i:i+BATCH_SIZE]
+                    self.acq_archive.add(self.mes_elites, i_candidate_acq, i_candidate_bhv)
 
         if pred_flag:
             candidate_pred = predict_objective(self=self, genomes=candidate_sol)
