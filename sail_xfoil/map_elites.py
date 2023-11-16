@@ -100,7 +100,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
         while((remaining_evals-BATCH_SIZE >= 0)):
 
             progress.update(1)
-            valid_indices = np.empty(0, dtype=int) 
+            valid_indices = np.empty(0, dtype=int)
 
             emitter = update_emitter(self, target_archive=target_archive)
             scheduler = Scheduler(target_archive, emitter)
@@ -120,6 +120,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
             # Load Updated Candidate Solutions  - (more details in acq_mes.py)
             if mes_flag and acq_flag:
                 candidate_sol = self.mes_elites
+                target_archive.as_pandas(include_solutions=False).sort_values(by="objective", ascending=False).head(0.8)
 
             status_vector, _ = target_archive.add(solution_batch=candidate_sol, objective_batch=candidate_obj, measures_batch=candidate_bhv)
             # store newly discovered elites

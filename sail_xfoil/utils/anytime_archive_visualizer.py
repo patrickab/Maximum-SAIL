@@ -14,12 +14,12 @@ BATCH_SIZE = config.BATCH_SIZE
 INIT_N_EVALS = config.INIT_N_EVALS
 ACQ_N_OBJ_EVALS = config.ACQ_N_OBJ_EVALS
 PRED_N_OBJ_EVALS = config.PRED_N_OBJ_EVALS
-INIT_N_MES_EVALS = config.INIT_N_MES_EVALS
+INIT_N_ACQ_EVALS = config.INIT_N_ACQ_EVALS
 
 
 # eg for n_obj_evals=1280, and BATCH_SIZE=10, we buffer 128/(2^3) = 16 pngs
 # for rendering all videos correctly, n_obj_evals must be contained in [BATCH_SIZE * 2^(n+3)]
-n_obj_evals = INIT_N_EVALS + ACQ_N_OBJ_EVALS + PRED_N_OBJ_EVALS + INIT_N_MES_EVALS
+n_obj_evals = INIT_N_EVALS + ACQ_N_OBJ_EVALS + PRED_N_OBJ_EVALS + INIT_N_ACQ_EVALS
 PNG_BUFFERSIZE = (n_obj_evals/BATCH_SIZE) / 8
 
 PNG_BUFFERSIZE = int(PNG_BUFFERSIZE)

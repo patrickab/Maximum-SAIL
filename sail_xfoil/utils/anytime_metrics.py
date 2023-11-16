@@ -16,14 +16,14 @@ ACQ_N_OBJ_EVALS = config.ACQ_N_OBJ_EVALS
 ACQ_N_MAP_EVALS = config.ACQ_N_MAP_EVALS
 PRED_N_OBJ_EVALS = config.PRED_N_OBJ_EVALS
 PRED_N_MAP_EVALS = config.PRED_N_MAP_EVALS
-INIT_N_MES_EVALS = config.INIT_N_MES_EVALS
+INIT_N_ACQ_EVALS = config.INIT_N_ACQ_EVALS
 PREDICTION_VERIFICATIONS = config.PREDICTION_VERIFICATIONS
 
 def initialize_anytime_metrics(self: SailRun, acq_flag=False, pred_flag=False):
 
     if acq_flag:
         total_eval_budget = ACQ_N_OBJ_EVALS if self.pred_verific_flag else ACQ_N_OBJ_EVALS + PRED_N_OBJ_EVALS
-        total_eval_budget += INIT_N_MES_EVALS if (self.random_init_flag or not self.custom_flag) else 0
+        total_eval_budget += INIT_N_ACQ_EVALS if (self.random_init_flag or not self.custom_flag) else 0
         total_target_eval_budget = ACQ_N_MAP_EVALS * (total_eval_budget//BATCH_SIZE)
     if pred_flag:
         total_eval_budget = PRED_N_OBJ_EVALS

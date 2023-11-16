@@ -19,6 +19,10 @@ SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 
 def acq_mes(self, genomes):
 
+    # if genomes is empty, return empty array
+    if len(genomes) == 0:
+        return np.array([])
+
     dev = device("cuda" if cuda.is_available() else "cpu")
     rng = np.random.default_rng(self.current_seed)
     cell_indices = self.obj_archive.index_of(genomes[:,1:3])
@@ -50,6 +54,7 @@ def acq_mes(self, genomes):
         acq_entropy_tensor[i] = acq_entropy[elite_index]
         acq_solution_tensor[i] = genomes_tensor[i,elite_index]
 
+    # Store MES Elites in SailRunner class to use them inside the MAP-Loop
     self.mes_elites = acq_solution_tensor.detach().numpy()
     mes_ndarray = acq_entropy_tensor.detach().numpy()
 
