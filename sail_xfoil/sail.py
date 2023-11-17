@@ -120,7 +120,7 @@ if __name__ == "__main__":
 
         benchmark_domains = []
         
-        # sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, greedy_flag=True, acq_mes_flag=True, ucb_init=True)
+        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, greedy_flag=True, acq_mes_flag=True, ucb_init=True)
         sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, greedy_flag=True, acq_mes_flag=True, mes_init=True)        
         sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, custom_flag=True, acq_ucb_flag=True, mes_init=True)
         sail(initial_seed=i, sail_vanilla_flag=True, pred_verific_flag=False, hybrid_flag=False, acq_mes_flag=False, mes_init=False)

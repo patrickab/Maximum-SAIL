@@ -1,0 +1,16 @@
+# interrupt with acq ucb loop
+                # perform this initially & after 50% of evaluations
+                # if remaining_evals % (INIT_N_MES_EVALS//2) == 0:
+                #     if remaining_evals != 0:
+                #         self.acq_function = acq_ucb            # fill acquisition archive using ucb
+                #         self.acq_mes_flag = False
+                #         self.acq_ucb_flag = True
+                #         map_elites(self=self, acq_flag=True)
+                #         self.acq_function = acq_mes            # switch to mes acquisition function
+                #         self.acq_mes_flag = True
+                #         self.acq_ucb_flag = False
+                #         candidate_sol=self.acq_archive.as_pandas().solution_batch()
+                #         candidate_bhv=self.acq_archive.as_pandas().measures_batch()
+                #         self.acq_archive.clear()
+                #         self.update_archive(candidate_sol=candidate_sol, candidate_bhv=candidate_bhv, acq_flag=True)
+

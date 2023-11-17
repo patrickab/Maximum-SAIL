@@ -388,7 +388,7 @@ class SailRun:
                     i_candidate_sol = candidate_sol[i:i+BATCH_SIZE]
                     i_candidate_bhv = candidate_bhv[i:i+BATCH_SIZE]
                     i_candidate_acq = self.acq_function(self=self, genomes=i_candidate_sol)
-                    self.acq_archive.add(candidate_sol=i_candidate_sol, candidate_acq=i_candidate_acq, candidate_bhv=np.hstack(i_candidate_bhv))
+                    self.acq_archive.add(i_candidate_sol, i_candidate_acq, i_candidate_bhv)
                 elif self.acq_mes_flag:
                     i_candidate_sol = candidate_sol[i:i+BATCH_SIZE]
                     i_candidate_acq = self.acq_function(self=self, genomes=i_candidate_sol)

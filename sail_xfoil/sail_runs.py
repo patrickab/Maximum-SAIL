@@ -136,6 +136,8 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
             for i in range(0, 200, BATCH_SIZE):
                 self.update_archive(candidate_sol=solution_batch[i:i+BATCH_SIZE], candidate_bhv=measures_batch[i:i+BATCH_SIZE], acq_flag=True)
                 print(f"iteration: {i}")
+            del solution_batch, measures_batch
+            gc.collect()
 
         # Produce new acquisition elites
         target_t0 = target_archive.stats.num_elites
