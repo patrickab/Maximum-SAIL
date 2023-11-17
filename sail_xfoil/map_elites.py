@@ -99,11 +99,13 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
     with tqdm(total=total_iterations) as progress:
         while((remaining_evals-BATCH_SIZE >= 0)):
 
+            remaining_evals -= BATCH_SIZE
+
             progress.update(1)
             valid_indices = np.empty(0, dtype=int)
 
             emitter = update_emitter(self, target_archive=target_archive)
-            scheduler = Scheduler(target_archive, emitter)
+            scheduler = _Scheduler(target_archive, emitter)
 
             # Create Samples
             samples = scheduler.ask()
@@ -117,39 +119,25 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
             candidate_obj = target_function(self=self, genomes=candidate_sol)
             candidate_bhv = scheduler_bhv[valid_indices]
 
-            # Load Updated Candidate Solutions  - (more details in acq_mes.py)
-            if mes_flag and acq_flag:
-                candidate_sol = self.mes_elites
-                target_archive.add(solution_batch=candidate_sol, objective_batch=candidate_obj, measures_batch=candidate_bhv)
-
+            if self.custom_flag and acq_flag:
+                if mes_flag:
+                    candidate_sol = self.mes_elites
                 if remaining_evals % 100 == 0 and remaining_evals > 200:
                     # Add Selection Pressure to Acq Archive by removing 20% of elites
-                    target_elites = target_archive.as_pandas(include_solutions=True).sort_values(by="objective", ascending=False).head(int(0.7*self.acq_archive.stats.num_elites))
+                    target_elites = target_archive.as_pandas(include_solutions=True).sort_values(by="objective", ascending=False).head(int(0.8*self.acq_archive.stats.num_elites))
                     target_archive.clear()
                     if target_elites.shape[0] != 0:
                         target_archive.add(target_elites.solution_batch(), target_elites.objective_batch(), target_elites.measures_batch())
 
+            # print(f"{target} Size (before): ", str(target_archive.stats.num_elites))
+            # print(f'new size (before): {new_elite_archive.stats.num_elites}')
             status_vector, _ = target_archive.add(solution_batch=candidate_sol, objective_batch=candidate_obj, measures_batch=candidate_bhv)
-            # store newly discovered elites
-            non_0_status_indices = np.where(status_vector != 0)[0]            
-            new_sol = candidate_sol[non_0_status_indices]
-            new_obj = candidate_obj[non_0_status_indices]
-            new_bhv = candidate_bhv[non_0_status_indices]
-            new_elite_archive.add(new_sol, new_obj, new_bhv)
+            new_elite_archive.add(candidate_sol, candidate_obj, candidate_bhv)
+            # print(f"{target} Size (after): ", str(target_archive.stats.num_elites))
+            # print(f'new size (after): {new_elite_archive.stats.num_elites}')
 
-            # Scheduler.ask() returns BATCH_SIZE samples --- Scheduler.tell() expects BATCH_SIZE objectives 
-            if candidate_obj.shape[0] == samples.shape[0]:
-                scheduler_obj = candidate_obj
-            else:
-                # Insert -1000 for invalid samples to avoid them being selected as elites
-                scheduler_obj = np.full(samples.shape[0], -1000, dtype=float)
-                scheduler_obj[valid_indices] = candidate_obj
-
-            scheduler.tell(scheduler_obj, scheduler_bhv)
-            remaining_evals -= BATCH_SIZE
-
-
-    del candidate_bhv, candidate_obj, candidate_sol, emitter, mes_flag, n_evals, new_bhv, new_obj, new_sol, non_0_status_indices, progress, remaining_evals, samples, scheduler, scheduler_bhv, scheduler_obj, status_vector, surface_batch, target_function, total_iterations, valid_indices
+    print(f'best new elite objectives:')
+    print(new_elite_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).head(50).objective_batch())
 
     # calculate anytime stats
     size_t1 = target_archive.stats.num_elites
@@ -231,3 +219,40 @@ class ScaledGaussianEmitter(GaussianEmitter):
         )
 
         return np.clip(parents + scaled_noise, self.lower_bounds, self.upper_bounds)
+
+
+class _Scheduler(Scheduler):
+    """Overwwrite Scheduler to allow not using scheduler.tell"""
+    
+    def ask(self):
+
+        self._last_called = "ask"
+        self._solution_batch = []
+
+        for i, emitter in enumerate(self._emitters):
+            emitter_sols = emitter.ask()
+            self._solution_batch.append(emitter_sols)
+            self._num_emitted[i] = len(emitter_sols)
+
+        # In case the emitters didn't return any solutions.
+        self._solution_batch = np.concatenate(
+            self._solution_batch, axis=0) if self._solution_batch else np.empty(
+                (0, self._solution_dim))
+        return self._solution_batch
+
+
+    def _check_length(self, name, array):
+        """Raises a ValueError if array does not have the same length as the
+        solutions."""
+        if len(array) != len(self._solution_batch):
+            raise ValueError(
+                f"{name} should have length {len(self._solution_batch)} "
+                "(this is the number of solutions output by ask()) but "
+                f"has length {len(array)}")
+
+    EMPTY_WARNING = (
+        "`{name}` was empty before adding solutions, and it is still empty "
+        "after adding solutions. "
+        "One potential cause is that `threshold_min` is too high in this "
+        "archive, i.e., solutions are not being inserted because their "
+        "objective value does not exceed `threshold_min`.")
