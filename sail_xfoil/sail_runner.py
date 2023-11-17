@@ -36,9 +36,9 @@ from gp.fit_gp_model import fit_gp_model
 from map_elites import map_elites
 import numpy as np
 
-MIN_THRESHHOLD = 2.5
-MIN_ACQ_UCB_THRESHHOLD = 2.5
-MAX_RENDER_THRESHHOLD = 5.0
+MIN_THRESHHOLD = 1.5
+MIN_ACQ_UCB_THRESHHOLD = 1.5
+MAX_RENDER_THRESHHOLD = 6.0
 
 
 class SailRun:
@@ -284,15 +284,32 @@ class SailRun:
 
         # select acquisition function based on class constructor
         if acq_ucb_flag:
-            self.acq_ucb_flag = True
-            self.acq_mes_flag = False
             self.acq_function = acq_ucb
-            self.acq_archive.set_threshhold(threshold_min = ACQ_MES_MIN_THRESHHOLD)
+            self.acq_mes_flag = False
+            self.acq_ucb_flag = True
+            self.acq_archive.set_threshhold(threshold_min = ACQ_UCB_MIN_THRESHHOLD)
         if acq_mes_flag:
+            self.acq_function = acq_mes
             self.acq_mes_flag = True
             self.acq_ucb_flag = False
-            self.acq_function = acq_mes
             self.acq_archive.set_threshhold(threshold_min = ACQ_MES_MIN_THRESHHOLD)
+            self.update_cellgrids()
+
+        # initialize acq archive with sobol samples
+        solution_batch = create_sobol_samples(order=500, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
+        solution_batch = solution_batch.T
+        solution_batch = scale_samples(solution_batch)
+        measures_batch = solution_batch[:, 1:3]
+
+        min_threshhold = 4.5 if self.acq_ucb_flag else 0.2
+        self.acq_archive.clear()
+        self.acq_archive.set_threshhold(min_threshhold)
+        print(f"Acq MES Flag {self.acq_mes_flag} - Acq UCB Flag {self.acq_ucb_flag} - Acq Function {self.acq_function}")
+        for i in range(0, 250, BATCH_SIZE):
+            self.update_archive(candidate_sol=solution_batch[i:i+BATCH_SIZE], candidate_bhv=measures_batch[i:i+BATCH_SIZE], acq_flag=True)
+            print(f"Initialize Acq Archive: {i+10}   Size: {self.acq_archive.stats.num_elites}  Best Objective: {self.acq_archive.best_elite.objective}")
+        min_threshhold = ACQ_UCB_MIN_THRESHHOLD if self.acq_ucb_flag else ACQ_MES_MIN_THRESHHOLD
+        self.acq_archive.set_threshhold(min_threshhold)
 
         print("\n[...] Terminate init_archive()\n")
 
@@ -340,7 +357,7 @@ class SailRun:
 
         if self.acq_mes_flag and acq_flag:
             vmin = 0.0
-            vmax = 0.25
+            vmax = 0.8
 
         # all visualisations of the acquisition archive represent the state of the archive, which candidate solutions are sampled from for objective evaluations
 
@@ -389,11 +406,13 @@ class SailRun:
 
         if acq_flag:
             for i in range(0, candidate_sol.shape[0], 10):
+
                 if self.acq_ucb_flag:
                     i_candidate_sol = candidate_sol[i:i+BATCH_SIZE]
                     i_candidate_bhv = candidate_bhv[i:i+BATCH_SIZE]
                     i_candidate_acq = self.acq_function(self=self, genomes=i_candidate_sol)
                     self.acq_archive.add(i_candidate_sol, i_candidate_acq, i_candidate_bhv)
+
                 elif self.acq_mes_flag:
                     i_candidate_sol = candidate_sol[i:i+BATCH_SIZE]
                     i_candidate_acq = self.acq_function(self=self, genomes=i_candidate_sol)
@@ -596,12 +615,16 @@ def evaluate_prediction_archive(self: SailRun):
     percentual_errors_greater_than_10 = np.sum(np.abs(prediction_error)/evaluated_prediction_elites.objective_batch() > 0.1)
     id_string = f"Initial Seed: {self.initial_seed}  Domain: {self.domain}\n"
     qd_string = f"Obj QD (per bin): {obj_qd_per_bin}\nPred QD (per bin / unverified): {pred_qd_per_bin}\nPred QD (per bin / verified): {pred_verified_qd_per_bin}\nObj QD (per elite): {obj_qd_per_elite}\nPred QD (per elite / unverified): {pred_qd_per_elite}\nPred QD (per elite / verified): {pred_verified_qd_per_elite}\n"
+    obj_elites_stats = f"Highest Objective Value: {self.obj_archive.best_elite.objective}   Number of Objective Elites: {self.obj_archive.stats.num_elites}   Objective values higher than 5.00: {np.sum(self.obj_archive.as_pandas(include_solutions=True)['objective'].values > 5.00)}\n"
+    verified_elites_stats = f"Highest Verified Obj Value: {self.evaluated_predictions_archive.best_elite.objective}   Number of Verified Elites: {self.evaluated_predictions_archive.stats.num_elites}   Verified objectives values higher than 5.00: {np.sum(self.acq_archive.as_pandas(include_solutions=True)['objective'].values > 5.00)}\n"
     error_str = f"MAE Error: {mae_error}\nMSE Error: {mse_error}\nMPE Error: {mse_error}\nPercentual Errors greater than 5%:  {percentual_errors_greater_than_10}\nPrediction Errors: \n{np.array2string(prediction_error)}\nPercentual Errors: \n{np.array2string(percentual_error)}\n"
     print("Percentual Errors Greater than 10%: ", percentual_errors_greater_than_10, "\n\n")
     
     with open("stats_log", "a") as file: 
         file.write(id_string)
         file.write(qd_string)
+        file.write(obj_elites_stats)
+        file.write(verified_elites_stats)
         file.write(error_str)
 
     true_objective = evaluated_prediction_elites.objective_batch()
@@ -641,14 +664,14 @@ def mes_sobol_cellgrids(self):
     Returns:
 
         bhv_cellbounds : 625 bins x 2  dimensions x 2 boundaries
-        bhv_cellgrids  : 625 bins x 2000 samples x 2 dimensions
-        mes_cellgrid   :   1      x 2000 samples x 11 dimensions
+        bhv_cellgrids  : 625 bins x 3000 samples x 2 dimensions
+        mes_cellgrid   :   1      x 3000 samples x 11 dimensions
 
     # how does the naive approach work? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.pdf
     # why would this approach be naive? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.mp4
 
     """
-    sobol_cellgrid = create_sobol_samples(order=2000, dim=SOL_DIMENSION, seed=self.current_seed).T
+    sobol_cellgrid = create_sobol_samples(order=3000, dim=SOL_DIMENSION, seed=self.current_seed).T
 
     archive = self.obj_archive
     n_cells = np.prod(archive.dims)
@@ -665,8 +688,8 @@ def mes_sobol_cellgrids(self):
     boundaries_0 = archive.boundaries[0]
     boundaries_1 = archive.boundaries[1]
 
-    # 625 bins, 2000 samples, 2 dimensions
-    bhv_cellgrids = np.empty((n_cells, 2000, BHV_DIMENSION))
+    # 625 bins, 3000 samples, 2 dimensions
+    bhv_cellgrids = np.empty((n_cells, 3000, BHV_DIMENSION))
     bhv_cellbounds = np.empty((n_cells, BHV_DIMENSION, 2))
 
     for i in range(n_cells):
@@ -691,10 +714,10 @@ def mes_sobol_cellgrids(self):
 
         # verify if all samples are in the same cell
         if np.unique(verification).shape[0] != 1:
-            raise ValueError("MES Sobol Cellgrid Error")
+            raise ValueError("MES Sobol Cellgrid Shape Error")
         
         # verify if all samples are in the correct cell
         if verification[0] != i:
-            raise ValueError("MES Sobol Cellgrid Error")
+            raise ValueError("MES Sobol Cellgrid Cell Error")
 
     return bhv_cellbounds, bhv_cellgrids, mes_cellgrid

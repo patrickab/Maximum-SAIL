@@ -30,10 +30,10 @@ def acq_mes(self, genomes):
     cell_solutionbounds = np.repeat(solutionbounds[np.newaxis,:,:], len(genomes), axis=0)    # create 8 copies of solutionbounds
     cell_solutionbounds[:, 1:3] = cellbounds                                                 # insert niche-specific cellbounds
  
-    # mutate each genome 150 times using gaussian noise scaled to cell_solutionbounds
-    genomes = np.repeat(genomes, 150, axis=0).reshape(len(genomes), 150, SOL_DIMENSION)   
+    # mutate each genome 300 times using gaussian noise scaled to cell_solutionbounds
+    genomes = np.repeat(genomes, 300, axis=0).reshape(len(genomes), 300, SOL_DIMENSION)   
     for i in range(len(genomes)):
-        scaled_noise = rng.normal(scale=np.abs(0.28*(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), size=(150, SOL_DIMENSION))
+        scaled_noise = rng.normal(scale=np.abs(0.28*(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), size=(300, SOL_DIMENSION))
         genomes[i] = np.clip(genomes[i] + scaled_noise, cell_solutionbounds[i,:,0], cell_solutionbounds[i,:,1])
 
     genomes_tensor = tensor(genomes, dtype=float64)     # Shape: 8 x BATCH_SIZE x SOL_DIMENSION
@@ -53,13 +53,49 @@ def acq_mes(self, genomes):
         acq_entropy_tensor[i] = acq_entropy[elite_index]
         acq_solution_tensor[i] = genomes_tensor[i,elite_index]
 
+        best_solutions, indices = genomes_tensor[i, acq_entropy > 0.25].sort(descending=True, dim=1)
+        if best_solutions.shape[0] != 0:
+            result_cell_indices = self.acq_archive.index_of(best_solutions[:,1:3])
+            if np.unique(result_cell_indices).shape[0] > 1:
+                # for every result_cell_index, add best_solutions to acq_archive
+
+                best_behavior = best_solutions[:,1:3]
+                best_entropies = acq_entropy[acq_entropy > 0.25].sort(descending=True, dim=1)
+
+                self.acq_archive.add_elites(best_solutions, best_behavior, best_entropies)
+
     # Store MES Elites in SailRunner class to use them inside the MAP-Loop
     self.mes_elites = acq_solution_tensor.detach().numpy()
     mes_ndarray = acq_entropy_tensor.detach().numpy()
 
-    del MES, acq_entropy, acq_entropy_tensor, acq_solution_tensor, cell_indices, cell_solutionbounds, cellbounds, cellgrid, elite_index, genomes_tensor, i, rng, scaled_noise, transformed_genomes
-    gc.collect()
+    return np.hstack(mes_ndarray)
 
+
+def simple_mes(self, genomes):
+
+    # if genomes is empty, return empty array
+    if len(genomes) == 0:
+        return np.array([])
+
+    genomes_tensor = tensor(genomes, dtype=float64)     # Shape: 8 x BATCH_SIZE x SOL_DIMENSION
+    transformed_genomes = genomes_tensor.unsqueeze(1)   # Shape: 1 x BATCH_SIZE x 1 x SOL_DIMENSION
+
+    # calculate MES for each mutant batch & select best mutant
+    acq_solution_tensor = tensor(np.zeros((len(genomes), SOL_DIMENSION)), dtype=float64)    # Shape: PARALLEL_BATCH_SIZE x 1
+    acq_entropy_tensor = tensor(np.zeros((len(genomes), 1)), dtype=float64)                 # Shape: PARALLEL_BATCH_SIZE x 1
+    for i in range(genomes.shape[0]):
+
+        cellgrid = assamble_cellgrid(self, genomes_tensor[i,0])
+        cellgrid = tensor(cellgrid, dtype=float64)      # Shape: 10000 x SOL_DIMENSION
+        MES = qMaxValueEntropy(model=self.gp_model, candidate_set=cellgrid, num_y_samples=256)
+        acq_entropy = MES(transformed_genomes[i].permute(1, 0, 2))
+        
+        elite_index = acq_entropy.argmax()
+        acq_entropy_tensor[i] = acq_entropy[elite_index]
+        acq_solution_tensor[i] = genomes_tensor[i,elite_index]
+
+    # Store MES Elites in SailRunner class to use them inside the MAP-Loop
+    mes_ndarray = acq_entropy_tensor.detach().numpy()
 
     return np.hstack(mes_ndarray)
 
@@ -108,8 +144,8 @@ def mes_sobol_cellgrids(self):
         bhv_cellgrids  : 625 bins x 10000 samples x 2 dimensions
         mes_cellgrid   :   1      x 10000 samples x 11 dimensions
 
-    # how does the naive approach work? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%150Sobol%150Cellgrids.pdf
-    # why would this approach be naive? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%150Sobol%150Cellgrids.mp4
+    # how does the naive approach work? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%300Sobol%300Cellgrids.pdf
+    # why would this approach be naive? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%300Sobol%300Cellgrids.mp4
 
     """
     sobol_cellgrid = create_sobol_samples(order=10000, dim=SOL_DIMENSION, seed=self.current_seed).T

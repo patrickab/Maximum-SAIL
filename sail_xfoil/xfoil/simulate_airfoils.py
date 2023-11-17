@@ -22,8 +22,8 @@ REYNOLDS = config.REYNOLDS
 base_area = numpy.float64(0.07798448603500001) # (reference: calculate_rae2822_surface()) - needs to be updated with correct values
 base_lift = numpy.float64(0.5517) # (reference: xfoil_compatible_rae2822.log) - needs to be updated with correct value
 
-xfoil_iterations = 350
-xfoil_path = r"/mnt/c/Program Files/xfoil/./xfoil.exe"
+xfoil_iterations = 500
+xfoil_path = r"xfoil"
 np.set_printoptions(precision=4, suppress=True, floatmode='fixed', linewidth=120)
 
 

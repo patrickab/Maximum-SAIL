@@ -8,3 +8,4 @@ error_log
 *.png
 *.mp4
 fragen.txt
+sail_xfoil/xfoil/simulate_airfoils.py

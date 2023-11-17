@@ -31,6 +31,7 @@ import numpy as np
 
 ### Custom Scripts ###
 from xfoil.generate_airfoils import generate_parsec_coordinates
+from acq_functions.acq_mes import simple_mes, acq_mes
 from xfoil.simulate_airfoils import xfoil
 from utils.pprint_nd import pprint
 
@@ -120,7 +121,9 @@ def eval_xfoil_loop(self, solution_batch, measures_batch, evaluate_prediction_ar
         acq_elite_df = acq_elite_df[~np.isin(acq_elite_df.solution_batch(), solution_batch)] # Remove evaluated elites
 
         if self.acq_mes_flag:
+            self.acq_function = simple_mes
             obj_elite_df = obj_elite_df.head(40)
+            acq_elite_df = acq_elite_df.head(int(0.8*acq_elite_df.shape[0]))
 
         acq_elites_solutions = acq_elite_df.solution_batch()
         acq_elites_measures = acq_elite_df.measures_batch()
@@ -131,7 +134,12 @@ def eval_xfoil_loop(self, solution_batch, measures_batch, evaluate_prediction_ar
 
         self.acq_archive.clear()
         self.acq_archive.add(obj_elites_solutions, obj_elites_objectives, obj_elites_measures)
-        self.update_archive(candidate_sol=acq_elites_solutions, candidate_bhv=acq_elites_measures, pred_flag=False)
+        self.update_archive(candidate_sol=acq_elites_solutions, candidate_bhv=acq_elites_measures, acq_flag=True)
+
+        if self.acq_mes_flag:
+            # discard all acquisition values below 0.15
+            acq_elite_df = acq_elite_df[acq_elite_df.objective_batch() > 0.15]
+            self.acq_function = acq_mes
     
 
     if pred_flag:

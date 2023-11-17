@@ -1,3 +1,28 @@
+"""
+Main function for running SAIL. This function is used for controlling behavior of SailRun objects.
+
+Parameters
+
+    initial_seed : used for seeding - among each benchmark iteration, all algorithms are seeded with the same value. This value is incremented by the number of TEST_RUNS, to ensure a unique sequence of seeds for each benchmark iteration, identical across all benchmarked algorithms.
+    
+    acq_ucb_flag : boolean flag for running SAIL with UCB acquisition function
+    acq_mes_flag : boolean flag for running SAIL with MES acquisition function
+    
+    greedy_flag: boolean flag for sampling only highest performing solutions from new elites archive (100% exploitation)
+    hybrid_flag: boolean flag for sampling certain percentage of highest performing solutions, certain percentage of new bin solutions (xx.xx% exploitation, 100-xx.xx% exploration)
+
+    random_init: boolean flag for initializing target archive with quasi-random sobol samples
+    mes_init: boolean flag for initializing target archive with MES samples
+
+    sail_vanilla_flag : boolean flag for running SAIL with vanilla behavior
+        - before each MAP-Loop, initialize target archive with objective elites
+    sail_custom_flag : boolean flag for running SAIL with custom behavior 
+        - before each MAP-Loop, initialize target archive with objective elites & updated target elites
+        - requires selection of: (greedy_flag or hybrid_flag) and (random_init or mes_init)
+        - offers possibility of using pred_verific_flag
+    sail_random_flag : boolean flag for running SAIL with uniform random solutions
+"""
+
 import numpy as np
 import subprocess
 import datetime
@@ -33,32 +58,6 @@ if (BATCH_SIZE%2)!=0 or ((PRED_N_OBJ_EVALS//PREDICTION_VERIFICATIONS)%2)!=0:
     raise ValueError("BATCH_SIZE and MAX_PRED_VERIFICATION//PEDICTION_VERIFICATION must be even numbers")
 
 def sail(initial_seed, acq_ucb_flag=False, acq_mes_flag=False, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, pred_verific_flag=False, greedy_flag=False, hybrid_flag=False, random_init=False, mes_init=False, ucb_init=False):
-
-    """
-    Main function for running SAIL. This function is used for controlling behavior of SailRun objects.
-
-    Parameters
-
-        initial_seed : used for seeding - among each benchmark iteration, all algorithms are seeded with the same value. This value is incremented by the number of TEST_RUNS, to ensure a unique sequence of seeds for each benchmark iteration, identical across all benchmarked algorithms.
-    
-        acq_ucb_flag : boolean flag for running SAIL with UCB acquisition function
-        acq_mes_flag : boolean flag for running SAIL with MES acquisition function
-    
-        greedy_flag: boolean flag for sampling only highest performing solutions from new elites archive (100% exploitation)
-        hybrid_flag: boolean flag for sampling certain percentage of highest performing solutions, certain percentage of new bin solutions (xx.xx% exploitation, 100-xx.xx% exploration)
-    
-        random_init: boolean flag for initializing target archive with quasi-random sobol samples
-        mes_init: boolean flag for initializing target archive with MES samples
-    
-        sail_vanilla_flag : boolean flag for running SAIL with vanilla behavior
-            - before each MAP-Loop, initialize target archive with objective elites
-        sail_custom_flag : boolean flag for running SAIL with custom behavior 
-            - before each MAP-Loop, initialize target archive with objective elites & updated target elites
-            - requires selection of: (greedy_flag or hybrid_flag) and (random_init or mes_init)
-            - offers possibility of using pred_verific_flag
-        sail_random_flag : boolean flag for running SAIL with uniform random solutions
-
-    """
 
     current_run = SailRun(initial_seed, acq_ucb_flag=acq_ucb_flag, acq_mes_flag=acq_mes_flag, sail_vanilla_flag=sail_vanilla_flag, sail_custom_flag=sail_custom_flag, sail_random_flag=sail_random_flag, pred_verific_flag=pred_verific_flag, greedy_flag=greedy_flag, hybrid_flag=hybrid_flag, random_init=random_init, mes_init=mes_init, ucb_init=ucb_init) 
 
@@ -119,9 +118,10 @@ if __name__ == "__main__":
         gc.collect()
 
         benchmark_domains = []
-        
-        sail(initial_seed=i, sail_vanilla_flag=True, pred_verific_flag=False, hybrid_flag=False, acq_ucb_flag=True, mes_init=False)
+
+        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, hybrid_flag=True, acq_mes_flag=True, ucb_init=True)
         sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, greedy_flag=True, acq_mes_flag=True, ucb_init=True)
+        sail(initial_seed=i, sail_vanilla_flag=True, pred_verific_flag=False, hybrid_flag=False, acq_ucb_flag=True, mes_init=False)
         gc.collect()
 
         img_filenames = [f"imgs/final_heatmaps_{i}_{benchmark_domain}.png" for benchmark_domain in benchmark_domains]
