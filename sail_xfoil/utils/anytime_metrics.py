@@ -123,8 +123,8 @@ def calculate_anytime_metrics(self: SailRun, obj_t0, obj_t1, target_t0, target_t
     anytime_metric_kwargs['target_t0'] = target_t0
     anytime_metric_kwargs['target_t1'] = target_t1
     anytime_metric_kwargs['n_new_target_bins'] = target_t1 - target_t0
-    anytime_metric_kwargs['n_new_target_improvements'] = 1337 # ToDo (new_bin_elites & improved_elites refer to objective elites & cannot be used for this metric)
-    anytime_metric_kwargs['n_new_target_elites'] = 1337 # ToDo (new_bin_elites & improved_elites refer to objective elites & cannot be used for this metric)
+    anytime_metric_kwargs['n_new_target_improvements'] = -123 # ToDo (new_bin_elites & improved_elites refer to objective elites & cannot be used for this metric)
+    anytime_metric_kwargs['n_new_target_elites'] = -123 # ToDo (new_bin_elites & improved_elites refer to objective elites & cannot be used for this metric)
     anytime_metric_kwargs['best_target_elite'] = target_archive.best_elite.objective
 
     anytime_metric_kwargs['total_new_obj_bins'] += anytime_metric_kwargs['n_new_obj_bins']
@@ -132,16 +132,16 @@ def calculate_anytime_metrics(self: SailRun, obj_t0, obj_t1, target_t0, target_t
     anytime_metric_kwargs['total_obj_improvements'] += anytime_metric_kwargs['n_new_obj_improvements']
 
     anytime_metric_kwargs['total_new_target_bins'] += anytime_metric_kwargs['n_new_target_bins']
-    anytime_metric_kwargs['total_new_target_elites'] = 1337 # ToDo (new_bin_elites & improved_elites refer to objective elites & cannot be used for this metric)
-    anytime_metric_kwargs['total_target_improvements'] = 1337 # ToDo (new_bin_elites & improved_elites refer to objective elites & cannot be used for this metric)
+    anytime_metric_kwargs['total_new_target_elites'] = -123 # ToDo (new_bin_elites & improved_elites refer to objective elites & cannot be used for this metric)
+    anytime_metric_kwargs['total_target_improvements'] = -123 # ToDo (new_bin_elites & improved_elites refer to objective elites & cannot be used for this metric)
 
     anytime_metric_kwargs['percentage_new_obj_bins'] = (anytime_metric_kwargs['total_new_obj_bins']/anytime_metric_kwargs['consumed_obj_evals'])*100
     anytime_metric_kwargs['percentage_new_obj_elites'] = (anytime_metric_kwargs['total_new_obj_elites']/anytime_metric_kwargs['consumed_obj_evals'])*100
     anytime_metric_kwargs['percentage_obj_improvements'] = (anytime_metric_kwargs['total_obj_improvements']/anytime_metric_kwargs['consumed_obj_evals'])*100
 
     anytime_metric_kwargs['percentage_new_target_bins'] = (anytime_metric_kwargs['total_new_target_bins']/anytime_metric_kwargs['consumed_target_evals'])*100
-    anytime_metric_kwargs['percentage_new_target_elites'] = 1337 # ToDo (new_bin_elites & improved_elites refer to objective elites & cannot be used for this metric)
-    anytime_metric_kwargs['percentage_target_improvements'] = 1337 # ToDo (new_bin_elites & improved_elites refer to objective elites & cannot be used for this metric)
+    anytime_metric_kwargs['percentage_new_target_elites'] = -123 # ToDo (new_bin_elites & improved_elites refer to objective elites & cannot be used for this metric)
+    anytime_metric_kwargs['percentage_target_improvements'] = -123 # ToDo (new_bin_elites & improved_elites refer to objective elites & cannot be used for this metric)
 
     anytime_metric_kwargs['convergence_errors'] = self.convergence_errors
     anytime_metric_kwargs['total_convergence_errors'] += anytime_metric_kwargs['convergence_errors']

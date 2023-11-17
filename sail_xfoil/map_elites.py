@@ -126,8 +126,8 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
                     # Add Selection Pressure to Acq Archive by removing 20% of elites
                     target_elites = target_archive.as_pandas(include_solutions=True).sort_values(by="objective", ascending=False).head(int(0.7*self.acq_archive.stats.num_elites))
                     target_archive.clear()
-                if target_elites.shape[0] != 0:
-                    target_archive.add(target_elites.solution_batch(), target_elites.objective_batch(), target_elites.measures_batch())
+                    if target_elites.shape[0] != 0:
+                        target_archive.add(target_elites.solution_batch(), target_elites.objective_batch(), target_elites.measures_batch())
 
             status_vector, _ = target_archive.add(solution_batch=candidate_sol, objective_batch=candidate_obj, measures_batch=candidate_bhv)
             # store newly discovered elites

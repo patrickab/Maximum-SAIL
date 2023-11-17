@@ -129,7 +129,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
 
         if consumed_obj_evals % 200:
             # initialize acq archive with sobol samples
-            solution_batch = create_sobol_samples(order=1500, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
+            solution_batch = create_sobol_samples(order=800, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
             solution_batch = solution_batch.T
             solution_batch = scale_samples(solution_batch)
             measures_batch = solution_batch[:, 1:3]

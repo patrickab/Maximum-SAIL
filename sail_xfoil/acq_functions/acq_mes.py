@@ -30,10 +30,10 @@ def acq_mes(self, genomes):
     cell_solutionbounds = np.repeat(solutionbounds[np.newaxis,:,:], len(genomes), axis=0)    # create 8 copies of solutionbounds
     cell_solutionbounds[:, 1:3] = cellbounds                                                 # insert niche-specific cellbounds
  
-    # mutate each genome 20 times using gaussian noise scaled to cell_solutionbounds
-    genomes = np.repeat(genomes, 20, axis=0).reshape(len(genomes), 20, SOL_DIMENSION)   
+    # mutate each genome 150 times using gaussian noise scaled to cell_solutionbounds
+    genomes = np.repeat(genomes, 150, axis=0).reshape(len(genomes), 150, SOL_DIMENSION)   
     for i in range(len(genomes)):
-        scaled_noise = rng.normal(scale=np.abs(0.28*(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), size=(20, SOL_DIMENSION))
+        scaled_noise = rng.normal(scale=np.abs(0.28*(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), size=(150, SOL_DIMENSION))
         genomes[i] = np.clip(genomes[i] + scaled_noise, cell_solutionbounds[i,:,0], cell_solutionbounds[i,:,1])
 
     genomes_tensor = tensor(genomes, dtype=float64)     # Shape: 8 x BATCH_SIZE x SOL_DIMENSION
@@ -108,8 +108,8 @@ def mes_sobol_cellgrids(self):
         bhv_cellgrids  : 625 bins x 10000 samples x 2 dimensions
         mes_cellgrid   :   1      x 10000 samples x 11 dimensions
 
-    # how does the naive approach work? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.pdf
-    # why would this approach be naive? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.mp4
+    # how does the naive approach work? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%150Sobol%150Cellgrids.pdf
+    # why would this approach be naive? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%150Sobol%150Cellgrids.mp4
 
     """
     sobol_cellgrid = create_sobol_samples(order=10000, dim=SOL_DIMENSION, seed=self.current_seed).T

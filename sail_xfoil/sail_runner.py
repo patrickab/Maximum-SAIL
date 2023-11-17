@@ -139,6 +139,11 @@ class SailRun:
         # for vanilla sail, random sail & random init just draw sobol samples
         if sail_vanilla_flag or sail_random_flag or random_init:
 
+            self.acq_function = acq_ucb
+            self.acq_mes_flag = False
+            self.acq_ucb_flag = True
+            self.acq_archive.set_threshhold(threshold_min = ACQ_UCB_MIN_THRESHHOLD)
+
             # initialize obj archive with sobol samples
             solution_batch = create_sobol_samples(order=INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
             solution_batch = solution_batch.T
@@ -223,10 +228,10 @@ class SailRun:
         # use UCB to fill obj archive
         if sail_custom_flag and ucb_init:
 
-            self.acq_archive.set_threshhold(threshold_min = ACQ_UCB_MIN_THRESHHOLD)
             self.acq_function = acq_ucb
             self.acq_mes_flag = False
             self.acq_ucb_flag = True
+            self.acq_archive.set_threshhold(threshold_min = ACQ_UCB_MIN_THRESHHOLD)
 
             # visualize empty acquisition archive
             for i in range(0, INIT_N_EVALS, BATCH_SIZE):
@@ -636,14 +641,14 @@ def mes_sobol_cellgrids(self):
     Returns:
 
         bhv_cellbounds : 625 bins x 2  dimensions x 2 boundaries
-        bhv_cellgrids  : 625 bins x 10000 samples x 2 dimensions
-        mes_cellgrid   :   1      x 10000 samples x 11 dimensions
+        bhv_cellgrids  : 625 bins x 2000 samples x 2 dimensions
+        mes_cellgrid   :   1      x 2000 samples x 11 dimensions
 
     # how does the naive approach work? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.pdf
     # why would this approach be naive? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.mp4
 
     """
-    sobol_cellgrid = create_sobol_samples(order=10000, dim=SOL_DIMENSION, seed=self.current_seed).T
+    sobol_cellgrid = create_sobol_samples(order=2000, dim=SOL_DIMENSION, seed=self.current_seed).T
 
     archive = self.obj_archive
     n_cells = np.prod(archive.dims)
@@ -660,8 +665,8 @@ def mes_sobol_cellgrids(self):
     boundaries_0 = archive.boundaries[0]
     boundaries_1 = archive.boundaries[1]
 
-    # 625 bins, 10000 samples, 2 dimensions
-    bhv_cellgrids = np.empty((n_cells, 10000, BHV_DIMENSION))
+    # 625 bins, 2000 samples, 2 dimensions
+    bhv_cellgrids = np.empty((n_cells, 2000, BHV_DIMENSION))
     bhv_cellbounds = np.empty((n_cells, BHV_DIMENSION, 2))
 
     for i in range(n_cells):
