@@ -53,16 +53,19 @@ def acq_mes(self, genomes):
         acq_entropy_tensor[i] = acq_entropy[elite_index]
         acq_solution_tensor[i] = genomes_tensor[i,elite_index]
 
-        best_solutions, indices = genomes_tensor[i, acq_entropy > 0.25].sort(descending=True, dim=1)
+        indices = np.where(acq_entropy > 0.25)[0]
+        best_solutions = genomes_tensor[i, indices]
         if best_solutions.shape[0] != 0:
             result_cell_indices = self.acq_archive.index_of(best_solutions[:,1:3])
             if np.unique(result_cell_indices).shape[0] > 1:
                 # for every result_cell_index, add best_solutions to acq_archive
 
-                best_behavior = best_solutions[:,1:3]
-                best_entropies = acq_entropy[acq_entropy > 0.25].sort(descending=True, dim=1)
+                print("\n\nIT HAPPENED \n\n")
 
-                self.acq_archive.add_elites(best_solutions, best_behavior, best_entropies)
+                best_behavior = best_solutions[:,1:3]
+                best_entropies = acq_entropy[indices]
+
+                self.acq_archive.add(best_solutions.detach().numpy(), best_entropies.detach().numpy(), best_behavior.detach().numpy())
 
     # Store MES Elites in SailRunner class to use them inside the MAP-Loop
     self.mes_elites = acq_solution_tensor.detach().numpy()
@@ -73,6 +76,7 @@ def acq_mes(self, genomes):
 
 def simple_mes(self, genomes):
 
+    print("\n\n\n\n\nentering simple_mes\n\n\n\n\n\n\n")
     # if genomes is empty, return empty array
     if len(genomes) == 0:
         return np.array([])

@@ -122,19 +122,16 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
             if self.custom_flag and acq_flag:
                 if mes_flag:
                     candidate_sol = self.mes_elites
-                if remaining_evals % 100 == 0 and remaining_evals > 200:
-                    # Add Selection Pressure to Acq Archive by removing 20% of elites
-                    target_elites = target_archive.as_pandas(include_solutions=True).sort_values(by="objective", ascending=False).head(int(0.8*self.acq_archive.stats.num_elites))
-                    target_archive.clear()
-                    if target_elites.shape[0] != 0:
+                if remaining_evals % 50 == 0 and remaining_evals > 200:
+                    if target_archive.stats.num_elites > 80:
+                        # Add Selection Pressure to Acq Archive by removing decreasing percentage of elites
+                        percentage = 0.5 + (remaining_evals/n_evals)*0.3
+                        target_elites = target_archive.as_pandas(include_solutions=True).sort_values(by="objective", ascending=False).head(int(percentage*target_archive.stats.num_elites))
+                        target_archive.clear()
                         target_archive.add(target_elites.solution_batch(), target_elites.objective_batch(), target_elites.measures_batch())
 
-            # print(f"{target} Size (before): ", str(target_archive.stats.num_elites))
-            # print(f'new size (before): {new_elite_archive.stats.num_elites}')
             status_vector, _ = target_archive.add(solution_batch=candidate_sol, objective_batch=candidate_obj, measures_batch=candidate_bhv)
             new_elite_archive.add(candidate_sol, candidate_obj, candidate_bhv)
-            # print(f"{target} Size (after): ", str(target_archive.stats.num_elites))
-            # print(f'new size (after): {new_elite_archive.stats.num_elites}')
 
     print(f'best new elite objectives:')
     print(new_elite_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).head(50).objective_batch())

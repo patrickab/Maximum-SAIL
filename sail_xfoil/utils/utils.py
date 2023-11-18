@@ -66,8 +66,8 @@ def eval_xfoil_loop(self, solution_batch, measures_batch, evaluate_prediction_ar
         print(iter_solutions.shape[0])
 
         # evaluate samples & extract converged solutions
-        generate_parsec_coordinates(iter_solutions)
-        _, success_indices, converged_obj = xfoil(n_solutions)
+        _, surface_batch = generate_parsec_coordinates(iter_solutions)
+        _, success_indices, converged_obj = xfoil(iterations=n_solutions, surface_batch=surface_batch)
         success_indices = success_indices[:n_solutions]
         converged_sol = iter_solutions[success_indices]
         converged_bhv = measures_batch[sample_index:sample_index+BATCH_SIZE][success_indices]
@@ -114,16 +114,17 @@ def eval_xfoil_loop(self, solution_batch, measures_batch, evaluate_prediction_ar
 
     if acq_flag and not self.random_flag:
 
-        self.acq_archive.clear()
+        print("acq archive size before update: ", self.acq_archive.stats.num_elites)
 
         obj_elite_df = self.obj_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False)
         acq_elite_df = self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False)
         acq_elite_df = acq_elite_df[~np.isin(acq_elite_df.solution_batch(), solution_batch)] # Remove evaluated elites
+        acq_elite_df = acq_elite_df[~np.isin(acq_elite_df.solution_batch(), obj_elite_df.solution_batch())] # Remove obj elites
 
         if self.acq_mes_flag:
-            self.acq_function = simple_mes
-            obj_elite_df = obj_elite_df.head(40)
-            acq_elite_df = acq_elite_df.head(int(0.8*acq_elite_df.shape[0]))
+            acq_elite_df = acq_elite_df[acq_elite_df.objective_batch() > 0.1]
+            acq_elite_df = acq_elite_df.head(int(acq_elite_df.shape[0]*0.5))
+            obj_elite_df = obj_elite_df[~np.isin(obj_elite_df.solution_batch(), acq_elite_df.solution_batch())].head(40)
 
         acq_elites_solutions = acq_elite_df.solution_batch()
         acq_elites_measures = acq_elite_df.measures_batch()
@@ -138,8 +139,10 @@ def eval_xfoil_loop(self, solution_batch, measures_batch, evaluate_prediction_ar
 
         if self.acq_mes_flag:
             # discard all acquisition values below 0.15
+            print("threshhold 0.15")
             acq_elite_df = acq_elite_df[acq_elite_df.objective_batch() > 0.15]
-            self.acq_function = acq_mes
+
+        print("acq archive size after update: ", self.acq_archive.stats.num_elites)
     
 
     if pred_flag:

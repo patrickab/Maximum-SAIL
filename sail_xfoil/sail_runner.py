@@ -296,7 +296,7 @@ class SailRun:
             self.update_cellgrids()
 
         # initialize acq archive with sobol samples
-        solution_batch = create_sobol_samples(order=500, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
+        solution_batch = create_sobol_samples(order=800, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
         solution_batch = solution_batch.T
         solution_batch = scale_samples(solution_batch)
         measures_batch = solution_batch[:, 1:3]
@@ -422,8 +422,15 @@ class SailRun:
                     else:
                         break
 
+                    print("Updated Acquisition values:")
+                    pprint(i_candidate_acq)
+
                     i_candidate_bhv = candidate_bhv[i:i+BATCH_SIZE]
-                    self.acq_archive.add(self.mes_elites, i_candidate_acq, i_candidate_bhv)
+                    print("Update Archive Size (before):" + str(self.acq_archive.stats.num_elites))
+                    result = self.acq_archive.add(self.mes_elites, i_candidate_acq, i_candidate_bhv)
+                    print("Update Archive Size (after):" + str(self.acq_archive.stats.num_elites))
+                    print(result)
+                    print()
 
         if pred_flag:
             candidate_pred = predict_objective(self=self, genomes=candidate_sol)
