@@ -73,14 +73,14 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
             qd_score_offset=-600,
             threshold_min = -1,)
 
+    mes_flag = self.acq_mes_flag
     if acq_flag:
         target = "Acq Archive"
-        mes_flag = self.acq_mes_flag
         target_function = self.acq_function
         target_archive = self.acq_archive
         if self.acq_mes_flag: # reduce number of acquisition evaluations for MES
             self.update_cellgrids()
-            n_evals = ACQ_N_MAP_EVALS//16
+            n_evals = ACQ_N_MAP_EVALS//6
         else:
             n_evals = ACQ_N_MAP_EVALS
 
@@ -119,22 +119,27 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
             candidate_obj = target_function(self=self, genomes=candidate_sol)
             candidate_bhv = scheduler_bhv[valid_indices]
 
+            if mes_flag:
+                candidate_sol = self.mes_elites
+
+            status_vector, _ = target_archive.add(solution_batch=candidate_sol, objective_batch=candidate_obj, measures_batch=candidate_bhv)
+
             if self.custom_flag and acq_flag:
-                if mes_flag:
-                    candidate_sol = self.mes_elites
                 if remaining_evals % 50 == 0 and remaining_evals > 200:
                     if target_archive.stats.num_elites > 80:
                         # Add Selection Pressure to Acq Archive by removing decreasing percentage of elites
-                        percentage = 0.5 + (remaining_evals/n_evals)*0.3
+                        percentage = 0.7 + (remaining_evals/n_evals)*0.2
                         target_elites = target_archive.as_pandas(include_solutions=True).sort_values(by="objective", ascending=False).head(int(percentage*target_archive.stats.num_elites))
                         target_archive.clear()
                         target_archive.add(target_elites.solution_batch(), target_elites.objective_batch(), target_elites.measures_batch())
 
-            status_vector, _ = target_archive.add(solution_batch=candidate_sol, objective_batch=candidate_obj, measures_batch=candidate_bhv)
             new_elite_archive.add(candidate_sol, candidate_obj, candidate_bhv)
 
     print(f'best new elite objectives:')
-    print(new_elite_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).head(50).objective_batch())
+    top_20_acq = new_elite_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).head(20).objective_batch()
+    mean_top_20_acq = np.mean(top_20_acq)
+    print(top_20_acq)
+    print(f'mean top 20 acq: {mean_top_20_acq}')
 
     # calculate anytime stats
     size_t1 = target_archive.stats.num_elites

@@ -34,6 +34,7 @@ from xfoil.generate_airfoils import generate_parsec_coordinates
 from acq_functions.acq_mes import simple_mes, acq_mes
 from xfoil.simulate_airfoils import xfoil
 from utils.pprint_nd import pprint
+from sail_runner import SailRun
 
 ### Global Parameters ###
 from config.config import Config
@@ -42,10 +43,11 @@ BATCH_SIZE = config.BATCH_SIZE
 SIGMA_EMITTER = config.SIGMA_EMITTER
 SOL_DIMENSION = config.SOL_DIMENSION
 BHV_DIMENSION = config.BHV_DIMENSION
+OBJ_DIMENSION = config.OBJ_DIMENSION
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 ACQ_MES_MIN_THRESHHOLD = config.ACQ_MES_MIN_THRESHHOLD
 
-def eval_xfoil_loop(self, solution_batch, measures_batch, evaluate_prediction_archive=False, acq_flag=False, pred_flag=False, candidate_targetvalues=None):
+def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_prediction_archive=False, acq_flag=False, pred_flag=False, candidate_targetvalues=None):
 
     n_errors = 0
     iteration = 0
@@ -109,6 +111,13 @@ def eval_xfoil_loop(self, solution_batch, measures_batch, evaluate_prediction_ar
 
 
     if (not evaluate_prediction_archive) and (not self.random_flag):
+        if solution_batch.shape[0] >= 800:
+            self.obj_archive.as_pandas(include_solutions=True).to_csv(f"sobol_10000.csv")
+            self.sol_array = np.empty((0, SOL_DIMENSION))
+            self.obj_array = np.empty((0, OBJ_DIMENSION))
+            sol = self.obj_archive.as_pandas(include_solutions=True).solution_batch()
+            obj = self.obj_archive.as_pandas(include_solutions=True).objective_batch()
+            self.update_gp_data(new_solutions=sol, new_objectives=obj)
         self.update_gp_model()
 
 
@@ -118,13 +127,18 @@ def eval_xfoil_loop(self, solution_batch, measures_batch, evaluate_prediction_ar
 
         obj_elite_df = self.obj_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False)
         acq_elite_df = self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False)
-        acq_elite_df = acq_elite_df[~np.isin(acq_elite_df.solution_batch(), solution_batch)] # Remove evaluated elites
-        acq_elite_df = acq_elite_df[~np.isin(acq_elite_df.solution_batch(), obj_elite_df.solution_batch())] # Remove obj elites
 
         if self.acq_mes_flag:
-            acq_elite_df = acq_elite_df[acq_elite_df.objective_batch() > 0.1]
+            lala = 5
+
+        # ToDo: (((does not work atm)))
+        acq_elite_df = acq_elite_df[~np.isin(acq_elite_df.solution_batch(), solution_batch).all(1)] # Remove evaluated elites
+        acq_elite_df = acq_elite_df[~np.isin(acq_elite_df.solution_batch(), obj_elite_df.solution_batch()).all(1)] # Remove obj elites
+
+        if self.acq_mes_flag:
+            acq_elite_df = acq_elite_df[acq_elite_df.objective_batch() > 0.02]
             acq_elite_df = acq_elite_df.head(int(acq_elite_df.shape[0]*0.5))
-            obj_elite_df = obj_elite_df[~np.isin(obj_elite_df.solution_batch(), acq_elite_df.solution_batch())].head(40)
+            obj_elite_df = obj_elite_df[~np.isin(obj_elite_df.solution_batch(), acq_elite_df.solution_batch()).all(1)].head(20)
 
         acq_elites_solutions = acq_elite_df.solution_batch()
         acq_elites_measures = acq_elite_df.measures_batch()
@@ -133,16 +147,17 @@ def eval_xfoil_loop(self, solution_batch, measures_batch, evaluate_prediction_ar
         obj_elites_objectives = obj_elite_df.objective_batch() if self.acq_ucb_flag else np.full(obj_elites_solutions.shape[0], ACQ_MES_MIN_THRESHHOLD*1.001)
         obj_elites_measures = obj_elite_df.measures_batch()
 
-        self.acq_archive.clear()
-        self.acq_archive.add(obj_elites_solutions, obj_elites_objectives, obj_elites_measures)
-        self.update_archive(candidate_sol=acq_elites_solutions, candidate_bhv=acq_elites_measures, acq_flag=True)
-
-        if self.acq_mes_flag:
-            # discard all acquisition values below 0.15
-            print("threshhold 0.15")
-            acq_elite_df = acq_elite_df[acq_elite_df.objective_batch() > 0.15]
-
-        print("acq archive size after update: ", self.acq_archive.stats.num_elites)
+        target_archive = self.acq_archive
+        target_archive.clear()
+        target_archive.add(obj_elites_solutions, obj_elites_objectives, obj_elites_measures)
+        print(f"Acq MES Flag {self.acq_mes_flag} - Acq UCB Flag {self.acq_ucb_flag} - Acq Function {self.acq_function}")
+        print(f"N candidate acq elites: {acq_elites_solutions.shape[0]}")
+        print(f"Threshhold: {target_archive.stats.num_elites}\n")
+        for i in range(0, acq_elites_solutions.shape[0], BATCH_SIZE):
+            self.update_archive(candidate_sol=acq_elites_solutions[i:i+BATCH_SIZE], candidate_bhv=acq_elites_measures[i:i+BATCH_SIZE], acq_flag=True)
+            if self.acq_mes_flag:
+                print(f"Updating Acq Archive - Size: {self.acq_archive.stats.num_elites}  Best Objective: {self.acq_archive.best_elite.objective}")
+        print(self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).head(20).objective_batch())
     
 
     if pred_flag:

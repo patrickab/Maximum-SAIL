@@ -36,6 +36,7 @@ def acq_mes(self, genomes):
         scaled_noise = rng.normal(scale=np.abs(0.28*(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), size=(300, SOL_DIMENSION))
         genomes[i] = np.clip(genomes[i] + scaled_noise, cell_solutionbounds[i,:,0], cell_solutionbounds[i,:,1])
 
+
     genomes_tensor = tensor(genomes, dtype=float64)     # Shape: 8 x BATCH_SIZE x SOL_DIMENSION
     transformed_genomes = genomes_tensor.unsqueeze(1)   # Shape: 1 x BATCH_SIZE x 1 x SOL_DIMENSION
 

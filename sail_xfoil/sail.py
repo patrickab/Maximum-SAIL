@@ -61,9 +61,6 @@ def sail(initial_seed, acq_ucb_flag=False, acq_mes_flag=False, sail_vanilla_flag
 
     current_run = SailRun(initial_seed, acq_ucb_flag=acq_ucb_flag, acq_mes_flag=acq_mes_flag, sail_vanilla_flag=sail_vanilla_flag, sail_custom_flag=sail_custom_flag, sail_random_flag=sail_random_flag, pred_verific_flag=pred_verific_flag, greedy_flag=greedy_flag, hybrid_flag=hybrid_flag, random_init=random_init, mes_init=mes_init, ucb_init=ucb_init) 
 
-    print("\n ## Exit Initialization ##")
-    print(" ## Enter Acquisition Loop ##\n\n")
-
     if sail_vanilla_flag:
         run_vanilla_sail(current_run)
         gc.collect()
