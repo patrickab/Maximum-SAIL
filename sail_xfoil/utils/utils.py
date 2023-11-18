@@ -150,15 +150,17 @@ def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_pred
         target_archive = self.acq_archive
         target_archive.clear()
         target_archive.add(obj_elites_solutions, obj_elites_objectives, obj_elites_measures)
-        print(f"Acq MES Flag {self.acq_mes_flag} - Acq UCB Flag {self.acq_ucb_flag} - Acq Function {self.acq_function}")
-        print(f"N candidate acq elites: {acq_elites_solutions.shape[0]}")
-        print(f"Threshhold: {target_archive.stats.num_elites}\n")
-        for i in range(0, acq_elites_solutions.shape[0], BATCH_SIZE):
-            self.update_archive(candidate_sol=acq_elites_solutions[i:i+BATCH_SIZE], candidate_bhv=acq_elites_measures[i:i+BATCH_SIZE], acq_flag=True)
-            if self.acq_mes_flag:
-                print(f"Updating Acq Archive - Size: {self.acq_archive.stats.num_elites}  Best Objective: {self.acq_archive.best_elite.objective}")
+        self.update_archive(candidate_sol=acq_elites_solutions, candidate_bhv=acq_elites_measures, acq_flag=True)
         print(self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).head(20).objective_batch())
-    
+
+        print("acq archive size after update: ", self.acq_archive.stats.num_elites)
+
+        # select only 20% of best updated acquisition elites
+        updated_elite_df = self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).head(int(self.acq_archive.stats.num_elites*0.2))
+        self.acq_archive.clear()
+        self.acq_archive.add(updated_elite_df.solution_batch(), updated_elite_df.objective_batch(), updated_elite_df.measures_batch())
+
+        print("acq archive size after selection: ", self.acq_archive.stats.num_elites)
 
     if pred_flag:
 
