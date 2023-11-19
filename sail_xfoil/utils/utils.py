@@ -98,6 +98,11 @@ def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_pred
         else:
             self.update_archive(candidate_sol=converged_sol, candidate_obj=converged_obj, candidate_bhv=converged_bhv, evaluate_prediction_archive=True)
 
+    if np.any(new_objectives >= 5.2):
+        # write to csv vile
+        print("\nWriting to csv file")
+        self.obj_archive.as_pandas(include_solutions=True).to_csv(f"exceptional_obj_archive_{self.domain}_{self.initial_seed}_{self.current_seed}.csv")
+
     if candidate_targetvalues is not None:
         if candidate_targetvalues.shape[0] != 0:
 
