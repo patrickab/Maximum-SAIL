@@ -33,7 +33,7 @@ def acq_mes(self, genomes):
     # mutate each genome 300 times using gaussian noise scaled to cell_solutionbounds
     genomes = np.repeat(genomes, 300, axis=0).reshape(len(genomes), 300, SOL_DIMENSION)   
     for i in range(len(genomes)):
-        scaled_noise = rng.normal(scale=np.abs(0.28*(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), size=(300, SOL_DIMENSION))
+        scaled_noise = rng.normal(scale=np.abs(0.25*(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), size=(300, SOL_DIMENSION))
         genomes[i] = np.clip(genomes[i] + scaled_noise, cell_solutionbounds[i,:,0], cell_solutionbounds[i,:,1])
 
 
@@ -54,19 +54,18 @@ def acq_mes(self, genomes):
         acq_entropy_tensor[i] = acq_entropy[elite_index]
         acq_solution_tensor[i] = genomes_tensor[i,elite_index]
 
-        indices = np.where(acq_entropy > 0.25)[0]
+        indices = np.where(acq_entropy > 0.1)[0]
         best_solutions = genomes_tensor[i, indices]
         if best_solutions.shape[0] != 0:
+            best_entropies = acq_entropy[indices]
             result_cell_indices = self.acq_archive.index_of(best_solutions[:,1:3])
             if np.unique(result_cell_indices).shape[0] > 1:
-                # for every result_cell_index, add best_solutions to acq_archive
-
-                print("\n\nIT HAPPENED \n\n")
-
+                print("\n\nMULTIPLE HIGHPERFORMING MUTANTS\n")
+                print("Number Unique Cells: ", np.unique(result_cell_indices).shape[0])
                 best_behavior = best_solutions[:,1:3]
-                best_entropies = acq_entropy[indices]
-
-                self.acq_archive.add(best_solutions.detach().numpy(), best_entropies.detach().numpy(), best_behavior.detach().numpy())
+                print("Acq Elites (before): ", self.acq_archive.stats.num_elites)
+                status_vector, acquisitions = self.acq_archive.add(best_solutions.detach().numpy(), best_entropies.detach().numpy(), best_behavior.detach().numpy())
+                print("Acq Elites (after): ", self.acq_archive.stats.num_elites, "\n")
 
     # Store MES Elites in SailRunner class to use them inside the MAP-Loop
     self.mes_elites = acq_solution_tensor.detach().numpy()

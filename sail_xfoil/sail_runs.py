@@ -112,7 +112,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
 
     initialize_archive(self)
 
-    CURIOSITY = 5 # For Hybrid Approach: 'CURIOSITY//BATCH_SIZE' new bin elites are to be sampled
+    CURIOSITY = 6 # For Hybrid Approach: 'CURIOSITY//BATCH_SIZE' new bin elites are to be sampled
 
     anytime_metric_kwargs = initialize_anytime_metrics(self=self, acq_flag=acq_loop, pred_flag=pred_loop)
 
@@ -130,8 +130,9 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
     while(current_eval_budget >= i_obj_evals):
 
         if consumed_obj_evals == total_eval_budget//3:
-            print("\nDECREASING CURIOSITY PARAMETER\n")
-            CURIOSITY = 4
+            CURIOSITY = 5
+            if total_eval_budget == total_eval_budget//6:
+                CURIOSITY = 3
 
         if consumed_obj_evals % 200:
             # initialize acq archive with sobol samples
@@ -292,11 +293,6 @@ def select_samples(self: SailRun, improved_elites, new_bin_elites, acq_flag=Fals
             else:
                 candidate_elite_df = pandas.concat([new_bin_elites.head(n_samples - n_improved_elites), improved_elites])
 
-    print(f"\n\n{target} Values for upcoming Objective Evaluations:\n")
-    target_objective = candidate_elite_df['objective'].to_numpy()
-    target_objective_improvement = candidate_elite_df['objective_improvement'].to_numpy()
-    pprint(target_objective, target_objective_improvement)
-
     return candidate_elite_df
 
 
@@ -409,6 +405,12 @@ def initialize_archive(self):
     # use UCB to fill obj archive
     if self.custom_flag and self.ucb_init:
 
+        # set to hybrid flag
+        greedy_flag = self.greedy_flag
+        hybrid_flag = self.hybrid_flag
+        self.greedy_flag = False
+        self.hybrid_flag = True
+
         self.acq_function = acq_ucb
         self.acq_mes_flag = False
         self.acq_ucb_flag = True
@@ -441,6 +443,8 @@ def initialize_archive(self):
             improved_elites, new_bin_elites = prepare_sample_elites(self=self, new_elite_archive=new_target_elites, old_elite_archive=self.obj_archive)                      # Split new_target_elites into improved elites & new bin elites, then (if self.acq_ucb_flag or pred_flag) calculate objective improvement (else) objective_improvement = objective
             candidate_solutions_df = select_samples(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, acq_flag=True, curiosity=6)            # Select samples based on exploration behavior defined in the class constructor
 
+            self.visualize_archive(archive=self.acq_archive, acq_flag=True)
+
             solution_batch = candidate_solutions_df.solution_batch()
             objective_batch = candidate_solutions_df.objective_batch()
             measures_batch = candidate_solutions_df.measures_batch()
@@ -452,6 +456,10 @@ def initialize_archive(self):
             print(f"Best Objective: {self.obj_archive.best_elite.objective}")
 
             remaining_evals -= BATCH_SIZE
+        
+        # reset to original flags
+        self.greedy_flag = greedy_flag
+        self.hybrid_flag = hybrid_flag
 
     # select acquisition function based on class constructor
     if ucb_flag:
@@ -478,6 +486,11 @@ def initialize_archive(self):
     print(f"Acq MES Flag {self.acq_mes_flag} - Acq UCB Flag {self.acq_ucb_flag} - Acq Function {self.acq_function}")
     for i in range(0, 800, BATCH_SIZE):
         self.update_archive(candidate_sol=solution_batch[i:i+BATCH_SIZE], candidate_bhv=measures_batch[i:i+BATCH_SIZE], acq_flag=True)
-        print(f"Initialize Acq Archive: {i+10}   Size: {self.acq_archive.stats.num_elites}  Best Objective: {self.acq_archive.best_elite.objective}")
+        print(f"Initialize Acq Archive: {i+10}   Size: {self.acq_archive.stats.num_elites}")
+    
+    sobol_acq_elites = self.acq_archive.as_pandas(include_solutions=True)
+    sobol_acq_elites = sobol_acq_elites[sobol_acq_elites.objective_batch() > 0.05]
+    self.acq_archive.clear()
+    self.update_archive(candidate_sol=sobol_acq_elites.solution_batch(), candidate_bhv=sobol_acq_elites.measures_batch(), acq_flag=True)
 
     print("\n[...] Terminate init_archive()\n")

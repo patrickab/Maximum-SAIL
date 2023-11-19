@@ -249,9 +249,9 @@ class SailRun:
 
                     print("\nUpdated Acquisition values:")
                     i_candidate_bhv = candidate_bhv[i:i+BATCH_SIZE]
-                    indices, acq_values = self.acq_archive.add(i_candidate_sol, i_candidate_acq, i_candidate_bhv)
+                    indices, _ = self.acq_archive.add(i_candidate_sol, i_candidate_acq, i_candidate_bhv)
                     print(f"Indices:{indices}")
-                    print(f"Acq Values:{acq_values}\n")
+                    print(f"Acq Values:{i_candidate_acq}\n")
                     return
 
         if pred_flag:
@@ -545,7 +545,8 @@ def mes_sobol_cellgrids(self):
 
         # verify if all samples are in the same cell
         if np.unique(verification).shape[0] != 1:
-            raise ValueError("MES Sobol Cellgrid Shape Error")
+            print("\n\n")
+            raise Warning("MES Sobol Cellgrid Shape Error")
         
         # verify if all samples are in the correct cell
         if verification[0] != i:

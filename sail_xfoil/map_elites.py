@@ -80,9 +80,13 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
         target_archive = self.acq_archive
         if self.acq_mes_flag: # reduce number of acquisition evaluations for MES
             self.update_cellgrids()
-            n_evals = ACQ_N_MAP_EVALS//6
+            n_evals = ACQ_N_MAP_EVALS//4
+            SIGMA_EMITTER = 0.15
         else:
             n_evals = ACQ_N_MAP_EVALS
+
+        print_frequency = n_evals/8
+        selection_frequency = n_evals/2
 
     if pred_flag:
         target = "Pred Archive"
@@ -124,14 +128,16 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
 
             status_vector, _ = target_archive.add(solution_batch=candidate_sol, objective_batch=candidate_obj, measures_batch=candidate_bhv)
 
-            if self.custom_flag and acq_flag:
-                if remaining_evals % 50 == 0 and remaining_evals > 200:
+            if remaining_evals % 200 == 0 and remaining_evals > 600:
+                if acq_flag and self.custom_flag:
                     if target_archive.stats.num_elites > 80:
                         # Add Selection Pressure to Acq Archive by removing decreasing percentage of elites
-                        percentage = 0.7 + (remaining_evals/n_evals)*0.2
+                        percentage = 0.6 + (remaining_evals/n_evals)*0.1
                         target_elites = target_archive.as_pandas(include_solutions=True).sort_values(by="objective", ascending=False).head(int(percentage*target_archive.stats.num_elites))
                         target_archive.clear()
                         target_archive.add(target_elites.solution_batch(), target_elites.objective_batch(), target_elites.measures_batch())
+                        print("Remaining Evaluations: ", remaining_evals)
+                        print(target_archive.as_pandas(include_solutions=True).sort_values(by="objective", ascending=False))
 
             new_elite_archive.add(candidate_sol, candidate_obj, candidate_bhv)
 
