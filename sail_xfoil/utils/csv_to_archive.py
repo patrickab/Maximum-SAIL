@@ -2,7 +2,26 @@ from ribs.archives import GridArchive, ArchiveDataFrame
 from pandas import DataFrame
 import pandas
 
-df = pandas.read_csv('exceptional_obj_archive_hybrid_verification_ucb_init_mes_0_51600.csv').sort_values(by=['objective'], ascending=False)
-df = ArchiveDataFrame(df)
+from config.config import Config
+config = Config('config/config.ini')
+SOL_DIMENSION = config.SOL_DIMENSION
+BHV_NUMBER_BINS = config.BHV_NUMBER_BINS
+BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 
-fufu = 5
+def csv_to_archive(csv_path: str):
+
+    min_obj_threshhold = -1
+
+    df = pandas.read_csv(csv_path).sort_values(by=['objective'], ascending=False)
+    df = ArchiveDataFrame(df)
+
+    archive = GridArchive(
+        solution_dim=SOL_DIMENSION,
+        dims=BHV_NUMBER_BINS,
+        ranges=BHV_VALUE_RANGE,
+        qd_score_offset=-600,
+        threshold_min = min_obj_threshhold
+    )
+
+    archive.add(df.solution_batch(), df.objective_batch(), df.measures_batch())
+    return archive
