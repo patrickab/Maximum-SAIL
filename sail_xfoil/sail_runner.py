@@ -279,7 +279,7 @@ class SailRun:
 
         # ToDO:does not work yet
         class _GridArchive(GridArchive):
-            def set_threshhold(self, threshold_min):
+            def set_threshold(self, threshold_min):
                 self._threshold_min = threshold_min
 
         obj_archive = _GridArchive(

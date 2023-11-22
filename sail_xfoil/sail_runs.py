@@ -135,7 +135,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
             if total_eval_budget == total_eval_budget//6:
                 CURIOSITY = 3
 
-        if consumed_obj_evals % total_eval_budget//5 and consumed_obj_evals != 0:
+        if consumed_obj_evals % (total_eval_budget//5) and consumed_obj_evals != 0:
             # initialize acq archive with sobol samples
             solution_batch = create_sobol_samples(order=1000, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
             solution_batch = solution_batch.T
@@ -320,7 +320,7 @@ def initialize_archive(self):
         self.acq_function = acq_ucb
         self.acq_mes_flag = False
         self.acq_ucb_flag = True
-        self.acq_archive.set_threshhold(threshold_min = ACQ_UCB_MIN_THRESHHOLD)
+        self.acq_archive.set_threshold(threshold_min = ACQ_UCB_MIN_THRESHHOLD)
 
         # visualize empty acquisition archive
         for i in range(0, INIT_N_EVALS, BATCH_SIZE):
@@ -336,7 +336,7 @@ def initialize_archive(self):
     # use MES to fill obj archive
     if self.custom_flag and self.mes_init:
 
-        self.acq_archive.set_threshhold(threshold_min = ACQ_MES_MIN_THRESHHOLD)
+        self.acq_archive.set_threshold(threshold_min = ACQ_MES_MIN_THRESHHOLD)
         self.acq_function = acq_mes
         self.acq_mes_flag = True
         self.acq_ucb_flag = False
@@ -402,7 +402,10 @@ def initialize_archive(self):
         self.acq_function = acq_ucb
         self.acq_mes_flag = False
         self.acq_ucb_flag = True
-        self.acq_archive.set_threshhold(threshold_min = ACQ_UCB_MIN_THRESHHOLD)
+
+        # set high initial threshold to ensure that only good solutions are added to the archive
+        self.acq_archive.set_threshold(threshold_min = 4.5)
+        self.new_elite_archive.set_threshold(threshold_min = 4.5)
 
         # visualize empty acquisition archive
         for i in range(0, INIT_N_EVALS, BATCH_SIZE):
@@ -429,7 +432,7 @@ def initialize_archive(self):
             new_target_elites, _, _ = map_elites(self, acq_flag=True)
             if new_target_elites.stats.num_elites < BATCH_SIZE: new_target_elites = ensure_n_new_elites(self=self, new_elite_archive=new_target_elites, acq_flag=True)   # Sample until enough new acquisition elites are found
             improved_elites, new_bin_elites = prepare_sample_elites(self=self, new_elite_archive=new_target_elites, old_elite_archive=self.obj_archive)                  # Split new_target_elites into improved elites & new bin elites, then (if self.acq_ucb_flag or pred_flag) calculate objective improvement (else) objective_improvement = objective
-            candidate_solutions_df = select_samples(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, acq_flag=True, curiosity=6)                    # Select samples based on exploration behavior defined in the class constructor
+            candidate_solutions_df = select_samples(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, acq_flag=True, curiosity=4)                    # Select samples based on exploration behavior defined in the class constructor
 
             self.visualize_archive(archive=self.acq_archive, acq_flag=True)
 
@@ -455,13 +458,13 @@ def initialize_archive(self):
         self.acq_function = acq_ucb
         self.acq_mes_flag = False
         self.acq_ucb_flag = True
-        self.acq_archive.set_threshhold(threshold_min = ACQ_UCB_MIN_THRESHHOLD)
+        self.acq_archive.set_threshold(threshold_min = ACQ_UCB_MIN_THRESHHOLD)
     if mes_flag:
         print("mes entering")
         self.acq_function = acq_mes
         self.acq_mes_flag = True
         self.acq_ucb_flag = False
-        self.acq_archive.set_threshhold(threshold_min = ACQ_MES_MIN_THRESHHOLD)
+        self.acq_archive.set_threshold(threshold_min = ACQ_MES_MIN_THRESHHOLD)
         self.update_cellgrids()
 
     # initialize acq archive with sobol samples
@@ -477,7 +480,7 @@ def initialize_archive(self):
         print(f"Initialize Acq Archive: {i+10}   Size: {self.acq_archive.stats.num_elites}")
     
     sobol_acq_elites = self.acq_archive.as_pandas(include_solutions=True)
-    sobol_acq_elites = sobol_acq_elites[sobol_acq_elites.objective_batch() > 0.05]
+    sobol_acq_elites = sobol_acq_elites[sobol_acq_elites.objective_batch() > 3*ACQ_MES_MIN_THRESHHOLD]
     self.acq_archive.clear()
     self.update_archive(candidate_sol=sobol_acq_elites.solution_batch(), candidate_bhv=sobol_acq_elites.measures_batch(), acq_flag=True)
 
