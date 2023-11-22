@@ -60,6 +60,7 @@ BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 ACQ_N_MAP_EVALS = config.ACQ_N_MAP_EVALS
 PRED_N_MAP_EVALS = config.PRED_N_MAP_EVALS
 PREDICTION_VERIFICATIONS = config.PREDICTION_VERIFICATIONS
+ACQ_MES_MIN_THRESHHOLD = config.ACQ_MES_MIN_THRESHHOLD
 
 def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_elite_archive=None):
 
@@ -81,7 +82,6 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
         if self.acq_mes_flag: # reduce number of acquisition evaluations for MES
             self.update_cellgrids()
             n_evals = ACQ_N_MAP_EVALS//4
-            SIGMA_EMITTER = 0.15
         else:
             n_evals = ACQ_N_MAP_EVALS
 
@@ -129,11 +129,11 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
 
             status_vector, _ = target_archive.add(solution_batch=candidate_sol, objective_batch=candidate_obj, measures_batch=candidate_bhv)
 
-            if remaining_evals % 100 == 0:
+            if remaining_evals % n_evals//5 == 0:
                 if acq_flag and self.acq_mes_flag:
                     if target_archive.stats.num_elites > 80:
                         target_elites = target_archive.as_pandas(include_solutions=True)
-                        target_elites = target_elites[target_elites['objective'] > 0.05]
+                        target_elites = target_elites[target_elites['objective'] > 5*ACQ_MES_MIN_THRESHHOLD]
                         target_archive.clear()
                         self.update_archive(candidate_sol=target_elites.solution_batch(), candidate_bhv=target_elites.measures_batch(), acq_flag=True)
                         target_archive = self.acq_archive

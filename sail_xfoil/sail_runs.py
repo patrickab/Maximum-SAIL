@@ -135,7 +135,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
             if total_eval_budget == total_eval_budget//6:
                 CURIOSITY = 3
 
-        if consumed_obj_evals % 100 and consumed_obj_evals != 0:
+        if consumed_obj_evals % total_eval_budget//5 and consumed_obj_evals != 0:
             # initialize acq archive with sobol samples
             solution_batch = create_sobol_samples(order=1000, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
             solution_batch = solution_batch.T
