@@ -116,9 +116,9 @@ if __name__ == "__main__":
 
         benchmark_domains = []
 
-        #sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, greedy_flag=True, acq_mes_flag=True, ucb_init=True)
-        #sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, hybrid_flag=True, acq_ucb_flag=True, ucb_init=True)
+        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, greedy_flag=True, acq_mes_flag=True, ucb_init=True)
         sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, hybrid_flag=True, acq_mes_flag=True, ucb_init=True)
+        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, hybrid_flag=True, acq_ucb_flag=True, ucb_init=True)
         sail(initial_seed=i, sail_vanilla_flag=True, acq_ucb_flag=True)
         gc.collect()
 

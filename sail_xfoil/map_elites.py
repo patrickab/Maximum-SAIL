@@ -127,7 +127,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
 
             status_vector, _ = target_archive.add(solution_batch=candidate_sol, objective_batch=candidate_obj, measures_batch=candidate_bhv)
 
-            if remaining_evals % (n_evals//10) == 0:
+            if remaining_evals % (n_evals//5) == 0:
                 if acq_flag and self.acq_mes_flag:
                     if target_archive.stats.num_elites > 80:
                         target_elites = target_archive.as_pandas(include_solutions=True)
