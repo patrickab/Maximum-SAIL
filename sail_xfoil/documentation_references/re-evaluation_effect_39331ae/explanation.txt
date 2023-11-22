@@ -1,0 +1,3 @@
+In the following sequence, in picture #39 we can see the final state of an MES acquisition archive after a terminated MAP-Loop.
+By re-evaluating the acquisition archive we can observe, that previous solutions produce highperforming offspring. This is shown in the pictures #40 to #42.
+A few commits before, those evaluated acquisition elites used to be discarted. Now we store and reevaluate them. 

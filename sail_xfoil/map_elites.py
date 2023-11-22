@@ -127,16 +127,31 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
 
             status_vector, _ = target_archive.add(solution_batch=candidate_sol, objective_batch=candidate_obj, measures_batch=candidate_bhv)
 
+            if self.acq_mes_flag and remaining_evals % (n_evals//10) == 0:
+                self.visualize_archive(archive=target_archive, acq_flag=True)
+
             if remaining_evals % (n_evals//5) == 0:
                 if acq_flag and self.acq_mes_flag:
                     if target_archive.stats.num_elites > 80:
+
+                        # extract good elites for update
                         target_elites = target_archive.as_pandas(include_solutions=True)
                         target_elites = target_elites[target_elites['objective'] > 2*ACQ_MES_MIN_THRESHHOLD]
-                        target_archive.clear()
                         self.update_archive(candidate_sol=target_elites.solution_batch(), candidate_bhv=target_elites.measures_batch(), acq_flag=True)
+                        print(target_elites.head(20))
+
+                        # extract top 30% elites for update
                         target_archive = self.acq_archive
                         target_elites = target_archive.as_pandas(include_solutions=True).head(int(0.3*target_archive.stats.num_elites))
                         self.update_archive(candidate_sol=target_elites.solution_batch(), candidate_bhv=target_elites.measures_batch(), acq_flag=True)
+
+                        # remove elites with low acquisition values
+                        target_elites = target_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False)
+                        target_elites = target_elites[target_elites['objective'] > 2*ACQ_MES_MIN_THRESHHOLD]
+                        print(target_elites.head(20))
+                        target_archive.clear()
+                        target_archive.add(solution_batch=target_elites.solution_batch(), objective_batch=target_elites.objective_batch(), measures_batch=target_elites.measures_batch())
+
                         print("Remaining Evaluations: ", remaining_evals)
             new_elite_archive.add(candidate_sol, candidate_obj, candidate_bhv)
 
