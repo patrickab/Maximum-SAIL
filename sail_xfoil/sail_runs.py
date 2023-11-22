@@ -137,13 +137,14 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
 
         if consumed_obj_evals % (total_eval_budget//5) and consumed_obj_evals != 0:
             # initialize acq archive with sobol samples
-            solution_batch = create_sobol_samples(order=1000, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
+            n_sobol_samples = 1000
+            solution_batch = create_sobol_samples(order=n_sobol_samples, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
             solution_batch = solution_batch.T
             solution_batch = scale_samples(solution_batch)
             measures_batch = solution_batch[:, 1:3]
-            for i in range(0, 200, BATCH_SIZE):
+            for i in range(0, n_sobol_samples, BATCH_SIZE):
                 self.update_archive(candidate_sol=solution_batch[i:i+BATCH_SIZE], candidate_bhv=measures_batch[i:i+BATCH_SIZE], acq_flag=acq_loop, pred_flag=pred_loop)
-                print(f"iteration: {i}")
+                print(f"Sobol iteration: {i}")
             del solution_batch, measures_batch
             gc.collect()
 
@@ -403,10 +404,6 @@ def initialize_archive(self):
         self.acq_mes_flag = False
         self.acq_ucb_flag = True
 
-        # set high initial threshold to ensure that only good solutions are added to the archive
-        self.acq_archive.set_threshold(threshold_min = 4.5)
-        self.new_elite_archive.set_threshold(threshold_min = 4.5)
-
         # visualize empty acquisition archive
         for i in range(0, INIT_N_EVALS, BATCH_SIZE):
             self.visualize_archive(self.acq_archive, acq_flag=True)
@@ -425,11 +422,15 @@ def initialize_archive(self):
         measures_batch = solution_batch[:, 1:3]
         self.update_archive(candidate_sol=solution_batch, candidate_bhv=measures_batch, acq_flag=True)          # initialize acq_archive with remaining sobol samples
 
+        # set high initial threshold to ensure that only good solutions are added to the archive
+        min_threshold = 4.5
+        self.acq_archive.set_threshold(threshold_min = min_threshold)
+
         remaining_evals = INIT_N_ACQ_EVALS
         while remaining_evals > 0:
 
             # calculate UCB Acquisition Elites
-            new_target_elites, _, _ = map_elites(self, acq_flag=True)
+            new_target_elites, _, _ = map_elites(self, acq_flag=True, new_elite_threshold=min_threshold)
             if new_target_elites.stats.num_elites < BATCH_SIZE: new_target_elites = ensure_n_new_elites(self=self, new_elite_archive=new_target_elites, acq_flag=True)   # Sample until enough new acquisition elites are found
             improved_elites, new_bin_elites = prepare_sample_elites(self=self, new_elite_archive=new_target_elites, old_elite_archive=self.obj_archive)                  # Split new_target_elites into improved elites & new bin elites, then (if self.acq_ucb_flag or pred_flag) calculate objective improvement (else) objective_improvement = objective
             candidate_solutions_df = select_samples(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, acq_flag=True, curiosity=4)                    # Select samples based on exploration behavior defined in the class constructor

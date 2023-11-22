@@ -62,7 +62,7 @@ PRED_N_MAP_EVALS = config.PRED_N_MAP_EVALS
 PREDICTION_VERIFICATIONS = config.PREDICTION_VERIFICATIONS
 ACQ_MES_MIN_THRESHHOLD = config.ACQ_MES_MIN_THRESHHOLD
 
-def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_elite_archive=None):
+def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_elite_archive=None, new_elite_threshold=0):
 
     print("\n\nInitialize Map-Elites [...]")
 
@@ -72,7 +72,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
             dims=BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
-            threshold_min = -1,)
+            threshold_min = new_elite_threshold,)
 
     mes_flag = self.acq_mes_flag
     if acq_flag:

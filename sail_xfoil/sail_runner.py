@@ -37,7 +37,7 @@ import numpy as np
 
 MIN_THRESHHOLD = 1.5
 MIN_ACQ_UCB_THRESHHOLD = 1.5
-MAX_RENDER_THRESHHOLD = 5.0
+MAX_RENDER_THRESHHOLD = 5.5
 
 
 class SailRun:
@@ -239,7 +239,6 @@ class SailRun:
                     self.acq_archive.add(i_candidate_sol, i_candidate_acq, i_candidate_bhv)
 
                 elif self.acq_mes_flag:
-                    print(candidate_sol.shape[0])
                     i_candidate_sol = candidate_sol[i:i+BATCH_SIZE]
                     i_candidate_acq = self.acq_function(self=self, genomes=i_candidate_sol)
 
@@ -248,11 +247,8 @@ class SailRun:
                     else:
                         break
 
-                    print("\nUpdated Acquisition values:")
                     i_candidate_bhv = candidate_bhv[i:i+BATCH_SIZE]
-                    indices, _ = self.acq_archive.add(i_candidate_sol, i_candidate_acq, i_candidate_bhv)
-                    print(f"Indices:{indices}")
-                    print(f"Acq Values:{i_candidate_acq}\n")
+                    self.acq_archive.add(i_candidate_sol, i_candidate_acq, i_candidate_bhv)
 
 
         if pred_flag:
