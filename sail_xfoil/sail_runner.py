@@ -399,7 +399,7 @@ def evaluate_prediction_archive(self: SailRun):
     This is done to determine the quality of results.
     """
 
-    from utils.utils import eval_xfoil_loop
+    from xfoil.eval_xfoil_loop import eval_xfoil_loop
 
     print("Evaluate Prediction Archive")
 

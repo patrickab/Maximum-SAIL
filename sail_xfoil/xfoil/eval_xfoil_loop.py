@@ -142,11 +142,10 @@ def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_pred
             acq_elite_df = acq_elite_df[~np.isin(acq_elite_df.solution_batch(), obj_elite_df.solution_batch()).all(1)] # Remove obj elites
 
             if self.acq_mes_flag:
-                acq_elite_df = acq_elite_df.head(int(acq_elite_df.shape[0]*0.8))
-                obj_elite_df = obj_elite_df[~np.isin(obj_elite_df.solution_batch(), acq_elite_df.solution_batch()).all(1)].head(40)
+                acq_elite_df = acq_elite_df.head(int(acq_elite_df.shape[0]))
                 obj_elite_df = obj_elite_df.sample(n=5, random_state=self.current_seed, replace=True)
             else:
-                acq_elite_df = acq_elite_df.head(int(acq_elite_df.shape[0]*0.5))
+                acq_elite_df = acq_elite_df.head(int(acq_elite_df.shape[0]))
 
             acq_elites_solutions = acq_elite_df.solution_batch()
             acq_elites_measures = acq_elite_df.measures_batch()
@@ -165,7 +164,7 @@ def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_pred
                 self.acq_archive.add(obj_elites_solutions, obj_elites_objectives, obj_elites_measures)
             else:
                 updated_elite_df = self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False)
-                updated_elite_df = updated_elite_df.head(int(updated_elite_df.shape[0]*0.8))
+                updated_elite_df = updated_elite_df.head(int(updated_elite_df.shape[0]))
                 self.acq_archive.clear()
                 self.acq_archive.add(updated_elite_df.solution_batch(), updated_elite_df.objective_batch(), updated_elite_df.measures_batch())
                 print(updated_elite_df)

@@ -28,7 +28,7 @@ CSV_BUFFERSIZE = (n_obj_evals/BATCH_SIZE) / 8
 
 ###### Import Custom Scripts ######
 
-from utils.utils import eval_xfoil_loop
+from xfoil.eval_xfoil_loop import eval_xfoil_loop
 from utils.pprint_nd import pprint
 from utils.anytime_metrics import initialize_anytime_metrics, calculate_anytime_metrics, store_anytime_metrics
 from xfoil.generate_airfoils import generate_parsec_coordinates
