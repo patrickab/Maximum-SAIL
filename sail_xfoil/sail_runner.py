@@ -239,6 +239,7 @@ class SailRun:
                     self.acq_archive.add(i_candidate_sol, i_candidate_acq, i_candidate_bhv)
 
                 elif self.acq_mes_flag:
+                    print(candidate_sol.shape[0])
                     i_candidate_sol = candidate_sol[i:i+BATCH_SIZE]
                     i_candidate_acq = self.acq_function(self=self, genomes=i_candidate_sol)
 
@@ -252,7 +253,7 @@ class SailRun:
                     indices, _ = self.acq_archive.add(i_candidate_sol, i_candidate_acq, i_candidate_bhv)
                     print(f"Indices:{indices}")
                     print(f"Acq Values:{i_candidate_acq}\n")
-                    return
+
 
         if pred_flag:
             candidate_pred = predict_objective(self=self, genomes=candidate_sol)
@@ -276,6 +277,7 @@ class SailRun:
         if self.acq_function == acq_mes:
             min_acq_threshhold = ACQ_MES_MIN_THRESHHOLD
 
+        # ToDO:does not work yet
         class _GridArchive(GridArchive):
             def set_threshhold(self, threshold_min):
                 self._threshold_min = threshold_min
@@ -546,10 +548,10 @@ def mes_sobol_cellgrids(self):
         # verify if all samples are in the same cell
         if np.unique(verification).shape[0] != 1:
             print("\n\n")
-            raise Warning("MES Sobol Cellgrid Shape Error")
-        
-        # verify if all samples are in the correct cell
-        if verification[0] != i:
-            raise ValueError("MES Sobol Cellgrid Cell Error")
+            # write to logfile
+            with open("sobolCellgridError", "a") as file:
+                file.write(f"Bin: {i}")
+                file.write(f"Unique Indices: {np.unique(verification)}")
+                file.write("\n\n")
 
     return bhv_cellbounds, bhv_cellgrids, mes_cellgrid

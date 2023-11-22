@@ -85,9 +85,6 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
         else:
             n_evals = ACQ_N_MAP_EVALS
 
-        print_frequency = n_evals/8
-        selection_frequency = n_evals/2
-
     if pred_flag:
         target = "Pred Archive"
         target_function = predict_objective
@@ -123,22 +120,24 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
             candidate_obj = target_function(self=self, genomes=candidate_sol)
             candidate_bhv = scheduler_bhv[valid_indices]
 
-            if mes_flag:
+            if valid_indices.shape[0] == 0:
+                print("No valid samples found")
+                continue
+
+            if mes_flag and acq_flag:
                 candidate_sol = self.mes_elites
 
             status_vector, _ = target_archive.add(solution_batch=candidate_sol, objective_batch=candidate_obj, measures_batch=candidate_bhv)
 
-            if remaining_evals % 200 == 0 and remaining_evals > 600:
-                if acq_flag and self.custom_flag:
+            if remaining_evals % 100 == 0:
+                if acq_flag and self.acq_mes_flag:
                     if target_archive.stats.num_elites > 80:
-                        # Add Selection Pressure to Acq Archive by removing decreasing percentage of elites
-                        percentage = 0.6 + (remaining_evals/n_evals)*0.1
-                        target_elites = target_archive.as_pandas(include_solutions=True).sort_values(by="objective", ascending=False).head(int(percentage*target_archive.stats.num_elites))
+                        target_elites = target_archive.as_pandas(include_solutions=True)
+                        target_elites = target_elites[target_elites['objective'] > 0.05]
                         target_archive.clear()
-                        target_archive.add(target_elites.solution_batch(), target_elites.objective_batch(), target_elites.measures_batch())
+                        self.update_archive(candidate_sol=target_elites.solution_batch(), candidate_bhv=target_elites.measures_batch(), acq_flag=True)
+                        target_archive = self.acq_archive
                         print("Remaining Evaluations: ", remaining_evals)
-                        print(target_archive.as_pandas(include_solutions=True).sort_values(by="objective", ascending=False))
-
             new_elite_archive.add(candidate_sol, candidate_obj, candidate_bhv)
 
     print(f'best new elite objectives:')

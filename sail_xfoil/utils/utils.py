@@ -123,46 +123,57 @@ def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_pred
         self.update_gp_model()
 
 
-    if acq_flag and not self.random_flag:
+    if acq_flag:
 
-        print("acq archive size before update: ", self.acq_archive.stats.num_elites)
+        if self.sail_vanilla_flag:
 
-        obj_elite_df = self.obj_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False)
-        acq_elite_df = self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False)
-
-        acq_elite_df = acq_elite_df[~np.isin(acq_elite_df.solution_batch(), solution_batch).all(1)] # Remove evaluated elites
-        acq_elite_df = acq_elite_df[~np.isin(acq_elite_df.solution_batch(), obj_elite_df.solution_batch()).all(1)] # Remove obj elites
-
-        if self.acq_mes_flag:
-            acq_elite_df = acq_elite_df.head(int(acq_elite_df.shape[0]*0.8))
-            obj_elite_df = obj_elite_df[~np.isin(obj_elite_df.solution_batch(), acq_elite_df.solution_batch()).all(1)].head(40)
-            obj_elite_df = obj_elite_df.sample(n=5, random_state=self.current_seed, replace=True)
-
-        acq_elites_solutions = acq_elite_df.solution_batch()
-        acq_elites_measures = acq_elite_df.measures_batch()
-
-        obj_elites_solutions = obj_elite_df.solution_batch()
-        obj_elites_objectives = obj_elite_df.objective_batch() if self.acq_ucb_flag else np.full(obj_elites_solutions.shape[0], ACQ_MES_MIN_THRESHHOLD*1.001)
-        obj_elites_measures = obj_elite_df.measures_batch()
-
-        self.acq_archive.clear()
-        self.update_archive(candidate_sol=acq_elites_solutions, candidate_bhv=acq_elites_measures, acq_flag=True)
-        print(self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).head(20).objective_batch())
-
-        print("acq archive size after update: ", self.acq_archive.stats.num_elites)
-
-        if self.acq_archive.stats.num_elites < 10:
-            self.acq_archive.add(obj_elites_solutions, obj_elites_objectives, obj_elites_measures)
-        else:
-            updated_elite_df = self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False)
-            updated_elite_df = updated_elite_df.head(int(updated_elite_df.shape[0]*0.8))
+            obj_elite_df = self.obj_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False)
             self.acq_archive.clear()
-            self.acq_archive.add(updated_elite_df.solution_batch(), updated_elite_df.objective_batch(), updated_elite_df.measures_batch())
+            self.acq_archive.add(obj_elite_df.solution_batch(), obj_elite_df.objective_batch(), obj_elite_df.measures_batch())
+
+        if self.sail_custom_flag:
+
+            print("acq archive size before update: ", self.acq_archive.stats.num_elites)
+
+            obj_elite_df = self.obj_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False)
+            acq_elite_df = self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False)
+
+            acq_elite_df = acq_elite_df[~np.isin(acq_elite_df.solution_batch(), solution_batch).all(1)] # Remove evaluated elites
+            acq_elite_df = acq_elite_df[~np.isin(acq_elite_df.solution_batch(), obj_elite_df.solution_batch()).all(1)] # Remove obj elites
+
+            if self.acq_mes_flag:
+                acq_elite_df = acq_elite_df.head(int(acq_elite_df.shape[0]*0.8))
+                obj_elite_df = obj_elite_df[~np.isin(obj_elite_df.solution_batch(), acq_elite_df.solution_batch()).all(1)].head(40)
+                obj_elite_df = obj_elite_df.sample(n=5, random_state=self.current_seed, replace=True)
+            else:
+                acq_elite_df = acq_elite_df.head(int(acq_elite_df.shape[0]*0.5))
+
+            acq_elites_solutions = acq_elite_df.solution_batch()
+            acq_elites_measures = acq_elite_df.measures_batch()
+
+            obj_elites_solutions = obj_elite_df.solution_batch()
+            obj_elites_objectives = obj_elite_df.objective_batch() if self.acq_ucb_flag else np.full(obj_elites_solutions.shape[0], ACQ_MES_MIN_THRESHHOLD*1.001)
+            obj_elites_measures = obj_elite_df.measures_batch()
+
+            self.acq_archive.clear()
+            self.update_archive(candidate_sol=acq_elites_solutions, candidate_bhv=acq_elites_measures, acq_flag=True)
+            print(self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).head(20).objective_batch())
+
+            print("acq archive size after update: ", self.acq_archive.stats.num_elites)
+
+            if self.acq_archive.stats.num_elites < 10 or self.acq_ucb_flag:
+                self.acq_archive.add(obj_elites_solutions, obj_elites_objectives, obj_elites_measures)
+            else:
+                updated_elite_df = self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False)
+                updated_elite_df = updated_elite_df.head(int(updated_elite_df.shape[0]*0.8))
+                self.acq_archive.clear()
+                self.acq_archive.add(updated_elite_df.solution_batch(), updated_elite_df.objective_batch(), updated_elite_df.measures_batch())
+                print(updated_elite_df)
+
 
         print("Acq Archive Size after selection: ", self.acq_archive.stats.num_elites)
         print("Best Acq Objective: ", self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).head(1).objective_batch())
         print("Worst Acq Objective: ", self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).tail(1).objective_batch())
-        print(updated_elite_df.objective_batch())
 
     if pred_flag:
 

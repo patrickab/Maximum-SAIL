@@ -110,7 +110,8 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
         pred_loop:  If True, will enter prediction verification loop
     """
 
-    initialize_archive(self)
+    if not pred_loop:
+        initialize_archive(self)
 
     CURIOSITY = 6 # For Hybrid Approach: 'CURIOSITY//BATCH_SIZE' new bin elites are to be sampled
 
@@ -134,7 +135,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
             if total_eval_budget == total_eval_budget//6:
                 CURIOSITY = 3
 
-        if consumed_obj_evals % 200:
+        if consumed_obj_evals % 100 and consumed_obj_evals != 0:
             # initialize acq archive with sobol samples
             solution_batch = create_sobol_samples(order=1000, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
             solution_batch = solution_batch.T
@@ -321,29 +322,16 @@ def initialize_archive(self):
         self.acq_ucb_flag = True
         self.acq_archive.set_threshhold(threshold_min = ACQ_UCB_MIN_THRESHHOLD)
 
+        # visualize empty acquisition archive
+        for i in range(0, INIT_N_EVALS, BATCH_SIZE):
+            self.visualize_archive(self.acq_archive, acq_flag=True)
+
         # initialize obj archive with sobol samples
         solution_batch = create_sobol_samples(order=INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
         solution_batch = solution_batch.T
         solution_batch = scale_samples(solution_batch)
         measures_batch = solution_batch[:, 1:3]
         eval_xfoil_loop(self, solution_batch=solution_batch, measures_batch=measures_batch, acq_flag=False)
-
-        # initialize acq archive with sobol samples
-        solution_batch = create_sobol_samples(order=200, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
-        solution_batch = solution_batch.T
-        solution_batch = scale_samples(solution_batch)
-        measures_batch = solution_batch[:, 1:3]
-        for i in range(0, 200, BATCH_SIZE):
-            self.update_archive(candidate_sol=solution_batch[i:i+BATCH_SIZE], candidate_bhv=measures_batch[i:i+BATCH_SIZE], acq_flag=True)
-            print(f"iteration: {i}")
-
-        # initialize acq archive with evaluated & unevaluated sobol samples
-        if not self.sail_random_flag:
-            self.update_archive(candidate_sol=solution_batch, candidate_bhv=measures_batch, acq_flag=True)
-
-        # visualize empty acquisition archive
-        for i in range(0, INIT_N_EVALS, BATCH_SIZE):
-            self.visualize_archive(self.acq_archive, acq_flag=True)
 
     # use MES to fill obj archive
     if self.custom_flag and self.mes_init:
@@ -360,14 +348,14 @@ def initialize_archive(self):
         self.update_cellgrids()
 
         # initialize obj archive with sobol samples
-        solution_batch = create_sobol_samples(order=INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
+        solution_batch = create_sobol_samples(order=INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed)
         solution_batch = solution_batch.T
         solution_batch = scale_samples(solution_batch)
         measures_batch = solution_batch[:, 1:3]
         eval_xfoil_loop(self, solution_batch=solution_batch, measures_batch=measures_batch, acq_flag=False)
 
         # initialize acq archive with sobol samples
-        solution_batch = create_sobol_samples(order=500, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
+        solution_batch = create_sobol_samples(order=500, dim=len(SOL_VALUE_RANGE), seed=self.current_seed)
         solution_batch = solution_batch.T
         solution_batch = scale_samples(solution_batch)
         measures_batch = solution_batch[:, 1:3]
@@ -421,14 +409,14 @@ def initialize_archive(self):
             self.visualize_archive(self.acq_archive, acq_flag=True)
 
         # initialize obj archive with sobol samples
-        solution_batch = create_sobol_samples(order=INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
+        solution_batch = create_sobol_samples(order=INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed)
         solution_batch = solution_batch.T
         solution_batch = scale_samples(solution_batch)
         measures_batch = solution_batch[:, 1:3]
         eval_xfoil_loop(self, solution_batch=solution_batch, measures_batch=measures_batch, acq_flag=False)
 
         # initialize acq archive with sobol samples
-        solution_batch = create_sobol_samples(order=50000, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
+        solution_batch = create_sobol_samples(order=50000, dim=len(SOL_VALUE_RANGE), seed=self.current_seed)
         solution_batch = solution_batch.T
         solution_batch = scale_samples(solution_batch)
         measures_batch = solution_batch[:, 1:3]
@@ -440,8 +428,8 @@ def initialize_archive(self):
             # calculate UCB Acquisition Elites
             new_target_elites, _, _ = map_elites(self, acq_flag=True)
             if new_target_elites.stats.num_elites < BATCH_SIZE: new_target_elites = ensure_n_new_elites(self=self, new_elite_archive=new_target_elites, acq_flag=True)   # Sample until enough new acquisition elites are found
-            improved_elites, new_bin_elites = prepare_sample_elites(self=self, new_elite_archive=new_target_elites, old_elite_archive=self.obj_archive)                      # Split new_target_elites into improved elites & new bin elites, then (if self.acq_ucb_flag or pred_flag) calculate objective improvement (else) objective_improvement = objective
-            candidate_solutions_df = select_samples(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, acq_flag=True, curiosity=6)            # Select samples based on exploration behavior defined in the class constructor
+            improved_elites, new_bin_elites = prepare_sample_elites(self=self, new_elite_archive=new_target_elites, old_elite_archive=self.obj_archive)                  # Split new_target_elites into improved elites & new bin elites, then (if self.acq_ucb_flag or pred_flag) calculate objective improvement (else) objective_improvement = objective
+            candidate_solutions_df = select_samples(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, acq_flag=True, curiosity=6)                    # Select samples based on exploration behavior defined in the class constructor
 
             self.visualize_archive(archive=self.acq_archive, acq_flag=True)
 
@@ -477,7 +465,7 @@ def initialize_archive(self):
         self.update_cellgrids()
 
     # initialize acq archive with sobol samples
-    solution_batch = create_sobol_samples(order=800, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
+    solution_batch = create_sobol_samples(order=800, dim=len(SOL_VALUE_RANGE), seed=self.current_seed)
     solution_batch = solution_batch.T
     solution_batch = scale_samples(solution_batch)
     measures_batch = solution_batch[:, 1:3]
