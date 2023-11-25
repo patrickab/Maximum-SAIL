@@ -131,28 +131,28 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
             if remaining_evals % (n_evals//5) == 0:
                 if acq_flag and self.acq_mes_flag:
                     self.visualize_archive(target_archive, acq_flag=True)
-                    if target_archive.stats.num_elites > 80:
 
-                        # update elites with high acquisition values
-                        target_elites = target_archive.as_pandas(include_solutions=True)
-                        update_elites = target_elites[target_elites['objective'] > ACQ_MES_MIN_THRESHHOLD*2]
+                    # update elites with high acquisition values
+                    target_elites = target_archive.as_pandas(include_solutions=True)
+                    update_elites = target_elites[target_elites['objective'] > ACQ_MES_MIN_THRESHHOLD*2]
+                    self.update_archive(candidate_sol=update_elites.solution_batch(), candidate_bhv=update_elites.measures_batch(), acq_flag=True)
+
+                    percentages = [0.4, 0.2, 0.1, 0.05]
+
+                    for percentage in percentages:
+                        self.update_seed()
+                        target_elites = target_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False)
+                        update_elites = target_elites.head(int(percentage*target_archive.stats.num_elites))
                         self.update_archive(candidate_sol=update_elites.solution_batch(), candidate_bhv=update_elites.measures_batch(), acq_flag=True)
 
-                        percentages = [0.4, 0.2, 0.1, 0.05, 0.025]
-
-                        for percentage in percentages:
-                            self.update_seed()
-                            target_elites = target_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False)
-                            update_elites = target_elites.head(int(percentage*target_archive.stats.num_elites))
-                            self.update_archive(candidate_sol=update_elites.solution_batch(), candidate_bhv=update_elites.measures_batch(), acq_flag=True)
-
+                    if target_archive.stats.num_elites > 80:
                         # remove elites with low acquisition values
                         target_elites = target_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False)
-                        target_elites = target_elites[target_elites['objective'] > 1.5*ACQ_MES_MIN_THRESHHOLD]
+                        target_elites = target_elites[target_elites['objective'] > 2*ACQ_MES_MIN_THRESHHOLD]
                         target_archive.clear()
                         target_archive.add(solution_batch=target_elites.solution_batch(), objective_batch=target_elites.objective_batch(), measures_batch=target_elites.measures_batch())
 
-                        print("Remaining Evaluations: ", remaining_evals)
+                    print("Remaining Evaluations: ", remaining_evals)
                     self.visualize_archive(target_archive, acq_flag=True)
 
             remaining_evals -= BATCH_SIZE

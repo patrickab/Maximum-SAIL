@@ -90,7 +90,7 @@ def anytime_archive_visualizer(self, archive, vmin, vmax, obj_flag=False, acq_fl
                 "-map", "[v]",
                 file_b
             ]
-
+            
             subprocess.run(ffmpeg_combine, input=b'y\n', stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             subprocess.run(f"rm {file_a} {buffervid_b}", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
             gc.collect()

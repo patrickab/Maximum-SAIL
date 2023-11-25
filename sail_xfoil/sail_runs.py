@@ -14,6 +14,7 @@ PREDICTION_VERIFICATIONS = config.PREDICTION_VERIFICATIONS
 ACQ_UCB_MIN_THRESHHOLD = config.ACQ_UCB_MIN_THRESHHOLD
 ACQ_MES_MIN_THRESHHOLD = config.ACQ_MES_MIN_THRESHHOLD
 INIT_N_ACQ_EVALS = config.INIT_N_ACQ_EVALS
+INIT_N_SOBOL_ACQ = config.INIT_N_SOBOL_ACQ
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 ACQ_N_OBJ_EVALS = config.ACQ_N_OBJ_EVALS
 ACQ_N_MAP_EVALS = config.ACQ_N_MAP_EVALS
@@ -423,7 +424,7 @@ def initialize_archive(self):
         self.update_archive(candidate_sol=solution_batch, candidate_bhv=measures_batch, acq_flag=True)          # initialize acq_archive with remaining sobol samples
 
         # set high initial threshold to ensure that only good solutions are added to the archive
-        min_threshold = 4.5
+        min_threshold = 3.5
         self.acq_archive.set_threshold(threshold_min = min_threshold)
 
         remaining_evals = INIT_N_ACQ_EVALS
@@ -469,19 +470,19 @@ def initialize_archive(self):
         self.update_cellgrids()
 
     # initialize acq archive with sobol samples
-    solution_batch = create_sobol_samples(order=800, dim=len(SOL_VALUE_RANGE), seed=self.current_seed)
+    solution_batch = create_sobol_samples(order=INIT_N_SOBOL_ACQ, dim=len(SOL_VALUE_RANGE), seed=self.current_seed)
     solution_batch = solution_batch.T
     solution_batch = scale_samples(solution_batch)
     measures_batch = solution_batch[:, 1:3]
 
     self.acq_archive.clear()
     print(f"Acq MES Flag {self.acq_mes_flag} - Acq UCB Flag {self.acq_ucb_flag} - Acq Function {self.acq_function}")
-    for i in range(0, 800, BATCH_SIZE):
+    for i in range(0, INIT_N_SOBOL_ACQ, BATCH_SIZE):
         self.update_archive(candidate_sol=solution_batch[i:i+BATCH_SIZE], candidate_bhv=measures_batch[i:i+BATCH_SIZE], acq_flag=True)
         print(f"Initialize Acq Archive: {i+10}   Size: {self.acq_archive.stats.num_elites}")
     
     sobol_acq_elites = self.acq_archive.as_pandas(include_solutions=True)
-    sobol_acq_elites = sobol_acq_elites[sobol_acq_elites.objective_batch() > 3*ACQ_MES_MIN_THRESHHOLD]
+    sobol_acq_elites = sobol_acq_elites[sobol_acq_elites.objective_batch() > 2*ACQ_MES_MIN_THRESHHOLD]
     self.acq_archive.clear()
     self.update_archive(candidate_sol=sobol_acq_elites.solution_batch(), candidate_bhv=sobol_acq_elites.measures_batch(), acq_flag=True)
 

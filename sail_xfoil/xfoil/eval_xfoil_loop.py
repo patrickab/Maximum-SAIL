@@ -140,7 +140,6 @@ def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_pred
             
             if self.acq_mes_flag:
                 n_bins = np.prod(self.acq_archive.dims)
-                acq_elite_df = acq_elite_df[acq_elite_df['objective'] > 3*ACQ_MES_MIN_THRESHHOLD]
                 acq_elite_df = acq_elite_df.head(n_bins//3)
 
             acq_elites_solutions = acq_elite_df.solution_batch()
@@ -158,7 +157,7 @@ def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_pred
 
             if self.acq_archive.stats.num_elites < 10 or self.acq_ucb_flag:
                 if self.acq_mes_flag:
-                    obj_elite_df = obj_elite_df.head(n_bins*0.05)
+                    obj_elite_df = obj_elite_df.head(int(n_bins*0.05))
                     obj_elite_df = obj_elite_df.sample(n=BATCH_SIZE, random_state=self.current_seed, replace=True)
                 self.acq_archive.add(obj_elites_solutions, obj_elites_objectives, obj_elites_measures)
 
