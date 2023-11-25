@@ -153,9 +153,13 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
                         target_archive.add(solution_batch=target_elites.solution_batch(), objective_batch=target_elites.objective_batch(), measures_batch=target_elites.measures_batch())
 
                         print("Remaining Evaluations: ", remaining_evals)
-            new_elite_archive.add(candidate_sol, candidate_obj, candidate_bhv)
 
             remaining_evals -= BATCH_SIZE
+
+    # through mutants, MES can produce multiple elites per evaluation, but only one elite will be communicated to the MAP-Loop
+    # a more elegant solution should be implemented instead, however, from a methodological point of view, this is not a problem.
+    if self.acq_mes_flag and acq_flag:
+        new_elite_archive = self.acq_archive
 
     print(f'best new elite objectives:')
     top_20_acq = new_elite_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).head(20).objective_batch()
