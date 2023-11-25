@@ -137,6 +137,14 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
                 CURIOSITY = 3
 
         if consumed_obj_evals % (total_eval_budget//10) and consumed_obj_evals != 0:
+
+            if self.acq_mes_flag:
+                # preserve only highperforming elites
+                target_elites = target_archive.as_pandas(include_solutions=True)
+                update_elites = target_elites[target_elites['objective'] > 0.35]
+                self.acq_archive.clear()
+                self.update_archive(candidate_sol=update_elites.solution_batch(), candidate_bhv=update_elites.measures_batch(), acq_flag=True)
+
             # initialize acq archive with sobol samples
             n_sobol_samples = 1000
             solution_batch = create_sobol_samples(order=n_sobol_samples, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
