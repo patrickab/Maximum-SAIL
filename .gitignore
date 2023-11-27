@@ -9,3 +9,4 @@ error_log
 *.mp4
 fragen.txt
 sail_xfoil/xfoil/simulate_airfoils.py
+sail_xfoil/.vscode

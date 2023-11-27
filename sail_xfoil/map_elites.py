@@ -103,7 +103,8 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
             progress.update(1)
             valid_indices = np.empty(0, dtype=int)
 
-            emitter = update_emitter(self, target_archive=target_archive)
+            sigma_emitter = SIGMA_EMITTER + 0.25*(remaining_evals/n_evals)
+            emitter = update_emitter(self, target_archive=target_archive, sigma_emitter=sigma_emitter)
             scheduler = _Scheduler(target_archive, emitter)
 
             # Create Samples
@@ -124,65 +125,17 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
 
             if mes_flag and acq_flag:
                 candidate_sol = self.mes_elites
+                if remaining_evals % (n_evals//5) == 0:
+                    self.visualize_archive(self.acq_archive, acq_flag=True)
 
             target_archive.add(solution_batch=candidate_sol, objective_batch=candidate_obj, measures_batch=candidate_bhv)
             new_elite_archive.add(candidate_sol, candidate_obj, candidate_bhv)
 
-            if remaining_evals % (n_evals//5) == 0:
-                if acq_flag and self.acq_mes_flag:
-                    self.visualize_archive(target_archive, acq_flag=True)
-
-                    # update elites with high acquisition values
-                    target_elites = target_archive.as_pandas(include_solutions=True)
-                    update_elites = target_elites[target_elites['objective'] > ACQ_MES_MIN_THRESHHOLD*2]
-                    self.update_archive(candidate_sol=update_elites.solution_batch(), candidate_bhv=update_elites.measures_batch(), acq_flag=True)
-
-                    percentages = [0.4, 0.2, 0.1, 0.05]
-
-                    for percentage in percentages:
-                        self.update_seed()
-                        target_elites = target_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False)
-                        update_elites = target_elites.head(int(percentage*target_archive.stats.num_elites))
-                        self.update_archive(candidate_sol=update_elites.solution_batch(), candidate_bhv=update_elites.measures_batch(), acq_flag=True)
-
-                    if target_archive.stats.num_elites > 80:
-                        # remove elites with low acquisition values
-                        target_elites = target_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False)
-                        target_elites = target_elites[target_elites['objective'] > 2*ACQ_MES_MIN_THRESHHOLD]
-                        target_archive.clear()
-                        target_archive.add(solution_batch=target_elites.solution_batch(), objective_batch=target_elites.objective_batch(), measures_batch=target_elites.measures_batch())
-
-                    print("Remaining Evaluations: ", remaining_evals)
-                    self.visualize_archive(target_archive, acq_flag=True)
-
             remaining_evals -= BATCH_SIZE
-
-    # through mutants, MES can produce multiple elites per evaluation, but only one elite will be communicated to the MAP-Loop
-    # a more elegant solution should be implemented instead, however, from a methodological point of view, this is not a problem.
-
-    # In order to avoid evaluation of similar solutions, we discard solutions with nearly identical solutions.
-    # In future this should be done calculating the distance between the solutions in the objective space & setting a threshold.
-    if self.acq_mes_flag and acq_flag:
-
-        new_elite_archive.clear()
-        acq_elites = self.acq_archive.as_pandas(include_solutions=True)
-        new_elite_archive.add(acq_elites.solution_batch(), acq_elites.objective_batch(), acq_elites.measures_batch())
-
-        print("\nBefore removing duplicates: ", new_elite_archive.stats.num_elites)
-        print(new_elite_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).head(50))
-
-        # remove nearly identical solutions from new_elite_archive but not from acq_archive
-        new_elites = new_elite_archive.as_pandas(include_solutions=True)
-        diff = new_elites['objective'].diff()          # Calculate the difference between objective values
-        new_elites = new_elites[np.abs(diff > 0.05)]   # Filter out rows where the difference is less than or equal to 0.05
-        new_elite_archive.clear()               # Update the new_elite_archive with the filtered values
-        new_elite_archive.add(solution_batch=new_elites.solution_batch(), objective_batch=new_elites.objective_batch(), measures_batch=new_elites.measures_batch())
-        print("\nAfter removing duplicates: ", new_elite_archive.stats.num_elites)
-        print(new_elite_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).head(20))
 
     # calculate anytime stats
     size_t1 = target_archive.stats.num_elites
-    print(f"{target} Size: ", str(size_t1))
+    print(f"\n{target} Size: ", str(size_t1))
     print("[...] End Map-Elites\n\n")
     if self.acq_mes_flag and acq_flag: self.mes_sobol_cellgrids = None # free RAM
     return new_elite_archive, size_t0, size_t1
@@ -191,6 +144,9 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
 def update_emitter(self, target_archive, sigma_emitter=SIGMA_EMITTER, sol_value_range=SOL_VALUE_RANGE):
 
     self.update_seed()
+
+    sol_value_range[1] = (0.40 , 0.55)
+    sol_value_range[2] = (0.08 , 0.1)
 
     emitter = [
         ScaledGaussianEmitter(
