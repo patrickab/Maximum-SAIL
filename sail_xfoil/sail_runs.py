@@ -141,7 +141,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
             if self.acq_mes_flag:
                 # preserve only highperforming elites
                 target_elites = target_archive.as_pandas(include_solutions=True)
-                update_elites = target_elites[target_elites['objective'] > 0.35]
+                update_elites = target_elites[target_elites.shape[0]//2]
                 self.acq_archive.clear()
                 self.update_archive(candidate_sol=update_elites.solution_batch(), candidate_bhv=update_elites.measures_batch(), acq_flag=True)
 
