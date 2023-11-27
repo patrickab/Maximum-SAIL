@@ -103,7 +103,8 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
             progress.update(1)
             valid_indices = np.empty(0, dtype=int)
 
-            emitter = update_emitter(self, target_archive=target_archive)
+            sigma_emitter = SIGMA_EMITTER + 0.25*(remaining_evals/n_evals)
+            emitter = update_emitter(self, target_archive=target_archive, sigma_emitter=sigma_emitter)
             scheduler = _Scheduler(target_archive, emitter)
 
             # Create Samples
@@ -124,6 +125,8 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
 
             if mes_flag and acq_flag:
                 candidate_sol = self.mes_elites
+                if remaining_evals % (n_evals//5) == 0:
+                    self.visualize_archive(self.acq_archive, acq_flag=True)
 
             target_archive.add(solution_batch=candidate_sol, objective_batch=candidate_obj, measures_batch=candidate_bhv)
             new_elite_archive.add(candidate_sol, candidate_obj, candidate_bhv)
@@ -132,7 +135,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
 
     # calculate anytime stats
     size_t1 = target_archive.stats.num_elites
-    print(f"{target} Size: ", str(size_t1))
+    print(f"\n{target} Size: ", str(size_t1))
     print("[...] End Map-Elites\n\n")
     if self.acq_mes_flag and acq_flag: self.mes_sobol_cellgrids = None # free RAM
     return new_elite_archive, size_t0, size_t1
@@ -141,6 +144,9 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
 def update_emitter(self, target_archive, sigma_emitter=SIGMA_EMITTER, sol_value_range=SOL_VALUE_RANGE):
 
     self.update_seed()
+
+    sol_value_range[1] = (0.40 , 0.55)
+    sol_value_range[2] = (0.08 , 0.1)
 
     emitter = [
         ScaledGaussianEmitter(

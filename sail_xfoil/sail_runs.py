@@ -114,7 +114,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
     if not pred_loop:
         initialize_archive(self)
 
-    CURIOSITY = 6 # For Hybrid Approach: 'CURIOSITY//BATCH_SIZE' new bin elites are to be sampled
+    CURIOSITY = 5 # For Hybrid Approach: 'CURIOSITY//BATCH_SIZE' new bin elites are to be sampled
 
     anytime_metric_kwargs = initialize_anytime_metrics(self=self, acq_flag=acq_loop, pred_flag=pred_loop)
 
@@ -132,11 +132,11 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
     while(current_eval_budget >= i_obj_evals):
 
         if consumed_obj_evals == total_eval_budget//3:
-            CURIOSITY = 5
+            CURIOSITY = 4
             if total_eval_budget == total_eval_budget//6:
                 CURIOSITY = 3
 
-        if consumed_obj_evals % (total_eval_budget//10) and consumed_obj_evals != 0:
+        if (consumed_obj_evals % (total_eval_budget//10)) == 0 and consumed_obj_evals != 0:
 
             if self.acq_mes_flag:
                 # preserve only highperforming elites
@@ -146,7 +146,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
                 self.update_archive(candidate_sol=update_elites.solution_batch(), candidate_bhv=update_elites.measures_batch(), acq_flag=True)
 
             # initialize acq archive with sobol samples
-            n_sobol_samples = 1000
+            n_sobol_samples = 1200
             solution_batch = create_sobol_samples(order=n_sobol_samples, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
             solution_batch = solution_batch.T
             solution_batch = scale_samples(solution_batch)
@@ -490,8 +490,6 @@ def initialize_archive(self):
         print(f"Initialize Acq Archive: {i+10}   Size: {self.acq_archive.stats.num_elites}")
     
     sobol_acq_elites = self.acq_archive.as_pandas(include_solutions=True)
-    sobol_acq_elites = sobol_acq_elites[sobol_acq_elites.objective_batch() > 2*ACQ_MES_MIN_THRESHHOLD]
-    self.acq_archive.clear()
     self.update_archive(candidate_sol=sobol_acq_elites.solution_batch(), candidate_bhv=sobol_acq_elites.measures_batch(), acq_flag=True)
 
     print("\n[...] Terminate init_archive()\n")

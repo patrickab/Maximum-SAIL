@@ -15,6 +15,7 @@ SIGMA_UCB = config.SIGMA_UCB
 SOL_DIMENSION = config.SOL_DIMENSION
 BHV_DIMENSION = config.BHV_DIMENSION
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
+ACQ_MES_MIN_THRESHHOLD = config.ACQ_MES_MIN_THRESHHOLD
 
 
 def acq_mes(self, genomes):
@@ -26,11 +27,6 @@ def acq_mes(self, genomes):
     rng = np.random.default_rng(self.current_seed)
     cell_indices = self.obj_archive.index_of(genomes[:,1:3])
 
-    idx = self.acq_archive.int_to_grid_index(cell_indices)
-    boundaries_0 = self.acq_archive.boundaries[0]
-    boundaries_1 = self.acq_archive.boundaries[1]
-
-
     cellbounds = self.bhv_cellbounds[cell_indices]
     cellbounds[:,:1,0] = cellbounds[:,:1,0]
     cellbounds[:,:1,1] = cellbounds[:,:1,1]
@@ -38,11 +34,11 @@ def acq_mes(self, genomes):
     cell_solutionbounds = np.repeat(solutionbounds[np.newaxis,:,:], len(genomes), axis=0)    # create copies of solutionbounds
     cell_solutionbounds[:, 1:3] = cellbounds                                                 # insert niche-specific cellbounds
 
-    # mutate each genome 200 times using gaussian noise scaled to cell_solutionbounds
-    genomes = np.repeat(genomes, 200, axis=0).reshape(len(genomes), 200, SOL_DIMENSION)   
+    # mutate each genome 900 times using gaussian noise scaled to cell_solutionbounds
+    genomes = np.repeat(genomes, 900, axis=0).reshape(len(genomes), 900, SOL_DIMENSION)   
     for i in range(len(genomes)):
-        scaled_noise = rng.normal(scale=np.abs(0.1*(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), size=(200, SOL_DIMENSION))
-        genomes[i] = np.clip(genomes[i] + scaled_noise, 1.01*cell_solutionbounds[i,:,0], 0.99*cell_solutionbounds[i,:,1])
+        scaled_noise = rng.normal(scale=np.abs(0.25*(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), size=(900, SOL_DIMENSION))
+        genomes[i] = np.clip(genomes[i] + scaled_noise, 1.001*cell_solutionbounds[i,:,0], 0.999*cell_solutionbounds[i,:,1])
         if np.unique(self.acq_archive.index_of(genomes[i,:,1:3])).shape[0] != 1:
             raise ValueError("Genomes in multiple cells")
 
@@ -81,7 +77,6 @@ def simple_mes(self, genomes):
     genomes_tensor = tensor(genomes, dtype=float64)     # Shape: 8 x BATCH_SIZE x SOL_DIMENSION
     transformed_genomes = genomes_tensor.unsqueeze(1)   # Shape: 1 x BATCH_SIZE x 1 x SOL_DIMENSION
 
-    # calculate MES for each mutant batch & select best mutant
     acq_solution_tensor = tensor(np.zeros((len(genomes), SOL_DIMENSION)), dtype=float64)    # Shape: PARALLEL_BATCH_SIZE x 1
     acq_entropy_tensor = tensor(np.zeros((len(genomes), 1)), dtype=float64)                 # Shape: PARALLEL_BATCH_SIZE x 1
     for i in range(genomes.shape[0]):
@@ -145,8 +140,8 @@ def mes_sobol_cellgrids(self):
         bhv_cellgrids  : 625 bins x 10000 samples x 2 dimensions
         mes_cellgrid   :   1      x 10000 samples x 11 dimensions
 
-    # how does the naive approach work? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%200Sobol%200Cellgrids.pdf
-    # why would this approach be naive? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%200Sobol%200Cellgrids.mp4
+    # how does the naive approach work? : https://github.com/patrickab/Maximum-SAIL/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.pdf
+    # why would this approach be naive? : https://github.com/patrickab/Maximum-SAIL/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.mp4
 
     """
     sobol_cellgrid = create_sobol_samples(order=10000, dim=SOL_DIMENSION, seed=self.current_seed).T
