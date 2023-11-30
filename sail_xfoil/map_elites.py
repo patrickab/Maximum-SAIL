@@ -119,13 +119,15 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
             candidate_obj = target_function(self=self, genomes=candidate_sol)
             candidate_bhv = scheduler_bhv[valid_indices]
 
+            target_archive.add(solution_batch=candidate_sol, objective_batch=candidate_obj, measures_batch=candidate_bhv)
+            new_elite_archive.add(candidate_sol, candidate_obj, candidate_bhv)
+
             if mes_flag and acq_flag:
                 candidate_sol = self.mes_elites
                 if remaining_evals % (n_evals//5) == 0:
+                    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+                    self.update_archive(candidate_sol=acq_elite_df.solution_batch()[valid_indices], candidate_bhv=acq_elite_df.measures_batch()[valid_indices], acq_flag=True)
                     self.visualize_archive(self.acq_archive, acq_flag=True)
-
-            target_archive.add(solution_batch=candidate_sol, objective_batch=candidate_obj, measures_batch=candidate_bhv)
-            new_elite_archive.add(candidate_sol, candidate_obj, candidate_bhv)
 
             remaining_evals -= BATCH_SIZE
 
@@ -140,6 +142,9 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
 def update_emitter(self, target_archive, sigma_emitter=SIGMA_EMITTER, sol_value_range=SOL_VALUE_RANGE):
 
     self.update_seed()
+
+    sol_value_range[1] = (0.2625,0.6)
+    sol_value_range[2] = (0.0725, 0.14)
 
     emitter = [
         ScaledGaussianEmitter(
