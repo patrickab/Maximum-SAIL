@@ -486,10 +486,16 @@ def initialize_archive(self):
     self.acq_archive.clear()
     print(f"Acq MES Flag {self.acq_mes_flag} - Acq UCB Flag {self.acq_ucb_flag} - Acq Function {self.acq_function}")
     for i in range(0, INIT_N_SOBOL_ACQ, BATCH_SIZE):
-        self.update_archive(candidate_sol=solution_batch[i:i+BATCH_SIZE], candidate_bhv=measures_batch[i:i+BATCH_SIZE], acq_flag=True)
+        # Generate Parsec Coordinates & remove Invalid Samples
+        valid_indices, surface_batch = generate_parsec_coordinates(solution_batch[i:i+BATCH_SIZE], io_flag=False)
+        self.update_archive(candidate_sol=solution_batch[i:i+BATCH_SIZE][valid_indices], candidate_bhv=measures_batch[i:i+BATCH_SIZE][valid_indices], acq_flag=True)
         print(f"Initialize Acq Archive: {i+10}   Size: {self.acq_archive.stats.num_elites}")
-    
-    sobol_acq_elites = self.acq_archive.as_pandas(include_solutions=True)
-    self.update_archive(candidate_sol=sobol_acq_elites.solution_batch(), candidate_bhv=sobol_acq_elites.measures_batch(), acq_flag=True)
+
+    for i in range(4):
+        print(f" initial update {i}")
+        sobol_acq_elites = self.acq_archive.as_pandas(include_solutions=True)
+        valid_indices, surface_batch = generate_parsec_coordinates(solution_batch[i:i+BATCH_SIZE], io_flag=False)
+        self.update_archive(candidate_sol=sobol_acq_elites.solution_batch()[valid_indices], candidate_bhv=sobol_acq_elites.measures_batch()[valid_indices], acq_flag=True)
+
 
     print("\n[...] Terminate init_archive()\n")

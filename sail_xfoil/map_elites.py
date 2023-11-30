@@ -119,10 +119,6 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
             candidate_obj = target_function(self=self, genomes=candidate_sol)
             candidate_bhv = scheduler_bhv[valid_indices]
 
-            if valid_indices.shape[0] == 0:
-                print("No valid samples found")
-                continue
-
             if mes_flag and acq_flag:
                 candidate_sol = self.mes_elites
                 if remaining_evals % (n_evals//5) == 0:
@@ -144,9 +140,6 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
 def update_emitter(self, target_archive, sigma_emitter=SIGMA_EMITTER, sol_value_range=SOL_VALUE_RANGE):
 
     self.update_seed()
-
-    sol_value_range[1] = (0.40 , 0.55)
-    sol_value_range[2] = (0.08 , 0.1)
 
     emitter = [
         ScaledGaussianEmitter(

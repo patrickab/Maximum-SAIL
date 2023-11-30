@@ -34,11 +34,11 @@ def acq_mes(self, genomes):
     cell_solutionbounds = np.repeat(solutionbounds[np.newaxis,:,:], len(genomes), axis=0)    # create copies of solutionbounds
     cell_solutionbounds[:, 1:3] = cellbounds                                                 # insert niche-specific cellbounds
 
-    # mutate each genome 900 times using gaussian noise scaled to cell_solutionbounds
-    genomes = np.repeat(genomes, 900, axis=0).reshape(len(genomes), 900, SOL_DIMENSION)   
+    # mutate each genome 500 times using gaussian noise scaled to cell_solutionbounds
+    genomes = np.repeat(genomes, 500, axis=0).reshape(len(genomes), 500, SOL_DIMENSION)   
     for i in range(len(genomes)):
-        scaled_noise = rng.normal(scale=np.abs(0.35*(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), size=(900, SOL_DIMENSION))
-        genomes[i] = genomes[i] + scaled_noise
+        scaled_noise = rng.normal(scale=np.abs(0.15 *(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), size=(500, SOL_DIMENSION))
+        genomes[i] = np.clip(genomes[i] + scaled_noise, np.array(SOL_VALUE_RANGE)[:,0], np.array(SOL_VALUE_RANGE)[:,1])
 
     genomes_tensor = tensor(genomes, dtype=float64)     # Shape: 8 x BATCH_SIZE x SOL_DIMENSION
     transformed_genomes = genomes_tensor.unsqueeze(1)   # Shape: 1 x BATCH_SIZE x 1 x SOL_DIMENSION
@@ -57,19 +57,22 @@ def acq_mes(self, genomes):
         acq_entropy_tensor[i] = acq_entropy[elite_index]
         acq_solution_tensor[i] = genomes_tensor[i,elite_index]
 
-        result_cell_indices = self.acq_archive.index_of(genomes_tensor[i][:,1:3])
-        if np.unique(result_cell_indices).shape[0] > 1:
-            print("\n\nMULTIPLE MUTANTS\n")
-            print("Number Unique Cells: ", np.unique(result_cell_indices).shape[0])
-            print("Acq Elites (before): ", self.acq_archive.stats.num_elites)
-            self.acq_archive.add(genomes_tensor[i].detach().numpy(), acq_entropy.detach().numpy(), genomes_tensor[i][:,1:3].detach().numpy())
-            print("Acq Elites (after): ", self.acq_archive.stats.num_elites, "\n")
+        self.acq_archive.add(genomes_tensor[i].detach().numpy(), acq_entropy.detach().numpy(), genomes_tensor[i][:,1:3].detach().numpy())
 
     # Store MES Elites in SailRunner class to use them inside the MAP-Loop
     self.mes_elites = acq_solution_tensor.detach().numpy()
     mes_ndarray = acq_entropy_tensor.detach().numpy()
 
     return np.hstack(mes_ndarray)
+
+# can be used for debugging (to be removed in future)
+#        result_cell_indices = self.acq_archive.index_of(genomes_tensor[i][:,1:3])
+#        if np.unique(result_cell_indices).shape[0] > 1:
+#            print("\n\nMULTIPLE MUTANTS\n")
+#            print("Number Unique Cells: ", np.unique(result_cell_indices).shape[0])
+#            print("Acq Elites (before): ", self.acq_archive.stats.num_elites)
+#            self.acq_archive.add(genomes_tensor[i].detach().numpy(), acq_entropy.detach().numpy(), genomes_tensor[i][:,1:3].detach().numpy())
+#            print("Acq Elites (after): ", self.acq_archive.stats.num_elites, "\n")
 
 
 def simple_mes(self, genomes):
