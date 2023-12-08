@@ -34,10 +34,10 @@ def acq_mes(self, genomes):
     cell_solutionbounds = np.repeat(solutionbounds[np.newaxis,:,:], len(genomes), axis=0)    # create copies of solutionbounds
     cell_solutionbounds[:, 1:3] = cellbounds                                                 # insert niche-specific cellbounds
 
-    # mutate each genome 900 times using gaussian noise scaled to cell_solutionbounds
-    genomes = np.repeat(genomes, 900, axis=0).reshape(len(genomes), 900, SOL_DIMENSION)   
+    # mutate each genome 800 times using gaussian noise scaled to cell_solutionbounds
+    genomes = np.repeat(genomes, 800, axis=0).reshape(len(genomes), 800, SOL_DIMENSION)   
     for i in range(len(genomes)):
-        scaled_noise = rng.normal(scale=np.abs(0.05 *(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), size=(900, SOL_DIMENSION))
+        scaled_noise = rng.normal(scale=np.abs(0.05 *(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), size=(800, SOL_DIMENSION))
         genomes[i] = np.clip(genomes[i] + scaled_noise, np.array(SOL_VALUE_RANGE)[:,0], np.array(SOL_VALUE_RANGE)[:,1])
 
     genomes_tensor = tensor(genomes, dtype=float64)     # Shape: 8 x BATCH_SIZE x SOL_DIMENSION

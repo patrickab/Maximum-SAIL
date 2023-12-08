@@ -81,7 +81,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
         target_archive = self.acq_archive
         if self.acq_mes_flag: # reduce number of acquisition evaluations for MES
             self.update_cellgrids()
-            n_evals = ACQ_N_MAP_EVALS//4
+            n_evals = ACQ_N_MAP_EVALS//8
         else:
             n_evals = ACQ_N_MAP_EVALS
 
@@ -103,7 +103,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
             progress.update(1)
             valid_indices = np.empty(0, dtype=int)
 
-            sigma_emitter = SIGMA_EMITTER + 0.25*(remaining_evals/n_evals)
+            sigma_emitter = SIGMA_EMITTER + 0.3*(remaining_evals/n_evals)
             emitter = update_emitter(self, target_archive=target_archive, sigma_emitter=sigma_emitter)
             scheduler = _Scheduler(target_archive, emitter)
 
@@ -126,8 +126,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
                 candidate_sol = self.mes_elites
                 if remaining_evals % (n_evals//5) == 0:
                     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
-                    self.update_archive(candidate_sol=acq_elite_df.solution_batch()[valid_indices], candidate_bhv=acq_elite_df.measures_batch()[valid_indices], acq_flag=True)
-                    self.visualize_archive(self.acq_archive, acq_flag=True)
+                    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
 
             remaining_evals -= BATCH_SIZE
 
@@ -142,9 +141,6 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
 def update_emitter(self, target_archive, sigma_emitter=SIGMA_EMITTER, sol_value_range=SOL_VALUE_RANGE):
 
     self.update_seed()
-
-    sol_value_range[1] = (0.2625,0.6)
-    sol_value_range[2] = (0.0725, 0.14)
 
     emitter = [
         ScaledGaussianEmitter(

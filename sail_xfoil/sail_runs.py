@@ -291,8 +291,8 @@ def select_samples(self: SailRun, improved_elites, new_bin_elites, acq_flag=Fals
     if self.acq_mes_flag:
 
         # Select best 70% of MES elites
-        improved_elites = improved_elites.head(improved_elites.shape[0]*0.7)
-        new_bin_elites = new_bin_elites.head(new_bin_elites.shape[0]*0.7)
+        improved_elites = improved_elites.head(int(improved_elites.shape[0]*0.7))
+        new_bin_elites = new_bin_elites.head(int(new_bin_elites.shape[0]*0.7))
 
         # shuffle elites
         improved_elites = improved_elites.sample(frac=1, random_state=self.initial_seed)
@@ -504,11 +504,8 @@ def initialize_archive(self):
         self.update_archive(candidate_sol=solution_batch[i:i+BATCH_SIZE][valid_indices], candidate_bhv=measures_batch[i:i+BATCH_SIZE][valid_indices], acq_flag=True)
         print(f"Initialize Acq Archive: {i+10}   Size: {self.acq_archive.stats.num_elites}")
 
-    for i in range(4):
-        print(f" initial update {i}")
-        sobol_acq_elites = self.acq_archive.as_pandas(include_solutions=True)
-        valid_indices, surface_batch = generate_parsec_coordinates(solution_batch[i:i+BATCH_SIZE], io_flag=False)
-        self.update_archive(candidate_sol=sobol_acq_elites.solution_batch()[valid_indices], candidate_bhv=sobol_acq_elites.measures_batch()[valid_indices], acq_flag=True)
-
+    for i in range(0, 4):
+        acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+        self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
 
     print("\n[...] Terminate init_archive()\n")
