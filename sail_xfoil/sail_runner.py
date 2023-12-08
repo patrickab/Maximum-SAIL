@@ -326,7 +326,7 @@ class SailRun:
             dims=BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
-            threshold_min = 0 # percentual errors are always positive
+            threshold_min = -0.01 # percentual errors are always positive
         )
 
         return obj_archive, acq_archive, pred_archive, new_archive, evaluated_predictions_archive, prediction_error_archive
@@ -493,14 +493,14 @@ def mes_sobol_cellgrids(self):
     Returns:
 
         bhv_cellbounds : 625 bins x 2  dimensions x 2 boundaries
-        bhv_cellgrids  : 625 bins x 8000 samples x 2 dimensions
-        mes_cellgrid   :   1      x 8000 samples x 11 dimensions
+        bhv_cellgrids  : 625 bins x 4000 samples x 2 dimensions
+        mes_cellgrid   :   1      x 4000 samples x 11 dimensions
 
     # how does the naive approach work? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.pdf
     # why would this approach be naive? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.mp4
 
     """
-    sobol_cellgrid = create_sobol_samples(order=8000, dim=SOL_DIMENSION, seed=self.current_seed).T
+    sobol_cellgrid = create_sobol_samples(order=4000, dim=SOL_DIMENSION, seed=self.current_seed).T
 
     archive = self.obj_archive
     n_cells = np.prod(archive.dims)
@@ -517,8 +517,8 @@ def mes_sobol_cellgrids(self):
     boundaries_0 = archive.boundaries[0]
     boundaries_1 = archive.boundaries[1]
 
-    # 625 bins, 8000 samples, 2 dimensions
-    bhv_cellgrids = np.empty((n_cells, 8000, BHV_DIMENSION))
+    # 625 bins, 4000 samples, 2 dimensions
+    bhv_cellgrids = np.empty((n_cells, 4000, BHV_DIMENSION))
     bhv_cellbounds = np.empty((n_cells, BHV_DIMENSION, 2))
 
     for i in range(n_cells):

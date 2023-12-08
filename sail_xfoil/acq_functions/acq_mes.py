@@ -34,10 +34,10 @@ def acq_mes(self, genomes):
     cell_solutionbounds = np.repeat(solutionbounds[np.newaxis,:,:], len(genomes), axis=0)    # create copies of solutionbounds
     cell_solutionbounds[:, 1:3] = cellbounds                                                 # insert niche-specific cellbounds
 
-    # mutate each genome 500 times using gaussian noise scaled to cell_solutionbounds
-    genomes = np.repeat(genomes, 500, axis=0).reshape(len(genomes), 500, SOL_DIMENSION)   
+    # mutate each genome 900 times using gaussian noise scaled to cell_solutionbounds
+    genomes = np.repeat(genomes, 900, axis=0).reshape(len(genomes), 900, SOL_DIMENSION)   
     for i in range(len(genomes)):
-        scaled_noise = rng.normal(scale=np.abs(0.15 *(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), size=(500, SOL_DIMENSION))
+        scaled_noise = rng.normal(scale=np.abs(0.05 *(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), size=(900, SOL_DIMENSION))
         genomes[i] = np.clip(genomes[i] + scaled_noise, np.array(SOL_VALUE_RANGE)[:,0], np.array(SOL_VALUE_RANGE)[:,1])
 
     genomes_tensor = tensor(genomes, dtype=float64)     # Shape: 8 x BATCH_SIZE x SOL_DIMENSION
@@ -50,7 +50,7 @@ def acq_mes(self, genomes):
 
         cellgrid = assamble_cellgrid(self, genomes_tensor[i,0])
         cellgrid = tensor(cellgrid, dtype=float64)      # Shape: 10000 x SOL_DIMENSION
-        MES = qMaxValueEntropy(model=self.gp_model, candidate_set=cellgrid, num_y_samples=256)
+        MES = qMaxValueEntropy(model=self.gp_model, candidate_set=cellgrid, num_y_samples=96, num_mv_samples=30)
         acq_entropy = MES(transformed_genomes[i].permute(1, 0, 2))
 
         elite_index = acq_entropy.argmax()
@@ -107,7 +107,7 @@ def simple_mes(self, genomes):
 def assamble_cellgrid(self, genome):
     """Creates a Sobol Cellgrid for a requested genome"""
 
-    mes_cellgrid = np.empty((1, 10000, SOL_DIMENSION))
+    mes_cellgrid = np.empty((1, 4000, SOL_DIMENSION))
 
     genome_behavior = genome[1:3]
     genome_cell_index = self.obj_archive.index_of_single(genome_behavior)
