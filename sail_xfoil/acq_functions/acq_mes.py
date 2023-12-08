@@ -1,6 +1,7 @@
 ### Packages ###
 from torch import float64, cuda, device, tensor
-from botorch.acquisition import qMaxValueEntropy
+from botorch.acquisition import qLowerBoundMaxValueEntropy
+from botorch.optim import optimize_acqf
 from chaospy import create_sobol_samples
 import numpy as np
 import gc
@@ -50,7 +51,7 @@ def acq_mes(self, genomes):
 
         cellgrid = assamble_cellgrid(self, genomes_tensor[i,0])
         cellgrid = tensor(cellgrid, dtype=float64)      # Shape: 10000 x SOL_DIMENSION
-        MES = qMaxValueEntropy(model=self.gp_model, candidate_set=cellgrid, num_y_samples=64, num_mv_samples=30)
+        MES = qLowerBoundMaxValueEntropy(model=self.gp_model, candidate_set=cellgrid, num_mv_samples=100)
         acq_entropy = MES(transformed_genomes[i].permute(1, 0, 2))
 
         elite_index = acq_entropy.argmax()
@@ -64,15 +65,6 @@ def acq_mes(self, genomes):
     mes_ndarray = acq_entropy_tensor.detach().numpy()
 
     return np.hstack(mes_ndarray)
-
-# can be used for debugging (to be removed in future)
-#        result_cell_indices = self.acq_archive.index_of(genomes_tensor[i][:,1:3])
-#        if np.unique(result_cell_indices).shape[0] > 1:
-#            print("\n\nMULTIPLE MUTANTS\n")
-#            print("Number Unique Cells: ", np.unique(result_cell_indices).shape[0])
-#            print("Acq Elites (before): ", self.acq_archive.stats.num_elites)
-#            self.acq_archive.add(genomes_tensor[i].detach().numpy(), acq_entropy.detach().numpy(), genomes_tensor[i][:,1:3].detach().numpy())
-#            print("Acq Elites (after): ", self.acq_archive.stats.num_elites, "\n")
 
 
 def simple_mes(self, genomes):
@@ -91,7 +83,7 @@ def simple_mes(self, genomes):
 
         cellgrid = assamble_cellgrid(self, genomes_tensor[i,0])
         cellgrid = tensor(cellgrid, dtype=float64)      # Shape: 10000 x SOL_DIMENSION
-        MES = qMaxValueEntropy(model=self.gp_model, candidate_set=cellgrid, num_y_samples=256)
+        MES = qLowerBoundMaxValueEntropy(model=self.gp_model, candidate_set=cellgrid, num_y_samples=256)
         acq_entropy = MES(transformed_genomes[i].permute(1, 0, 2))
         
         elite_index = acq_entropy.argmax()
