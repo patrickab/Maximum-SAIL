@@ -124,7 +124,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
 
             if mes_flag and acq_flag:
                 candidate_sol = self.mes_elites
-                if remaining_evals % (n_evals//5) == 0:
+                if remaining_evals % (n_evals//2) == 0:
                     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
                     self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
 

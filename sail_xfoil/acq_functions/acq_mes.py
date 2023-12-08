@@ -50,7 +50,7 @@ def acq_mes(self, genomes):
 
         cellgrid = assamble_cellgrid(self, genomes_tensor[i,0])
         cellgrid = tensor(cellgrid, dtype=float64)      # Shape: 10000 x SOL_DIMENSION
-        MES = qMaxValueEntropy(model=self.gp_model, candidate_set=cellgrid, num_y_samples=96, num_mv_samples=30)
+        MES = qMaxValueEntropy(model=self.gp_model, candidate_set=cellgrid, num_y_samples=64, num_mv_samples=30)
         acq_entropy = MES(transformed_genomes[i].permute(1, 0, 2))
 
         elite_index = acq_entropy.argmax()
