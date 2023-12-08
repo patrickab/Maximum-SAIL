@@ -32,6 +32,7 @@ import numpy as np
 ### Custom Scripts ###
 from xfoil.generate_airfoils import generate_parsec_coordinates
 from acq_functions.acq_mes import simple_mes, acq_mes
+from gp.optimize_mean import maximize_mean
 from xfoil.simulate_airfoils import xfoil
 from utils.pprint_nd import pprint
 from sail_runner import SailRun
@@ -56,6 +57,13 @@ def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_pred
     remaining_samples = solution_batch.shape[0]
     obj_t0 = self.obj_archive.stats.num_elites
     target = "Acquisition" if acq_flag else "Prediction"
+
+    if self.custom_flag and self.obj_current_iteration % 5 == 0:
+
+        new_x, max_mean = maximize_mean(self.gp_model)
+        _, success_index, converged_obj = xfoil(iterations=1, surface_batch=new_x)
+        self.obj_archive.add_single(new_x, converged_obj, measures=new_x[1:3])
+        print(f"Max Mean: {max_mean} - Max Mean Objective: {converged_obj}")
 
     while remaining_samples>0:
 
