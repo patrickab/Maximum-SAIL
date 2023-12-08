@@ -137,10 +137,7 @@ def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_pred
 
             obj_elite_df = self.obj_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False)
             acq_elite_df = self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False)
-            
-            if self.acq_mes_flag:
-                n_bins = np.prod(self.acq_archive.dims)
-                acq_elite_df = acq_elite_df.head(n_bins//3)
+            n_bins = np.prod(self.acq_archive.dims)
 
             acq_elites_solutions = acq_elite_df.solution_batch()
             acq_elites_measures = acq_elite_df.measures_batch()
