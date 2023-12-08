@@ -25,7 +25,7 @@ PNG_BUFFERSIZE = (n_obj_evals/BATCH_SIZE) / 8
 PNG_BUFFERSIZE = int(PNG_BUFFERSIZE)
 print("PNG_BUFFERSIZE: ", PNG_BUFFERSIZE)
 
-def anytime_archive_visualizer(self, archive, vmin, vmax, obj_flag=False, acq_flag=False, pred_flag=False, new_flag=False):
+def anytime_archive_visualizer(self, archive, vmin, vmax, obj_flag=False, acq_flag=False, pred_flag=False, new_flag=False, map_flag=False):
 
     domain = self.domain
     initial_seed = self.initial_seed
@@ -46,6 +46,10 @@ def anytime_archive_visualizer(self, archive, vmin, vmax, obj_flag=False, acq_fl
         prefix = "pred"
         name = "Prediction Archive"
         iteration = self.pred_current_iteration
+    if map_flag:
+        prefix = "inner_acq"
+        name = "Inner Acq Archive"
+        iteration = self.map_current_iteration
 
     print(f"anytime_archive_visualizer(): iteration: {iteration}  archive: {prefix}")
 

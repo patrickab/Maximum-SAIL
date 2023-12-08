@@ -1,5 +1,6 @@
 ### Packages ###
-from torch import float64, cuda, device, tensor
+import torch
+from torch import float64, cuda, tensor
 from botorch.acquisition import qLowerBoundMaxValueEntropy
 from botorch.optim import optimize_acqf
 from chaospy import create_sobol_samples
@@ -24,6 +25,8 @@ def acq_mes(self, genomes):
     # if genomes is empty, return empty array
     if len(genomes) == 0:
         return np.array([])
+    
+    device = torch.device("cuda" if cuda.is_available() else "cpu")
 
     rng = np.random.default_rng(self.current_seed)
     cell_indices = self.obj_archive.index_of(genomes[:,1:3])
@@ -50,7 +53,7 @@ def acq_mes(self, genomes):
     for i in range(genomes.shape[0]):
 
         cellgrid = assamble_cellgrid(self, genomes_tensor[i,0])
-        cellgrid = tensor(cellgrid, dtype=float64)      # Shape: 10000 x SOL_DIMENSION
+        cellgrid = tensor(cellgrid, dtype=float64, device=device)      # Shape: 4000 x SOL_DIMENSION
         MES = qLowerBoundMaxValueEntropy(model=self.gp_model, candidate_set=cellgrid, num_mv_samples=100)
         acq_entropy = MES(transformed_genomes[i].permute(1, 0, 2))
 
@@ -82,7 +85,7 @@ def simple_mes(self, genomes):
     for i in range(genomes.shape[0]):
 
         cellgrid = assamble_cellgrid(self, genomes_tensor[i,0])
-        cellgrid = tensor(cellgrid, dtype=float64)      # Shape: 10000 x SOL_DIMENSION
+        cellgrid = tensor(cellgrid, dtype=float64)      # Shape: 4000 x SOL_DIMENSION
         MES = qLowerBoundMaxValueEntropy(model=self.gp_model, candidate_set=cellgrid, num_y_samples=256)
         acq_entropy = MES(transformed_genomes[i].permute(1, 0, 2))
         
@@ -137,14 +140,14 @@ def mes_sobol_cellgrids(self):
     Returns:
 
         bhv_cellbounds : 625 bins x 2  dimensions x 2 boundaries
-        bhv_cellgrids  : 625 bins x 10000 samples x 2 dimensions
-        mes_cellgrid   :   1      x 10000 samples x 11 dimensions
+        bhv_cellgrids  : 625 bins x 4000 samples x 2 dimensions
+        mes_cellgrid   :   1      x 4000 samples x 11 dimensions
 
     # how does the naive approach work? : https://github.com/patrickab/Maximum-SAIL/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.pdf
     # why would this approach be naive? : https://github.com/patrickab/Maximum-SAIL/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.mp4
 
     """
-    sobol_cellgrid = create_sobol_samples(order=10000, dim=SOL_DIMENSION, seed=self.current_seed).T
+    sobol_cellgrid = create_sobol_samples(order=4000, dim=SOL_DIMENSION, seed=self.current_seed).T
 
     archive = self.obj_archive
     n_cells = np.prod(archive.dims)
@@ -161,8 +164,8 @@ def mes_sobol_cellgrids(self):
     boundaries_0 = archive.boundaries[0]
     boundaries_1 = archive.boundaries[1]
 
-    # 625 bins, 10000 samples, 2 dimensions
-    bhv_cellgrids = np.empty((n_cells, 10000, BHV_DIMENSION))
+    # 625 bins, 4000 samples, 2 dimensions
+    bhv_cellgrids = np.empty((n_cells, 4000, BHV_DIMENSION))
     bhv_cellbounds = np.empty((n_cells, BHV_DIMENSION, 2))
 
     for i in range(n_cells):
@@ -196,16 +199,20 @@ def mes_sobol_cellgrids(self):
     return bhv_cellbounds, bhv_cellgrids, mes_cellgrid
 
 
-def optimize_mes(self):
+def optimize_mes(self, init_flag=False):
+
+    device = torch.device("cuda" if cuda.is_available() else "cpu")
 
     n_bins = np.prod(self.acq_archive.dims)
-    n_samples = n_bins // 4
+    n_samples = n_bins // 4 if self.acq_archive.stats.num_elites > n_bins // 4 else self.acq_archive.stats.num_elites
     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True).sample(n=n_samples, random_state=self.current_seed, replace=False)
+
+    if init_flag:
+        self.acq_archive.clear()
 
     genomes = acq_elite_df.solution_batch()
     objectives = acq_elite_df.objective_batch()
 
-    rng = np.random.default_rng(self.current_seed)
     cell_indices = self.obj_archive.index_of(genomes[:,1:3])
 
     cellbounds = self.bhv_cellbounds[cell_indices]
@@ -226,7 +233,7 @@ def optimize_mes(self):
     for i in range(genomes.shape[0]):
 
         cellgrid = assamble_cellgrid(self, genomes_tensor[i])
-        cellgrid = tensor(cellgrid, dtype=float64)      # Shape: 10000 x SOL_DIMENSION
+        cellgrid = tensor(cellgrid, dtype=float64, device=device)      # Shape: 4000 x SOL_DIMENSION
         MES = qLowerBoundMaxValueEntropy(model=self.gp_model, candidate_set=cellgrid, num_mv_samples=100)
 
         new_genome, new_acquisition = optimize_acqf(

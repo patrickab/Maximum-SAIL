@@ -494,7 +494,7 @@ def initialize_archive(self):
 
     print(self.acq_archive.as_pandas().sort_values(by='index').objective_batch())
     print("Mean Acq Objective: ", self.acq_archive.as_pandas().objective_batch().mean())
-    optimize_mes(self=self)
+    optimize_mes(self=self, init_flag=True)
     print("Mean Acq Objective: ", self.acq_archive.as_pandas().objective_batch().mean())
     print(self.acq_archive.as_pandas().sort_values(by='index').objective_batch())
 

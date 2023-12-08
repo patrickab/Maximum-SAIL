@@ -77,6 +77,7 @@ class SailRun:
         self.new_current_iteration = 1
         self.acq_current_iteration = 1
         self.pred_current_iteration = 1
+        self.map_current_iteration = 1
 
 
         if hybrid_flag:
@@ -148,7 +149,7 @@ class SailRun:
         n_new = new_solutions.shape[0]
         n_old = self.sol_array.shape[0]
         n_expected = n_old + n_new 
-        new_solutions = np.vstack(new_solutions) if new_solutions.shape[0] != 0 else new_solutions
+        new_solutions = np.vstack(new_solutions) if new_solutions.shape[0] != 11 else new_solutions
         new_objectives = np.vstack(new_objectives) if new_solutions.shape[0] != 0 else new_objectives
         self.sol_array = np.vstack((self.sol_array, new_solutions))
         self.obj_array = np.vstack((self.obj_array, new_objectives))
@@ -175,18 +176,18 @@ class SailRun:
         return self.current_seed
 
 
-    def visualize_archive(self, archive, obj_flag=False, acq_flag=False, pred_flag=False, new_flag=False):
+    def visualize_archive(self, archive, obj_flag=False, acq_flag=False, pred_flag=False, new_flag=False, map_flag=False):
 
         vmin = MIN_THRESHHOLD
         vmax = MAX_RENDER_THRESHHOLD
 
-        if self.acq_mes_flag and acq_flag:
+        if self.acq_mes_flag and (acq_flag or map_flag):
             vmin = 0.0
-            vmax = 0.8
+            vmax = 0.4
 
         # all visualisations of the acquisition archive represent the state of the archive, which candidate solutions are sampled from for objective evaluations
 
-        anytime_archive_visualizer(self, archive=archive, obj_flag=obj_flag, acq_flag=acq_flag, pred_flag=pred_flag, new_flag=new_flag, vmin=vmin, vmax=vmax)
+        anytime_archive_visualizer(self, archive=archive, obj_flag=obj_flag, acq_flag=acq_flag, pred_flag=pred_flag, new_flag=new_flag, map_flag=map_flag, vmin=vmin, vmax=vmax)
         if obj_flag:
             self.obj_current_iteration += 1
         if new_flag:
@@ -195,6 +196,8 @@ class SailRun:
             self.acq_current_iteration += 1
         if pred_flag:
             self.pred_current_iteration += 1
+        if map_flag:
+            self.map_current_iteration += 1
 
     def update_archive(self, candidate_sol=None, candidate_obj=None, candidate_bhv=None, obj_flag=False, acq_flag=False, pred_flag=False, evaluate_prediction_archive=False):
         """"
@@ -493,14 +496,14 @@ def mes_sobol_cellgrids(self):
     Returns:
 
         bhv_cellbounds : 625 bins x 2  dimensions x 2 boundaries
-        bhv_cellgrids  : 625 bins x 4000 samples x 2 dimensions
-        mes_cellgrid   :   1      x 4000 samples x 11 dimensions
+        bhv_cellgrids  : 625 bins x 6000 samples x 2 dimensions
+        mes_cellgrid   :   1      x 6000 samples x 11 dimensions
 
     # how does the naive approach work? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.pdf
     # why would this approach be naive? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.mp4
 
     """
-    sobol_cellgrid = create_sobol_samples(order=4000, dim=SOL_DIMENSION, seed=self.current_seed).T
+    sobol_cellgrid = create_sobol_samples(order=6000, dim=SOL_DIMENSION, seed=self.current_seed).T
 
     archive = self.obj_archive
     n_cells = np.prod(archive.dims)
@@ -517,8 +520,8 @@ def mes_sobol_cellgrids(self):
     boundaries_0 = archive.boundaries[0]
     boundaries_1 = archive.boundaries[1]
 
-    # 625 bins, 4000 samples, 2 dimensions
-    bhv_cellgrids = np.empty((n_cells, 4000, BHV_DIMENSION))
+    # 625 bins, 6000 samples, 2 dimensions
+    bhv_cellgrids = np.empty((n_cells, 6000, BHV_DIMENSION))
     bhv_cellbounds = np.empty((n_cells, BHV_DIMENSION, 2))
 
     for i in range(n_cells):

@@ -1,8 +1,8 @@
 import os
+import numpy as np
 import torch
 from botorch.acquisition import PosteriorMean
 from botorch.optim import optimize_acqf
-from numpy import float64
 
 ### Global Parameters ###
 from config.config import Config
@@ -16,10 +16,13 @@ def maximize_mean(gp_model):
     acq_func = PosteriorMean(gp_model)
     new_x, max_mean = optimize_acqf(
         acq_function=acq_func,
-        bounds=torch.tensor(SOL_VALUE_RANGE, dtype=float64, device=device),
+        bounds=torch.tensor(SOL_VALUE_RANGE, dtype=torch.float64, device=device).T,
         q=1,
         num_restarts=10,
         raw_samples=1024,
     )
+
+    max_mean = max_mean.detach().numpy()
+    new_x = new_x.detach().numpy()
 
     return new_x, max_mean

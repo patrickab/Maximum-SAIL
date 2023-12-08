@@ -58,12 +58,15 @@ def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_pred
     obj_t0 = self.obj_archive.stats.num_elites
     target = "Acquisition" if acq_flag else "Prediction"
 
-    if self.custom_flag and self.obj_current_iteration % 5 == 0:
+    if self.custom_flag and self.obj_current_iteration % 5 == 0 and not evaluate_prediction_archive:
 
         new_x, max_mean = maximize_mean(self.gp_model)
         _, success_index, converged_obj = xfoil(iterations=1, surface_batch=new_x)
-        self.obj_archive.add_single(new_x, converged_obj, measures=new_x[1:3])
+        self.obj_archive.add_single(new_x[0], converged_obj, measures=new_x[0,1:3])
         print(f"Max Mean: {max_mean} - Max Mean Objective: {converged_obj}")
+
+        if converged_obj.shape[0] == 1:
+            self.update_gp_data(new_solutions=new_x, new_objectives=converged_obj)
 
     while remaining_samples>0:
 
