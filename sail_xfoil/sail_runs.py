@@ -276,7 +276,10 @@ def prepare_sample_elites(self: SailRun, new_elite_archive: GridArchive, old_eli
 
 
 def select_samples(self: SailRun, improved_elites, new_bin_elites, acq_flag=False, pred_flag=False, curiosity=5):
-    """Selects samples based on exploration behavior defined in the class constructor"""
+    """
+    - Selects samples based on exploration behavior defined in the class constructor
+    - In case of MES, the best 70% of elites are selected, then randomly shuffled. This is done due to different MES value ranges
+    """
 
     if acq_flag:
         target = "Acquisition"
@@ -284,6 +287,16 @@ def select_samples(self: SailRun, improved_elites, new_bin_elites, acq_flag=Fals
     if pred_flag:
         target = "Prediction"
         n_samples = PRED_N_OBJ_EVALS//PREDICTION_VERIFICATIONS
+
+    if self.acq_mes_flag:
+
+        # Select best 70% of MES elites
+        improved_elites = improved_elites.head(improved_elites.shape[0]*0.7)
+        new_bin_elites = new_bin_elites.head(new_bin_elites.shape[0]*0.7)
+
+        # shuffle elites
+        improved_elites = improved_elites.sample(frac=1, random_state=self.initial_seed)
+        new_bin_elites = new_bin_elites.sample(frac=1, random_state=self.initial_seed)
 
     if self.greedy_flag: # Evaluate only maximum improvement, regardeless of new/old bin
         candidate_elite_df = pandas.concat([new_bin_elites, improved_elites]).sort_values(by=['objective_improvement'], ascending=False).head(n_samples)
