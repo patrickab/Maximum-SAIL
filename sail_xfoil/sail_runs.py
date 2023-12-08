@@ -30,6 +30,7 @@ CSV_BUFFERSIZE = (n_obj_evals/BATCH_SIZE) / 8
 ###### Import Custom Scripts ######
 
 from xfoil.eval_xfoil_loop import eval_xfoil_loop
+from acq_functions.acq_mes import optimize_mes
 from utils.pprint_nd import pprint
 from utils.anytime_metrics import initialize_anytime_metrics, calculate_anytime_metrics, store_anytime_metrics
 from xfoil.generate_airfoils import generate_parsec_coordinates
@@ -136,26 +137,13 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
             if total_eval_budget == total_eval_budget//6:
                 CURIOSITY = 3
 
-        if (consumed_obj_evals % (total_eval_budget//10)) == 0 and consumed_obj_evals != 0:
-
-            if self.acq_mes_flag:
-                # preserve only highperforming elites
-                target_elites = target_archive.as_pandas(include_solutions=True)
-                update_elites = target_elites[target_elites.shape[0]//2]
-                self.acq_archive.clear()
-                self.update_archive(candidate_sol=update_elites.solution_batch(), candidate_bhv=update_elites.measures_batch(), acq_flag=True)
-
-            # initialize acq archive with sobol samples
-            n_sobol_samples = 1200
-            solution_batch = create_sobol_samples(order=n_sobol_samples, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
-            solution_batch = solution_batch.T
-            solution_batch = scale_samples(solution_batch)
-            measures_batch = solution_batch[:, 1:3]
-            for i in range(0, n_sobol_samples, BATCH_SIZE):
-                self.update_archive(candidate_sol=solution_batch[i:i+BATCH_SIZE], candidate_bhv=measures_batch[i:i+BATCH_SIZE], acq_flag=acq_loop, pred_flag=pred_loop)
-                print(f"Sobol iteration: {i}")
-            del solution_batch, measures_batch
-            gc.collect()
+        if (self.obj_current_iteration % 10) == 0:
+            if self.acq_mes_flag and self.obj_current_iteration != 30:
+                print(self.acq_archive.as_pandas().sort_values(by='index').objective_batch())
+                print("Mean Acq Objective: ", self.acq_archive.as_pandas().objective_batch().mean())
+                optimize_mes(self)
+                print("Mean Acq Objective: ", self.acq_archive.as_pandas().objective_batch().mean())
+                print(self.acq_archive.as_pandas().sort_values(by='index').objective_batch())
 
         # Produce new acquisition elites
         target_t0 = target_archive.stats.num_elites
@@ -503,6 +491,13 @@ def initialize_archive(self):
         valid_indices, surface_batch = generate_parsec_coordinates(solution_batch[i:i+BATCH_SIZE], io_flag=False)
         self.update_archive(candidate_sol=solution_batch[i:i+BATCH_SIZE][valid_indices], candidate_bhv=measures_batch[i:i+BATCH_SIZE][valid_indices], acq_flag=True)
         print(f"Initialize Acq Archive: {i+10}   Size: {self.acq_archive.stats.num_elites}")
+
+    print(self.acq_archive.as_pandas().sort_values(by='index').objective_batch())
+    print("Mean Acq Objective: ", self.acq_archive.as_pandas().objective_batch().mean())
+    optimize_mes(self=self)
+    print("Mean Acq Objective: ", self.acq_archive.as_pandas().objective_batch().mean())
+    print(self.acq_archive.as_pandas().sort_values(by='index').objective_batch())
+
 
     for i in range(0, 4):
         acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)

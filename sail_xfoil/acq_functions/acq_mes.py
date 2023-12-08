@@ -194,3 +194,54 @@ def mes_sobol_cellgrids(self):
             raise ValueError("MES Sobol Cellgrid Error")
 
     return bhv_cellbounds, bhv_cellgrids, mes_cellgrid
+
+
+def optimize_mes(self):
+
+    n_bins = np.prod(self.acq_archive.dims)
+    n_samples = n_bins // 4
+    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True).sample(n=n_samples, random_state=self.current_seed, replace=False)
+
+    genomes = acq_elite_df.solution_batch()
+    objectives = acq_elite_df.objective_batch()
+
+    rng = np.random.default_rng(self.current_seed)
+    cell_indices = self.obj_archive.index_of(genomes[:,1:3])
+
+    cellbounds = self.bhv_cellbounds[cell_indices]
+    cellbounds[:,:1,0] = cellbounds[:,:1,0]
+    cellbounds[:,:1,1] = cellbounds[:,:1,1]
+    solutionbounds = np.array(SOL_VALUE_RANGE)
+    cell_solutionbounds = np.repeat(solutionbounds[np.newaxis,:,:], len(genomes), axis=0)    # create copies of solutionbounds
+    cell_solutionbounds[:, 1:3] = cellbounds                                                 # insert niche-specific cellbounds
+
+    genomes_tensor = tensor(genomes, dtype=float64)     # Shape: 8 x BATCH_SIZE x SOL_DIMENSION
+    transformed_genomes = genomes_tensor.unsqueeze(1)   # Shape: 1 x BATCH_SIZE x 1 x SOL_DIMENSION
+
+    # track time
+    import time
+    start = time.time()
+
+    # optimize MES for each mutant batch & select best mutant
+    for i in range(genomes.shape[0]):
+
+        cellgrid = assamble_cellgrid(self, genomes_tensor[i])
+        cellgrid = tensor(cellgrid, dtype=float64)      # Shape: 10000 x SOL_DIMENSION
+        MES = qLowerBoundMaxValueEntropy(model=self.gp_model, candidate_set=cellgrid, num_mv_samples=100)
+
+        new_genome, new_acquisition = optimize_acqf(
+            acq_function=MES,
+            bounds=tensor(cell_solutionbounds[i].T, dtype=float64),
+            q=1,
+            num_restarts=10,
+            raw_samples=1024,
+        )
+
+        new_genome = new_genome.detach().numpy()
+        new_acquisition = new_acquisition.detach().numpy()
+
+        print("Old Acquisition: ", objectives[i], "  New Acquisition: ", new_acquisition,  "  Improvement (Percent): ", (objectives[i] - new_acquisition)/objectives[i] * 100)
+
+        self.acq_archive.add_single(new_genome[0], new_acquisition, new_genome[0,1:3])
+
+    print("Optimize MES Time: ", time.time() - start)
