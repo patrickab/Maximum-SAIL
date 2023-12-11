@@ -505,7 +505,7 @@ def mes_sobol_cellgrids(self):
     """
     sobol_cellgrid = create_sobol_samples(order=6000, dim=SOL_DIMENSION, seed=self.current_seed).T
 
-    archive = self.obj_archive
+    archive = self.acq_archive
     n_cells = np.prod(archive.dims)
 
     archive_indices = range(n_cells)

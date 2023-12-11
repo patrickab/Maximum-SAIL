@@ -25,11 +25,10 @@ def acq_mes(self, genomes):
     # if genomes is empty, return empty array
     if len(genomes) == 0:
         return np.array([])
-    
-    device = torch.device("cuda" if cuda.is_available() else "cpu")
 
+    gp_model = self.gp_model
     rng = np.random.default_rng(self.current_seed)
-    cell_indices = self.obj_archive.index_of(genomes[:,1:3])
+    cell_indices = self.acq_archive.index_of(genomes[:,1:3])
 
     cellbounds = self.bhv_cellbounds[cell_indices]
     cellbounds[:,:1,0] = cellbounds[:,:1,0]
@@ -44,8 +43,8 @@ def acq_mes(self, genomes):
         scaled_noise = rng.normal(scale=np.abs(0.05 *(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), size=(800, SOL_DIMENSION))
         genomes[i] = np.clip(genomes[i] + scaled_noise, np.array(SOL_VALUE_RANGE)[:,0], np.array(SOL_VALUE_RANGE)[:,1])
 
-    genomes_tensor = tensor(genomes, dtype=float64)     # Shape: 8 x BATCH_SIZE x SOL_DIMENSION
-    transformed_genomes = genomes_tensor.unsqueeze(1)   # Shape: 1 x BATCH_SIZE x 1 x SOL_DIMENSION
+    genomes_tensor = tensor(genomes, dtype=float64)          # Shape: 8 x BATCH_SIZE x SOL_DIMENSION
+    transformed_genomes = genomes_tensor.unsqueeze(1)        # Shape: 1 x BATCH_SIZE x 1 x SOL_DIMENSION
 
     # calculate MES for each mutant batch & select best mutant
     acq_solution_tensor = tensor(np.zeros((len(genomes), SOL_DIMENSION)), dtype=float64)    # Shape: PARALLEL_BATCH_SIZE x 1
@@ -53,8 +52,8 @@ def acq_mes(self, genomes):
     for i in range(genomes.shape[0]):
 
         cellgrid = assamble_cellgrid(self, genomes_tensor[i,0])
-        cellgrid = tensor(cellgrid, dtype=float64, device=device)      # Shape: 4000 x SOL_DIMENSION
-        MES = qMaxValueEntropy(model=self.gp_model, candidate_set=cellgrid, num_mv_samples=100, num_y_samples=32)
+        cellgrid = tensor(cellgrid, dtype=float64)                   # Shape: 4000 x SOL_DIMENSION
+        MES = qMaxValueEntropy(model=gp_model, candidate_set=cellgrid, num_mv_samples=100, num_y_samples=32)
         acq_entropy = MES(transformed_genomes[i].permute(1, 0, 2))
 
         elite_index = acq_entropy.argmax()
@@ -201,11 +200,13 @@ def mes_sobol_cellgrids(self):
 
 def optimize_mes(self, init_flag=False):
 
-    device = torch.device("cuda" if cuda.is_available() else "cpu")
+    np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 
+    gp_model = self.gp_model
     n_bins = np.prod(self.acq_archive.dims)
-    n_samples = n_bins // 4 if self.acq_archive.stats.num_elites > n_bins // 4 else self.acq_archive.stats.num_elitese
+    n_samples = n_bins // 2 if self.acq_archive.stats.num_elites > n_bins // 2 else self.acq_archive.stats.num_elites
     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True).sample(n=n_samples, random_state=self.current_seed, replace=False)
+    sum_perc_improvement = 0
 
     if init_flag:
         self.acq_archive.clear()
@@ -233,8 +234,8 @@ def optimize_mes(self, init_flag=False):
     for i in range(genomes.shape[0]):
 
         cellgrid = assamble_cellgrid(self, genomes_tensor[i])
-        cellgrid = tensor(cellgrid, dtype=float64, device=device)      # Shape: 4000 x SOL_DIMENSION
-        MES = qLowerBoundMaxValueEntropy(model=self.gp_model, candidate_set=cellgrid, num_mv_samples=100)
+        cellgrid = tensor(cellgrid, dtype=float64)      # Shape: 4000 x SOL_DIMENSION
+        MES = qLowerBoundMaxValueEntropy(model=gp_model, candidate_set=cellgrid, num_mv_samples=100)
 
         new_genome, new_acquisition = optimize_acqf(
             acq_function=MES,
@@ -247,8 +248,11 @@ def optimize_mes(self, init_flag=False):
         new_genome = new_genome.detach().numpy()
         new_acquisition = new_acquisition.detach().numpy()
 
-        print("Old Acquisition: ", objectives[i], "  New Acquisition: ", new_acquisition,  "  Improvement (Percent): ", (objectives[i] - new_acquisition)/objectives[i] * 100)
+        perc_improvement = ((new_acquisition)-objectives[i])/objectives[i] * 100
+        sum_perc_improvement += perc_improvement
+        print("Old Acquisition: ", objectives[i], "  New Acquisition: ", new_acquisition,  "  Improvement (Percent): ", perc_improvement)
+        self.acq_archive.add_single(new_genome[0], new_acquisition, new_genome[0,1:3]) 
 
-        self.acq_archive.add_single(new_genome[0], new_acquisition, new_genome[0,1:3])
-
+    mean_perc_improvement = sum_perc_improvement / n_samples
+    print("Mean Improvement (Percent): ", mean_perc_improvement)
     print("Optimize MES Time: ", time.time() - start)

@@ -13,10 +13,8 @@ SIGMA_UCB = config.SIGMA_UCB
 
 def acq_ucb(self, genomes):
 
-    dev = device("cuda" if cuda.is_available() else "cpu")
-
-    genomes = tensor(genomes, dtype=float64, device=dev)           # Shape: PARALLEL_BATCH_SIZE x SOL_DIMENSION
-    transformed_genomes = genomes.unsqueeze(1)                     # Shape: PARALLEL_BATCH_SIZE x 1 x SOL_DIMENSION
+    genomes = tensor(genomes, dtype=float64)          # Shape: PARALLEL_BATCH_SIZE x SOL_DIMENSION
+    transformed_genomes = genomes.unsqueeze(1)        # Shape: PARALLEL_BATCH_SIZE x 1 x SOL_DIMENSION
 
     UCB = UpperConfidenceBound(self.gp_model, beta=SIGMA_UCB)
     ucb_tensor = UCB(transformed_genomes)

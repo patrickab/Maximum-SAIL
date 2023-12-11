@@ -24,13 +24,11 @@ def fit_gp_model(x_sol, y_obj):
     print("\nfit_gp_model()...")
     print(f"n_data_points: {n_data_points}\n")
 
-    # Use a GPU if available
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     dtype = torch.float64
 
     # Convert variables to tensor
-    x_tensor = torch.tensor(x_sol, device=device, dtype=dtype)
-    y_tensor = torch.tensor(y_obj, device=device, dtype=dtype)
+    x_tensor = torch.tensor(x_sol, dtype=dtype)
+    y_tensor = torch.tensor(y_obj, dtype=dtype)
 
     lower_bounds = torch.tensor([lower for lower, _ in SOL_VALUE_RANGE])
     upper_bounds = torch.tensor([upper for _, upper in SOL_VALUE_RANGE])

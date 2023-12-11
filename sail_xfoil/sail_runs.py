@@ -276,11 +276,14 @@ def select_samples(self: SailRun, improved_elites, new_bin_elites, acq_flag=Fals
         target = "Prediction"
         n_samples = PRED_N_OBJ_EVALS//PREDICTION_VERIFICATIONS
 
+    if self.acq_ucb_flag:
+        new_bin_elites = new_bin_elites.sample(frac=1, random_state=self.initial_seed)
+
     if self.acq_mes_flag:
 
         # Select best 70% of MES elites
-        improved_elites = improved_elites.head(int(improved_elites.shape[0]*0.8))
-        new_bin_elites = new_bin_elites.head(int(new_bin_elites.shape[0]*0.8))
+        improved_elites = improved_elites.head(int(improved_elites.shape[0]*0.9))
+        new_bin_elites = new_bin_elites.head(int(new_bin_elites.shape[0]*0.9))
 
         # shuffle elites
         improved_elites = improved_elites.sample(frac=1, random_state=self.initial_seed)
@@ -443,7 +446,7 @@ def initialize_archive(self):
             new_target_elites, _, _ = map_elites(self, acq_flag=True, new_elite_threshold=min_threshold)
             if new_target_elites.stats.num_elites < BATCH_SIZE: new_target_elites = ensure_n_new_elites(self=self, new_elite_archive=new_target_elites, acq_flag=True)   # Sample until enough new acquisition elites are found
             improved_elites, new_bin_elites = prepare_sample_elites(self=self, new_elite_archive=new_target_elites, old_elite_archive=self.obj_archive)                  # Split new_target_elites into improved elites & new bin elites, then (if self.acq_ucb_flag or pred_flag) calculate objective improvement (else) objective_improvement = objective
-            candidate_solutions_df = select_samples(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, acq_flag=True, curiosity=4)                    # Select samples based on exploration behavior defined in the class constructor
+            candidate_solutions_df = select_samples(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, acq_flag=True, curiosity=3)                    # Select samples based on exploration behavior defined in the class constructor
 
             self.visualize_archive(archive=self.acq_archive, acq_flag=True)
 

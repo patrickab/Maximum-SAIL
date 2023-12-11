@@ -81,7 +81,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
         target_archive = self.acq_archive
         if self.acq_mes_flag: # reduce number of acquisition evaluations for MES
             self.update_cellgrids()
-            n_evals = ACQ_N_MAP_EVALS//4
+            n_evals = ACQ_N_MAP_EVALS
         else:
             n_evals = ACQ_N_MAP_EVALS
 
@@ -128,8 +128,12 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
             if mes_flag and acq_flag:
                 if remaining_evals % (n_evals//10) == 0 and remaining_evals != 0:
                     self.visualize_archive(archive=self.acq_archive, map_flag=True)
-                if remaining_evals % (n_evals//3) == 0 and remaining_evals != 0:
+                if remaining_evals % (n_evals//4) == 0 and remaining_evals != 0:
                     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+                    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
+
+                    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True).sort_values(by=['objective'], ascending=False)
+                    acq_elite_df = acq_elite_df.head(int(BATCH_SIZE*0.5))
                     self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
 
             remaining_evals -= BATCH_SIZE
