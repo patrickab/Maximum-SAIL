@@ -1,7 +1,7 @@
 ### Packages ###
 import torch
 from torch import float64, cuda, tensor
-from botorch.acquisition import qLowerBoundMaxValueEntropy
+from botorch.acquisition import qMaxValueEntropy, qLowerBoundMaxValueEntropy
 from botorch.optim import optimize_acqf
 from chaospy import create_sobol_samples
 import numpy as np
@@ -54,7 +54,7 @@ def acq_mes(self, genomes):
 
         cellgrid = assamble_cellgrid(self, genomes_tensor[i,0])
         cellgrid = tensor(cellgrid, dtype=float64, device=device)      # Shape: 4000 x SOL_DIMENSION
-        MES = qLowerBoundMaxValueEntropy(model=self.gp_model, candidate_set=cellgrid, num_mv_samples=100)
+        MES = qMaxValueEntropy(model=self.gp_model, candidate_set=cellgrid, num_mv_samples=100, num_y_samples=32)
         acq_entropy = MES(transformed_genomes[i].permute(1, 0, 2))
 
         elite_index = acq_entropy.argmax()
@@ -204,7 +204,7 @@ def optimize_mes(self, init_flag=False):
     device = torch.device("cuda" if cuda.is_available() else "cpu")
 
     n_bins = np.prod(self.acq_archive.dims)
-    n_samples = n_bins // 4 if self.acq_archive.stats.num_elites > n_bins // 4 else self.acq_archive.stats.num_elites
+    n_samples = n_bins // 4 if self.acq_archive.stats.num_elites > n_bins // 4 else self.acq_archive.stats.num_elitese
     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True).sample(n=n_samples, random_state=self.current_seed, replace=False)
 
     if init_flag:
