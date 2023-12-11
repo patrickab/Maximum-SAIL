@@ -55,7 +55,8 @@ BATCH_SIZE = config.BATCH_SIZE
 SIGMA_EMITTER = config.SIGMA_EMITTER
 SOL_DIMENSION = config.SOL_DIMENSION
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
-BHV_NUMBER_BINS = config.BHV_NUMBER_BINS
+OBJ_BHV_NUMBER_BINS = config.OBJ_BHV_NUMBER_BINS
+ACQ_BHV_NUMBER_BINS = config.ACQ_BHV_NUMBER_BINS
 BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 ACQ_N_MAP_EVALS = config.ACQ_N_MAP_EVALS
 PRED_N_MAP_EVALS = config.PRED_N_MAP_EVALS
@@ -67,9 +68,12 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
     print("\n\nInitialize Map-Elites [...]")
 
     if new_elite_archive is None:
+
+        number_bins = ACQ_BHV_NUMBER_BINS if acq_flag else OBJ_BHV_NUMBER_BINS
+
         new_elite_archive = GridArchive(
             solution_dim=SOL_DIMENSION,
-            dims=BHV_NUMBER_BINS,
+            dims=number_bins,
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
             threshold_min = new_elite_threshold,)
@@ -79,7 +83,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
         target = "Acq Archive"
         target_function = self.acq_function
         target_archive = self.acq_archive
-        if self.acq_mes_flag: # reduce number of acquisition evaluations for MES
+        if self.acq_mes_flag: # allows to reduce number of acquisition evaluations for MES
             self.update_cellgrids()
             n_evals = ACQ_N_MAP_EVALS
         else:
@@ -126,15 +130,20 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
             new_elite_archive.add(candidate_sol, candidate_obj, candidate_bhv)
 
             if mes_flag and acq_flag:
-                if remaining_evals % (n_evals//10) == 0 and remaining_evals != 0:
-                    self.visualize_archive(archive=self.acq_archive, map_flag=True)
-                if remaining_evals % (n_evals//4) == 0 and remaining_evals != 0:
+
+                if remaining_evals % (n_evals//5) == 0 and remaining_evals != 0:
                     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
                     self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
 
                     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True).sort_values(by=['objective'], ascending=False)
                     acq_elite_df = acq_elite_df.head(int(BATCH_SIZE*0.5))
                     self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
+
+                if remaining_evals % (n_evals//10) == 0 and remaining_evals != 0:
+                    self.visualize_archive(archive=self.acq_archive, map_flag=True)
+                    acquisition_sum = np.sum(self.acq_archive.as_pandas.objective_batch())
+                    print(f"Acquisition Value Sum: {acquisition_sum}")
+
 
             remaining_evals -= BATCH_SIZE
 

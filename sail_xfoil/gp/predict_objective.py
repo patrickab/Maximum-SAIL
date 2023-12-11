@@ -16,10 +16,9 @@ REYNOLDS = config.REYNOLDS
 
 def predict_objective(self, genomes):
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     self.gp_model.eval()
-    genomes_tensor = torch.tensor(genomes, dtype=float64, device=device)           # Shape: PARALLEL_BATCH_SIZE x SOL_DIMENSION
-    transformed_genomes = genomes_tensor.unsqueeze(1)                              # Shape: PARALLEL_BATCH_SIZE x 1 x SOL_DIMENSION
+    genomes_tensor = torch.tensor(genomes, dtype=float64)           # Shape: PARALLEL_BATCH_SIZE x SOL_DIMENSION
+    transformed_genomes = genomes_tensor.unsqueeze(1)               # Shape: PARALLEL_BATCH_SIZE x 1 x SOL_DIMENSION
 
     # Get the predictive posterior distribution
     with gpytorch.settings.fast_pred_var(), torch.no_grad():

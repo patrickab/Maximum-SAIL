@@ -132,9 +132,9 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
 
     while(current_eval_budget >= i_obj_evals):
 
-        if consumed_obj_evals == total_eval_budget//3:
+        if consumed_obj_evals >= total_eval_budget//3:
             CURIOSITY = 6
-            if total_eval_budget == total_eval_budget//6:
+            if consumed_obj_evals >= total_eval_budget//6:
                 CURIOSITY = 7
 
         if (self.obj_current_iteration % 10) == 0:
@@ -232,17 +232,28 @@ def prepare_sample_elites(self: SailRun, new_elite_archive: GridArchive, old_eli
     """
 
     old_elite_df = old_elite_archive.as_pandas(include_solutions=True).sort_values(by=['index'])
-    new_elite_df = new_elite_archive.as_pandas(include_solutions=True).sort_values(by=['index'])
 
-    # Index referrs to the bin, that the elite belongs to
+    # Map Acquisition Elites to Objective Archive Indices (may differ if resolution of acquisition archive differs)
+    new_elite_df = new_elite_archive.as_pandas(include_solutions=True)
+    new_elite_indices = self.obj_archive.index_of(new_elite_df.measures_batch())
+
+    # Index refers to the bin, that the elite belongs to
     # Therefore the index can be used to seperate improved elites from new bin elites
-    is_improved_new_elite = np.isin(new_elite_df['index'], old_elite_df['index'])
+    is_improved_new_elite = np.isin(new_elite_indices, old_elite_df['index'])
     
     improved_elites = new_elite_df[is_improved_new_elite]
     new_bin_elites   = new_elite_df[~is_improved_new_elite]
 
+    # Map improved elites to objective archive indices
+    improved_elites = improved_elites.assign(index = self.obj_archive.index_of(improved_elites.measures_batch()))
+    new_bin_elites = new_bin_elites.assign(index = self.acq_archive.index_of(new_bin_elites.measures_batch()))
+
+    # If duplicate indices exist, delete the one with the higher objective
+    improved_elites = improved_elites.sort_values(by=['index'], ascending=False)
+    improved_elites = improved_elites.drop_duplicates(subset=['index'], keep='first')
+
     # Select old elites that have been improved
-    is_improved_old_elite = np.isin(old_elite_df['index'], improved_elites['index'])
+    is_improved_old_elite = np.isin(old_elite_df['index'], new_elite_indices)
     improved_old_elites = old_elite_df[is_improved_old_elite]
 
     improved_elites = improved_elites.sort_values(by=['index'])
@@ -375,7 +386,7 @@ def initialize_archive(self):
         measures_batch = solution_batch[:, 1:3]
         for i in range(0, 200, BATCH_SIZE):
             self.update_archive(candidate_sol=solution_batch[i:i+BATCH_SIZE], candidate_bhv=measures_batch[i:i+BATCH_SIZE], acq_flag=True)
-            print(f"Initialize Acq Archive: {i+10}")
+            print(f"Initialize Acq Archive: {i+BATCH_SIZE}")
 
         remaining_evals = INIT_N_ACQ_EVALS
         while remaining_evals > 0:
@@ -493,7 +504,7 @@ def initialize_archive(self):
         # Generate Parsec Coordinates & remove Invalid Samples
         valid_indices, surface_batch = generate_parsec_coordinates(solution_batch[i:i+BATCH_SIZE], io_flag=False)
         self.update_archive(candidate_sol=solution_batch[i:i+BATCH_SIZE][valid_indices], candidate_bhv=measures_batch[i:i+BATCH_SIZE][valid_indices], acq_flag=True)
-        print(f"Initialize Acq Archive: {i+10}   Size: {self.acq_archive.stats.num_elites}")
+        print(f"Initialize Acq Archive: {i+BATCH_SIZE}   Size: {self.acq_archive.stats.num_elites}")
 
     print(self.acq_archive.as_pandas().sort_values(by='index').objective_batch())
     print("Mean Acq Objective: ", self.acq_archive.as_pandas().objective_batch().mean())

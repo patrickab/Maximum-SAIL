@@ -53,7 +53,7 @@ def acq_mes(self, genomes):
 
         cellgrid = assamble_cellgrid(self, genomes_tensor[i,0])
         cellgrid = tensor(cellgrid, dtype=float64)                   # Shape: 4000 x SOL_DIMENSION
-        MES = qMaxValueEntropy(model=gp_model, candidate_set=cellgrid, num_mv_samples=100, num_y_samples=32)
+        MES = qLowerBoundMaxValueEntropy(model=gp_model, candidate_set=cellgrid, num_mv_samples=100)
         acq_entropy = MES(transformed_genomes[i].permute(1, 0, 2))
 
         elite_index = acq_entropy.argmax()
@@ -104,7 +104,7 @@ def assamble_cellgrid(self, genome):
     mes_cellgrid = np.empty((1, 4000, SOL_DIMENSION))
 
     genome_behavior = genome[1:3]
-    genome_cell_index = self.obj_archive.index_of_single(genome_behavior)
+    genome_cell_index = self.acq_archive.index_of_single(genome_behavior)
 
     mes_cellgrid = self.mes_sobol_cellgrid.copy()
     bhv_cellgrid_i = self.bhv_sobol_cellgrids[genome_cell_index].copy()
@@ -214,7 +214,7 @@ def optimize_mes(self, init_flag=False):
     genomes = acq_elite_df.solution_batch()
     objectives = acq_elite_df.objective_batch()
 
-    cell_indices = self.obj_archive.index_of(genomes[:,1:3])
+    cell_indices = self.acq_archive.index_of(genomes[:,1:3])
 
     cellbounds = self.bhv_cellbounds[cell_indices]
     cellbounds[:,:1,0] = cellbounds[:,:1,0]

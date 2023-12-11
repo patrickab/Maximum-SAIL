@@ -17,11 +17,12 @@ INIT_N_EVALS = config.INIT_N_EVALS
 SOL_DIMENSION = config.SOL_DIMENSION
 OBJ_DIMENSION = config.OBJ_DIMENSION
 BHV_DIMENSION = config.BHV_DIMENSION
-BHV_NUMBER_BINS = config.BHV_NUMBER_BINS
 BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 INIT_N_ACQ_EVALS = config.INIT_N_ACQ_EVALS
 OBJ_MIN_THRESHHOLD = config.OBJ_MIN_THRESHHOLD
+OBJ_BHV_NUMBER_BINS = config.OBJ_BHV_NUMBER_BINS
+ACQ_BHV_NUMBER_BINS = config.ACQ_BHV_NUMBER_BINS
 ACQ_MES_MIN_THRESHHOLD = config.ACQ_MES_MIN_THRESHHOLD
 ACQ_UCB_MIN_THRESHHOLD = config.ACQ_UCB_MIN_THRESHHOLD
 
@@ -283,15 +284,16 @@ class SailRun:
 
         obj_archive = _GridArchive(
             solution_dim=SOL_DIMENSION,
-            dims=BHV_NUMBER_BINS,
+            dims=OBJ_BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
             threshold_min = min_obj_threshhold
         )
 
+        ACQ_BINS = ACQ_BHV_NUMBER_BINS if self.acq_mes_flag else OBJ_BHV_NUMBER_BINS
         acq_archive = _GridArchive(
             solution_dim=SOL_DIMENSION,
-            dims=BHV_NUMBER_BINS,
+            dims=ACQ_BINS,
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
             threshold_min = min_acq_threshhold
@@ -299,7 +301,7 @@ class SailRun:
 
         pred_archive = _GridArchive(
             solution_dim=SOL_DIMENSION,
-            dims=BHV_NUMBER_BINS,
+            dims=OBJ_BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
             threshold_min = min_pred_threshhold
@@ -308,7 +310,7 @@ class SailRun:
         # Used for visualizing new elites (improved + new bin discoveries)
         new_archive = _GridArchive(
             solution_dim=SOL_DIMENSION,
-            dims=BHV_NUMBER_BINS,
+            dims=OBJ_BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
             threshold_min = min_obj_threshhold
@@ -317,7 +319,7 @@ class SailRun:
         # Used for evaluating quality of results
         evaluated_predictions_archive = _GridArchive(
             solution_dim=SOL_DIMENSION,
-            dims=BHV_NUMBER_BINS,
+            dims=OBJ_BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
             threshold_min = -1000 # low perfoming predictions shall be stored under any circumstances
@@ -326,7 +328,7 @@ class SailRun:
         # Used for visualizing prediction errors
         prediction_error_archive = _GridArchive(
             solution_dim=SOL_DIMENSION,
-            dims=BHV_NUMBER_BINS,
+            dims=OBJ_BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
             threshold_min = -0.01 # percentual errors are always positive
@@ -542,7 +544,7 @@ def mes_sobol_cellgrids(self):
         bhv_cellgrid_i = bhv_cellgrid_i * cell_bound_ranges.T + lower_bounds   # scale sobol cellgrid to cellbounds
         bhv_cellgrids[i] = bhv_cellgrid_i                                      # insert bhv cellgrid into mes cellgrid
 
-        verification = self.obj_archive.index_of(bhv_cellgrid_i)
+        verification = self.acq_archive.index_of(bhv_cellgrid_i)
 
         # verify if all samples are in the same cell
         if np.unique(verification).shape[0] != 1:
