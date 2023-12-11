@@ -147,6 +147,8 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
 
             remaining_evals -= BATCH_SIZE
 
+    if self.acq_mes_flag and acq_flag: new_elite_archive = self.acq_archive
+
     # calculate anytime stats
     size_t1 = target_archive.stats.num_elites
     print(f"\n{target} Size: ", str(size_t1))
