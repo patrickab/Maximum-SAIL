@@ -36,8 +36,6 @@ from gp.fit_gp_model import fit_gp_model
 from map_elites import map_elites
 import numpy as np
 
-MIN_THRESHHOLD = 1.5
-MIN_ACQ_UCB_THRESHHOLD = 1.5
 MAX_RENDER_THRESHHOLD = 5.5
 
 
@@ -179,7 +177,7 @@ class SailRun:
 
     def visualize_archive(self, archive, obj_flag=False, acq_flag=False, pred_flag=False, new_flag=False, map_flag=False):
 
-        vmin = MIN_THRESHHOLD
+        vmin = OBJ_MIN_THRESHHOLD
         vmax = MAX_RENDER_THRESHHOLD
 
         if self.acq_mes_flag and (acq_flag or map_flag):
@@ -269,8 +267,8 @@ class SailRun:
         # therefore, in order to produce qualitative results, it makes sense to set a minimum threshold
         # in future work (for generalization), this threshold could be set as a hyperparameter or class attribute
 
-        min_obj_threshhold = MIN_THRESHHOLD
-        min_pred_threshhold = MIN_THRESHHOLD
+        min_obj_threshhold = OBJ_MIN_THRESHHOLD
+        min_pred_threshhold = OBJ_MIN_THRESHHOLD
 
         if self.acq_function == acq_ucb:
             min_acq_threshhold = ACQ_UCB_MIN_THRESHHOLD
