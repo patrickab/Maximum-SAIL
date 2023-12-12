@@ -506,11 +506,12 @@ def initialize_archive(self):
         self.update_archive(candidate_sol=solution_batch[i:i+BATCH_SIZE][valid_indices], candidate_bhv=measures_batch[i:i+BATCH_SIZE][valid_indices], acq_flag=True)
         print(f"Initialize Acq Archive: {i+BATCH_SIZE}   Size: {self.acq_archive.stats.num_elites}")
 
-    print(self.acq_archive.as_pandas().sort_values(by='index').objective_batch())
-    print("Mean Acq Objective: ", self.acq_archive.as_pandas().objective_batch().mean())
-    optimize_mes(self=self, init_flag=True)
-    print("Mean Acq Objective: ", self.acq_archive.as_pandas().objective_batch().mean())
-    print(self.acq_archive.as_pandas().sort_values(by='index').objective_batch())
+    if self.acq_mes_flag:
+        print(self.acq_archive.as_pandas().sort_values(by='index').objective_batch())
+        print("Mean Acq Objective: ", self.acq_archive.as_pandas().objective_batch().mean())
+        optimize_mes(self=self, init_flag=True)
+        print("Mean Acq Objective: ", self.acq_archive.as_pandas().objective_batch().mean())
+        print(self.acq_archive.as_pandas().sort_values(by='index').objective_batch())
 
 
     for i in range(0, 4):
