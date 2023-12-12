@@ -144,6 +144,8 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
                 optimize_mes(self)
                 print("Mean Acq Objective: ", self.acq_archive.as_pandas().objective_batch().mean())
                 print(self.acq_archive.as_pandas().sort_values(by='index').objective_batch())
+                acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+                self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
 
         # Produce new acquisition elites
         target_t0 = target_archive.stats.num_elites
@@ -236,6 +238,9 @@ def prepare_sample_elites(self: SailRun, new_elite_archive: GridArchive, old_eli
     # Map Acquisition Elites to Objective Archive Indices (may differ if resolution of acquisition archive differs)
     new_elite_df = new_elite_archive.as_pandas(include_solutions=True)
     new_elite_indices = self.obj_archive.index_of(new_elite_df.measures_batch())
+
+    # remove all solutions from new_elite_df, that already exist in old_elite_df
+    new_elite_df = new_elite_df[~np.isin(new_elite_df.solution_batch(), old_elite_df.solution_batch()).all(1)]
 
     # Index refers to the bin, that the elite belongs to
     # Therefore the index can be used to seperate improved elites from new bin elites

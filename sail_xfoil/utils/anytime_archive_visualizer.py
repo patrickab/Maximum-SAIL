@@ -20,7 +20,7 @@ INIT_N_ACQ_EVALS = config.INIT_N_ACQ_EVALS
 # eg for n_obj_evals=1280, and BATCH_SIZE=10, we buffer 128/(2^3) = 16 pngs
 # for rendering all videos correctly, n_obj_evals must be contained in [BATCH_SIZE * 2^(n+3)]
 n_obj_evals = INIT_N_EVALS + ACQ_N_OBJ_EVALS + PRED_N_OBJ_EVALS + INIT_N_ACQ_EVALS
-PNG_BUFFERSIZE = (n_obj_evals/BATCH_SIZE) / 8
+PNG_BUFFERSIZE = n_obj_evals/BATCH_SIZE
 
 PNG_BUFFERSIZE = int(PNG_BUFFERSIZE)
 print("PNG_BUFFERSIZE: ", PNG_BUFFERSIZE)
@@ -156,7 +156,7 @@ def anytime_archive_visualizer(self, archive, vmin, vmax, obj_flag=False, acq_fl
             subprocess.run(f"rm -rf obj acq new", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
             # then combine all 3 videos horizontally, first obj_*.mp4 then acq_*.mp4 then new_*.mp4
-            subprocess.run(f"ffmpeg -i obj_{initial_seed}_{domain}_{iteration}_heatmap.mp4 -i acq_{initial_seed}_{domain}_{iteration}_heatmap.mp4 -i new_{initial_seed}_{domain}_{iteration}_heatmap.mp4 -filter_complex \"[0:v][1:v][2:v]hstack=inputs=3[v]\" -map \"[v]\" {domain}_{initial_seed}_heatmaps.mp4", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(f"ffmpeg -i obj_{initial_seed}_{domain}_{iteration}_heatmap.mp4 -i acq_{initial_seed}_{domain}_{iteration}_heatmap.mp4 -i new_{initial_seed}_{domain}_{iteration}_heatmap.mp4 -filter_complex \"[0:v][1:v][2:v]hstack=inputs=3[v]\" -map \"[v]\" {domain}_{initial_seed}_heatmaps.mp4", input=b'y\n', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
             # remove all 3 subdirectories, then move back to sail rootfolder
             subprocess.run(f"rm -rf obj acq new", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

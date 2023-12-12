@@ -198,14 +198,19 @@ def mes_sobol_cellgrids(self):
     return bhv_cellbounds, bhv_cellgrids, mes_cellgrid
 
 
-def optimize_mes(self, init_flag=False):
+def optimize_mes(self, init_flag=False, map_flag=False):
 
     np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 
     gp_model = self.gp_model
     n_bins = np.prod(self.acq_archive.dims)
     n_samples = n_bins // 2 if self.acq_archive.stats.num_elites > n_bins // 2 else self.acq_archive.stats.num_elites
-    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True).sample(n=n_samples, random_state=self.current_seed, replace=False)
+    if init_flag or not map_flag:
+        acq_elite_df = self.acq_archive.as_pandas(include_solutions=True).sample(n=n_samples, random_state=self.current_seed, replace=False)
+    if map_flag:
+        # allows to optimize worst 10% of acquisition values
+        n_acq_elites = self.acq_archive.stats.num_elites
+        acq_elite_df = self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=True).head(n=int(n_acq_elites*0.1))
     sum_perc_improvement = 0
 
     if init_flag:
