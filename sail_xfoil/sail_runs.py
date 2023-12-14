@@ -115,7 +115,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
     if not pred_loop:
         initialize_archive(self)
 
-    CURIOSITY = 5 # For Hybrid Approach: 'CURIOSITY//BATCH_SIZE' new bin elites are to be sampled
+    CURIOSITY = 7 # For Hybrid Approach: 'CURIOSITY//BATCH_SIZE' new bin elites are to be sampled
 
     anytime_metric_kwargs = initialize_anytime_metrics(self=self, acq_flag=acq_loop, pred_flag=pred_loop)
 
