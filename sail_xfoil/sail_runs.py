@@ -122,6 +122,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
     total_eval_budget = anytime_metric_kwargs['total_eval_budget']
     current_eval_budget = anytime_metric_kwargs['current_eval_budget']
     consumed_obj_evals = anytime_metric_kwargs['consumed_obj_evals']
+    iteration = anytime_metric_kwargs['iteration']
 
     if acq_loop:
         i_obj_evals = BATCH_SIZE
@@ -137,7 +138,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
             if consumed_obj_evals >= total_eval_budget//6:
                 CURIOSITY = 7
 
-        if (self.obj_current_iteration % 10) == 0:
+        if (iteration % 10) == 0 and iteration != 0:
             if self.acq_mes_flag and self.obj_current_iteration != 30:
                 print(self.acq_archive.as_pandas().sort_values(by='index').objective_batch())
                 print("Mean Acq Objective: ", self.acq_archive.as_pandas().objective_batch().mean())
@@ -237,10 +238,10 @@ def prepare_sample_elites(self: SailRun, new_elite_archive: GridArchive, old_eli
 
     # Map Acquisition Elites to Objective Archive Indices (may differ if resolution of acquisition archive differs)
     new_elite_df = new_elite_archive.as_pandas(include_solutions=True)
-    new_elite_indices = self.obj_archive.index_of(new_elite_df.measures_batch())
 
-    # remove all solutions from new_elite_df, that already exist in old_elite_df
-    new_elite_df = new_elite_df[~np.isin(new_elite_df.solution_batch(), old_elite_df.solution_batch()).all(1)]
+    # remove all candidate solutions from new_elite_df, that have already been evaluated
+    new_elite_df = new_elite_df[~np.isin(new_elite_df.solution_batch(), self.sol_array).all(1)]
+    new_elite_indices = self.obj_archive.index_of(new_elite_df.measures_batch())
 
     # Index refers to the bin, that the elite belongs to
     # Therefore the index can be used to seperate improved elites from new bin elites

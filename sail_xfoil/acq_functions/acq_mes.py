@@ -40,8 +40,8 @@ def acq_mes(self, genomes):
     # mutate each genome 800 times using gaussian noise scaled to cell_solutionbounds
     genomes = np.repeat(genomes, 800, axis=0).reshape(len(genomes), 800, SOL_DIMENSION)   
     for i in range(len(genomes)):
-        scaled_noise = rng.normal(scale=np.abs(0.05 *(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), size=(800, SOL_DIMENSION))
-        genomes[i] = np.clip(genomes[i] + scaled_noise, np.array(SOL_VALUE_RANGE)[:,0], np.array(SOL_VALUE_RANGE)[:,1])
+        scaled_noise = rng.normal(scale=np.abs(0.25 *(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), size=(800, SOL_DIMENSION))
+        genomes[i] = np.clip(genomes[i] + scaled_noise, cell_solutionbounds[i,:,0], cell_solutionbounds[i,:,1])
 
     genomes_tensor = tensor(genomes, dtype=float64)          # Shape: 8 x BATCH_SIZE x SOL_DIMENSION
     transformed_genomes = genomes_tensor.unsqueeze(1)        # Shape: 1 x BATCH_SIZE x 1 x SOL_DIMENSION
@@ -65,6 +65,9 @@ def acq_mes(self, genomes):
     # Store MES Elites in SailRunner class to use them inside the MAP-Loop
     self.mes_elites = acq_solution_tensor.detach().numpy()
     mes_ndarray = acq_entropy_tensor.detach().numpy()
+
+    del cell_indices, cellbounds, solutionbounds, cell_solutionbounds, genomes, scaled_noise, genomes_tensor, transformed_genomes, acq_solution_tensor, acq_entropy_tensor, cellgrid, MES, acq_entropy, elite_index, rng
+    gc.collect()
 
     return np.hstack(mes_ndarray)
 

@@ -106,7 +106,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
             progress.update(1)
             valid_indices = np.empty(0, dtype=int)
 
-            sigma_emitter = SIGMA_EMITTER + 0.25*(remaining_evals/n_evals)
+            sigma_emitter = SIGMA_EMITTER + 0.1*(remaining_evals/n_evals)
             emitter = update_emitter(self, target_archive=target_archive, sigma_emitter=sigma_emitter)
             scheduler = _Scheduler(target_archive, emitter)
 
@@ -130,20 +130,16 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
 
             if mes_flag and acq_flag:
 
-                if remaining_evals % (n_evals//2) == 0 and remaining_evals != 0:
-                    continue
+                if remaining_evals % (n_evals//8) == 0 and remaining_evals != 0:
                     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
-                    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
-
-                    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True).sort_values(by=['objective'], ascending=False)
-                    acq_elite_df = acq_elite_df.head(int(acq_elite_df.shape[0]*0.5))
-                    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
+                    valid_indices, surface_batch = generate_parsec_coordinates(acq_elite_df.solution_batch(), io_flag=False)
+                    acq_elite_df = acq_elite_df.iloc[valid_indices]
+                    target_archive.add(solution_batch=acq_elite_df.solution_batch(), objective_batch=acq_elite_df.objective_batch(), measures_batch=acq_elite_df.measures_batch())
 
                 if remaining_evals % (n_evals//4) == 0 and remaining_evals != 0:
                     self.visualize_archive(archive=self.acq_archive, map_flag=True)
                     acquisition_sum = np.sum(self.acq_archive.as_pandas().objective_batch())
                     print(f"Acquisition Value Sum: {acquisition_sum}")
-
 
             remaining_evals -= BATCH_SIZE
 

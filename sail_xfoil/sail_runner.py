@@ -19,6 +19,7 @@ OBJ_DIMENSION = config.OBJ_DIMENSION
 BHV_DIMENSION = config.BHV_DIMENSION
 BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
+MUTANT_CELLRANGE = config.MUTANT_CELLRANGE
 INIT_N_ACQ_EVALS = config.INIT_N_ACQ_EVALS
 OBJ_MIN_THRESHHOLD = config.OBJ_MIN_THRESHHOLD
 OBJ_BHV_NUMBER_BINS = config.OBJ_BHV_NUMBER_BINS
@@ -349,11 +350,11 @@ def store_final_data(self: SailRun):
 
     max_acq_threshhold = 5.0 if self.acq_ucb_flag else 0.25
     
-    min_obj_threshhold = MIN_THRESHHOLD
-    min_pred_threshhold = MIN_THRESHHOLD
+    min_obj_threshhold = OBJ_MIN_THRESHHOLD
+    min_pred_threshhold = OBJ_MIN_THRESHHOLD
 
     if self.acq_function == acq_ucb:
-        min_acq_threshhold = MIN_ACQ_UCB_THRESHHOLD
+        min_acq_threshhold = ACQ_UCB_MIN_THRESHHOLD
     if self.acq_function == acq_mes:
         min_acq_threshhold = 0
 
@@ -496,14 +497,14 @@ def mes_sobol_cellgrids(self):
     Returns:
 
         bhv_cellbounds : 625 bins x 2  dimensions x 2 boundaries
-        bhv_cellgrids  : 625 bins x 6000 samples x 2 dimensions
-        mes_cellgrid   :   1      x 6000 samples x 11 dimensions
+        bhv_cellgrids  : 625 bins x 9000 samples x 2 dimensions
+        mes_cellgrid   :   1      x 9000 samples x 11 dimensions
 
     # how does the naive approach work? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.pdf
     # why would this approach be naive? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.mp4
 
     """
-    sobol_cellgrid = create_sobol_samples(order=6000, dim=SOL_DIMENSION, seed=self.current_seed).T
+    sobol_cellgrid = create_sobol_samples(order=9000, dim=SOL_DIMENSION, seed=self.current_seed).T
 
     archive = self.acq_archive
     n_cells = np.prod(archive.dims)
@@ -520,16 +521,27 @@ def mes_sobol_cellgrids(self):
     boundaries_0 = archive.boundaries[0]
     boundaries_1 = archive.boundaries[1]
 
-    # 625 bins, 6000 samples, 2 dimensions
-    bhv_cellgrids = np.empty((n_cells, 6000, BHV_DIMENSION))
+    cell_range_0 = np.diff(boundaries_0)[0]
+    cell_range_1 = np.diff(boundaries_1)[0]
+
+    # 625 bins, 9000 samples, 2 dimensions
+    bhv_cellgrids = np.empty((n_cells, 9000, BHV_DIMENSION))
     bhv_cellbounds = np.empty((n_cells, BHV_DIMENSION, 2))
 
     for i in range(n_cells):
 
         measure_0_idx, measure_1_idx = idx[i]
 
-        cell_bounds_0 = (boundaries_0[measure_0_idx], boundaries_0[measure_0_idx+1])
-        cell_bounds_1 = (boundaries_1[measure_1_idx], boundaries_1[measure_1_idx+1])
+        # Allow mutants by scaling cellbounds
+        cell_bounds_0 = (boundaries_0[measure_0_idx] - cell_range_0*MUTANT_CELLRANGE,
+                         boundaries_0[measure_0_idx+1] + cell_range_0*MUTANT_CELLRANGE)
+
+        cell_bounds_1 = (boundaries_1[measure_1_idx] - cell_range_1*MUTANT_CELLRANGE,
+                         boundaries_1[measure_1_idx+1] + cell_range_1*MUTANT_CELLRANGE)
+
+        # Restrict cellbounds to solution space boundaries
+        cell_bounds_0 = np.clip(cell_bounds_0, boundaries_0[0], boundaries_0[-1])
+        cell_bounds_1 = np.clip(cell_bounds_1, boundaries_1[0], boundaries_1[-1])
 
         cell_bounds_i = np.array([cell_bounds_0, cell_bounds_1])
         bhv_cellbounds[i] = cell_bounds_i
@@ -542,16 +554,9 @@ def mes_sobol_cellgrids(self):
         bhv_cellgrid_i = bhv_cellgrid_i * cell_bound_ranges.T + lower_bounds   # scale sobol cellgrid to cellbounds
         bhv_cellgrids[i] = bhv_cellgrid_i                                      # insert bhv cellgrid into mes cellgrid
 
-        verification = self.acq_archive.index_of(bhv_cellgrid_i)
-
-        # verify if all samples are in the same cell
-        if np.unique(verification).shape[0] != 1:
-            print("\n\n")
-            # write to logfile
-            with open("sobolCellgridError", "a") as file:
-                file.write(f"Bin: {i}")
-                file.write(f"Unique Indices: {np.unique(verification)}")
-                file.write("\n\n")
+    # Explicitly delete variables to free up memory
+    del sobol_cellgrid, idx, lower_bounds, upper_bounds, bhv_cellgrid, boundaries_0, boundaries_1, cell_range_0, cell_range_1, cell_bounds_0, cell_bounds_1, cell_bounds_i, cell_bound_ranges, bhv_cellgrid_i
+    gc.collect()
 
     return bhv_cellbounds, bhv_cellgrids, mes_cellgrid
 
