@@ -138,16 +138,6 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
             if consumed_obj_evals >= total_eval_budget//6:
                 CURIOSITY = 7
 
-        if (iteration % 10) == 0 and iteration != 0:
-            if self.acq_mes_flag and self.obj_current_iteration != 30:
-                print(self.acq_archive.as_pandas().sort_values(by='index').objective_batch())
-                print("Mean Acq Objective: ", self.acq_archive.as_pandas().objective_batch().mean())
-                optimize_mes(self)
-                print("Mean Acq Objective: ", self.acq_archive.as_pandas().objective_batch().mean())
-                print(self.acq_archive.as_pandas().sort_values(by='index').objective_batch())
-                acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
-                self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
-
         # Produce new acquisition elites
         target_t0 = target_archive.stats.num_elites
         new_target_elites, _, _ = map_elites(self, acq_flag=acq_loop, pred_flag=pred_loop)
@@ -297,10 +287,6 @@ def select_samples(self: SailRun, improved_elites, new_bin_elites, acq_flag=Fals
         new_bin_elites = new_bin_elites.sample(frac=1, random_state=self.initial_seed)
 
     if self.acq_mes_flag:
-
-        # Select best 70% of MES elites
-        improved_elites = improved_elites.head(int(improved_elites.shape[0]*0.9))
-        new_bin_elites = new_bin_elites.head(int(new_bin_elites.shape[0]*0.9))
 
         # shuffle elites
         improved_elites = improved_elites.sample(frac=1, random_state=self.initial_seed)

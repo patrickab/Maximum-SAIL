@@ -207,17 +207,14 @@ def optimize_mes(self, init_flag=False, map_flag=False):
 
     gp_model = self.gp_model
     n_bins = np.prod(self.acq_archive.dims)
-    n_samples = n_bins // 2 if self.acq_archive.stats.num_elites > n_bins // 2 else self.acq_archive.stats.num_elites
-    if init_flag or not map_flag:
-        acq_elite_df = self.acq_archive.as_pandas(include_solutions=True).sample(n=n_samples, random_state=self.current_seed, replace=False)
-    if map_flag:
-        # allows to optimize worst 10% of acquisition values
-        n_acq_elites = self.acq_archive.stats.num_elites
-        acq_elite_df = self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=True).head(n=int(n_acq_elites*0.1))
-    sum_perc_improvement = 0
+    n_samples = n_bins // 10
 
-    if init_flag:
-        self.acq_archive.clear()
+    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=True)
+    acq_elite_df = acq_elite_df.sample(frac=1, random_state=self.current_seed)
+    acq_elite_df = acq_elite_df.head(n=n_samples)
+    self.acq_archive.clear()
+
+    sum_perc_improvement = 0
 
     genomes = acq_elite_df.solution_batch()
     objectives = acq_elite_df.objective_batch()
@@ -251,6 +248,7 @@ def optimize_mes(self, init_flag=False, map_flag=False):
             q=1,
             num_restarts=10,
             raw_samples=1024,
+            #batch_initial_conditions=genomes_tensor[i].unsqueeze(0) 
         )
 
         new_genome = new_genome.detach().numpy()
