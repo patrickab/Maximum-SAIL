@@ -212,7 +212,9 @@ def optimize_mes(self, init_flag=False, map_flag=False):
     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=True)
     acq_elite_df = acq_elite_df.sample(frac=1, random_state=self.current_seed)
     acq_elite_df = acq_elite_df.head(n=n_samples)
-    self.acq_archive.clear()
+
+    if init_flag:
+        self.acq_archive.clear()
 
     sum_perc_improvement = 0
 
