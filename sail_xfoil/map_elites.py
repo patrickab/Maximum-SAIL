@@ -106,7 +106,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
             progress.update(1)
             valid_indices = np.empty(0, dtype=int)
 
-            sigma_emitter = SIGMA_EMITTER + 0.15*(remaining_evals/n_evals)
+            sigma_emitter = SIGMA_EMITTER + 0.25*(remaining_evals/n_evals)
             emitter = update_emitter(self, target_archive=target_archive, sigma_emitter=sigma_emitter)
             scheduler = _Scheduler(target_archive, emitter)
 
@@ -131,11 +131,12 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
             if mes_flag and acq_flag:
 
                 if remaining_evals % (n_evals//2) == 0 and remaining_evals != 0:
+                    continue
                     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
                     self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
 
                     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True).sort_values(by=['objective'], ascending=False)
-                    acq_elite_df = acq_elite_df.head(int(BATCH_SIZE*0.5))
+                    acq_elite_df = acq_elite_df.head(int(acq_elite_df.shape[0]*0.5))
                     self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
 
                 if remaining_evals % (n_evals//4) == 0 and remaining_evals != 0:
