@@ -36,11 +36,9 @@ from ribs.schedulers import Scheduler
 from ribs.archives import GridArchive
 from ribs.emitters import GaussianEmitter
 from ribs.emitters._emitter_base import EmitterBase
-from chaospy import create_sobol_samples
+from acq_functions.acq_mes import optimize_mes
 from tqdm import tqdm
-import subprocess
 import numpy as np
-import pandas as pd
 
 ##### Import custom scripts #####
 from xfoil.generate_airfoils import generate_parsec_coordinates
@@ -85,6 +83,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
         target_archive = self.acq_archive
         if self.acq_mes_flag: # allows to reduce number of acquisition evaluations for MES
             self.update_cellgrids()
+            optimize_mes(self, map_flag=True)
             n_evals = ACQ_N_MAP_EVALS//2
         else:
             n_evals = ACQ_N_MAP_EVALS
