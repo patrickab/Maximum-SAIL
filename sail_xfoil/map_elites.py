@@ -140,7 +140,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
                     target_archive.clear()
                     target_archive.add(solution_batch=acq_elite_df.solution_batch(), objective_batch=acq_elite_df.objective_batch(), measures_batch=acq_elite_df.measures_batch())
 
-                if remaining_evals % (n_evals//4) == 0 and remaining_evals != 0:
+                if remaining_evals % (n_evals//4) == 0:
                     if remaining_evals % (n_evals//2) == 0:
 
                         acquisition_sum = np.sum(self.acq_archive.as_pandas().objective_batch())
@@ -148,6 +148,8 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
 
                         acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
                         target_archive.clear()
+
+                        self.update_cellgrids(mutant_cellrange=-0.01)
                         self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
                         target_archive = self.acq_archive
 
