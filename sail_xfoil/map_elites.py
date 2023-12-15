@@ -84,7 +84,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
         if self.acq_mes_flag: # allows to reduce number of acquisition evaluations for MES
             self.update_cellgrids()
             optimize_mes(self, map_flag=True)
-            n_evals = ACQ_N_MAP_EVALS//2
+            n_evals = ACQ_N_MAP_EVALS//32
         else:
             n_evals = ACQ_N_MAP_EVALS
 
@@ -152,6 +152,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
                         self.update_cellgrids(mutant_cellrange=-0.01)
                         self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
                         target_archive = self.acq_archive
+                        self.update_cellgrids()
 
                     self.visualize_archive(archive=self.acq_archive, map_flag=True)
                     acquisition_sum = np.sum(self.acq_archive.as_pandas().objective_batch())

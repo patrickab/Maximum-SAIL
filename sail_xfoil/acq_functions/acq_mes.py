@@ -37,10 +37,10 @@ def acq_mes(self, genomes):
     cell_solutionbounds = np.repeat(solutionbounds[np.newaxis,:,:], len(genomes), axis=0)    # create copies of solutionbounds
     cell_solutionbounds[:, 1:3] = cellbounds                                                 # insert niche-specific cellbounds
 
-    # mutate each genome 800 times using gaussian noise scaled to cell_solutionbounds
-    genomes = np.repeat(genomes, 800, axis=0).reshape(len(genomes), 800, SOL_DIMENSION)   
+    # mutate each genome 300 times using gaussian noise scaled to cell_solutionbounds
+    genomes = np.repeat(genomes, 300, axis=0).reshape(len(genomes), 300, SOL_DIMENSION)   
     for i in range(len(genomes)):
-        scaled_noise = rng.normal(scale=np.abs(0.25 *(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), size=(800, SOL_DIMENSION))
+        scaled_noise = rng.normal(scale=np.abs(0.25 *(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), size=(300, SOL_DIMENSION))
         genomes[i] = np.clip(genomes[i] + scaled_noise, cell_solutionbounds[i,:,0], cell_solutionbounds[i,:,1])
 
     genomes_tensor = tensor(genomes, dtype=float64)          # Shape: 8 x BATCH_SIZE x SOL_DIMENSION
@@ -207,7 +207,7 @@ def optimize_mes(self, init_flag=False, map_flag=False):
 
     gp_model = self.gp_model
     n_bins = np.prod(self.acq_archive.dims)
-    n_samples = n_bins // 10
+    n_samples = n_bins // 20
 
     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=True)
     acq_elite_df = acq_elite_df.sample(frac=1, random_state=self.current_seed)
@@ -242,7 +242,7 @@ def optimize_mes(self, init_flag=False, map_flag=False):
 
         cellgrid = assamble_cellgrid(self, genomes_tensor[i])
         cellgrid = tensor(cellgrid, dtype=float64)      # Shape: 4000 x SOL_DIMENSION
-        MES = qLowerBoundMaxValueEntropy(model=gp_model, candidate_set=cellgrid, num_mv_samples=100)
+        MES = qLowerBoundMaxValueEntropy(model=gp_model, candidate_set=cellgrid, num_mv_samples=50)
 
         new_genome, new_acquisition = optimize_acqf(
             acq_function=MES,

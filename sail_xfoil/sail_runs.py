@@ -247,7 +247,7 @@ def prepare_sample_elites(self: SailRun, new_elite_archive: GridArchive, old_eli
 
     new_elite_df = new_elite_archive.as_pandas(include_solutions=True)
     if self.acq_mes_flag:
-        new_elite_df = new_elite_df.sort_values(by=['objective'], ascending=False).head(new_elite_df.shape[0]*0.9)
+        new_elite_df = new_elite_df.sort_values(by=['objective'], ascending=False).head(int(new_elite_df.shape[0]*0.9))
 
     # Remove all candidate solutions from new_elite_df, that have already been evaluated
     new_elite_df = new_elite_df[~np.isin(new_elite_df.solution_batch(), self.sol_array).all(1)]
