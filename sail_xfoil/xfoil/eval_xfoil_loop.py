@@ -48,7 +48,7 @@ OBJ_DIMENSION = config.OBJ_DIMENSION
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 ACQ_MES_MIN_THRESHHOLD = config.ACQ_MES_MIN_THRESHHOLD
 
-def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_prediction_archive=False, acq_flag=False, pred_flag=False, candidate_targetvalues=None):
+def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_prediction_archive=False, acq_flag=False, pred_flag=False, visualize_flag=True, candidate_targetvalues=None):
 
     n_errors = 0
     iteration = 0
@@ -101,8 +101,9 @@ def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_pred
             self.update_gp_data(new_solutions=converged_sol, new_objectives=converged_obj)
             self.update_archive(candidate_sol=converged_sol, candidate_obj=converged_obj, candidate_bhv=converged_bhv, obj_flag=True)
 
-            self.visualize_archive(self.new_archive, new_flag=True)
-            self.visualize_archive(self.obj_archive, obj_flag=True)
+            if visualize_flag:
+                self.visualize_archive(self.new_archive, new_flag=True)
+                self.visualize_archive(self.obj_archive, obj_flag=True)
 
             n_new_obj_elites += self.n_new_obj_elites
 

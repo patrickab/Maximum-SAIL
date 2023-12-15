@@ -61,7 +61,7 @@ PRED_N_MAP_EVALS = config.PRED_N_MAP_EVALS
 PREDICTION_VERIFICATIONS = config.PREDICTION_VERIFICATIONS
 ACQ_MES_MIN_THRESHHOLD = config.ACQ_MES_MIN_THRESHHOLD
 
-def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_elite_archive=None, new_elite_threshold=0):
+def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None, new_elite_threshold=0):
 
     print("\n\nInitialize Map-Elites [...]")
 
@@ -82,9 +82,8 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
         target_function = self.acq_function
         target_archive = self.acq_archive
         if self.acq_mes_flag: # allows to reduce number of acquisition evaluations for MES
-            self.update_cellgrids()
             optimize_mes(self, map_flag=True)
-            n_evals = ACQ_N_MAP_EVALS//32
+            n_evals = ACQ_N_MAP_EVALS//8
         else:
             n_evals = ACQ_N_MAP_EVALS
 
@@ -149,10 +148,8 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
                         acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
                         target_archive.clear()
 
-                        self.update_cellgrids(mutant_cellrange=-0.01)
-                        self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
+                        self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True, niche_restricted_update = True)
                         target_archive = self.acq_archive
-                        self.update_cellgrids()
 
                     self.visualize_archive(archive=self.acq_archive, map_flag=True)
                     acquisition_sum = np.sum(self.acq_archive.as_pandas().objective_batch())
