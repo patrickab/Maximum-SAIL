@@ -131,9 +131,13 @@ def map_elites(self, acq_flag=False, pred_flag=False, re_enter_flag=False, new_e
             if mes_flag and acq_flag:
 
                 if remaining_evals % (n_evals//8) == 0 and remaining_evals != 0:
+                # Delete all acquisition elites with invalid indices
+
                     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
                     valid_indices, surface_batch = generate_parsec_coordinates(acq_elite_df.solution_batch(), io_flag=False)
                     acq_elite_df = acq_elite_df.iloc[valid_indices]
+
+                    target_archive.clear()
                     target_archive.add(solution_batch=acq_elite_df.solution_batch(), objective_batch=acq_elite_df.objective_batch(), measures_batch=acq_elite_df.measures_batch())
 
                 if remaining_evals % (n_evals//4) == 0 and remaining_evals != 0:

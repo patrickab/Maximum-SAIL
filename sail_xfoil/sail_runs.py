@@ -138,6 +138,25 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
             if consumed_obj_evals >= total_eval_budget//6:
                 CURIOSITY = 7
 
+        if consumed_obj_evals % 100 == 0:
+
+            obj_elite_df = self.obj_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False)
+            acq_elite_df = self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False)
+
+            mean_objective = np.mean(obj_elite_df.objective_batch())                            # calculate mean objective of obj_archive
+            obj_elite_df = obj_elite_df[obj_elite_df.objective_batch() < mean_objective]        # select all elites with objective < mean_objective
+            obj_elite_indices = self.obj_archive.index_of(obj_elite_df.measures_batch())        # determine indeces of obj_elite_df in obj_archive
+
+
+            acq_elite_df = acq_elite_df.assign(index = self.obj_archive.index_of(acq_elite_df.measures_batch()))        # map acq_elites to obj_archive indices
+            acq_elite_df = acq_elite_df.sort_values(by=['index', 'objective'], ascending=False)                         # for duplicate indices index
+            acq_elite_df = acq_elite_df.drop_duplicates(subset=['index'], keep='first')                                 # delete the one with the lower objective
+
+            acq_elite_df = acq_elite_df[acq_elite_df.index.isin(obj_elite_indices)]                                                                 # for all obj_elites with objective < mean_objective
+            eval_xfoil_loop(self, solution_batch=acq_elite_df.solution_batch(), measures_batch=acq_elite_df.measures_batch(), acq_flag=True)        # evaluate acq_elites
+
+
+
         # Produce new acquisition elites
         target_t0 = target_archive.stats.num_elites
         new_target_elites, _, _ = map_elites(self, acq_flag=acq_loop, pred_flag=pred_loop)
