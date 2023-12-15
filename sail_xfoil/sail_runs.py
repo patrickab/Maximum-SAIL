@@ -133,8 +133,8 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
 
     while(current_eval_budget >= i_obj_evals):
 
-        if consumed_obj_evals >= total_eval_budget//3:
-            CURIOSITY = 6
+        if consumed_obj_evals >= total_eval_budget//2:
+            CURIOSITY = 5
             if consumed_obj_evals >= total_eval_budget//6:
                 CURIOSITY = 7
 
