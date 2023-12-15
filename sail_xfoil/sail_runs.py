@@ -245,11 +245,15 @@ def prepare_sample_elites(self: SailRun, new_elite_archive: GridArchive, old_eli
 
     old_elite_df = old_elite_archive.as_pandas(include_solutions=True).sort_values(by=['index'])
 
-    # Map Acquisition Elites to Objective Archive Indices (may differ if resolution of acquisition archive differs)
     new_elite_df = new_elite_archive.as_pandas(include_solutions=True)
+    if self.acq_mes_flag:
+        new_elite_df = new_elite_df.sort_values(by=['objective'], ascending=False).head(new_elite_df.shape[0]*0.9)
 
-    # remove all candidate solutions from new_elite_df, that have already been evaluated
+    # Remove all candidate solutions from new_elite_df, that have already been evaluated
     new_elite_df = new_elite_df[~np.isin(new_elite_df.solution_batch(), self.sol_array).all(1)]
+
+    # Map Acquisition Elites to Objective Archive Indices 
+    # (allows different archive resolutions for acq and obj archive)
     new_elite_indices = self.obj_archive.index_of(new_elite_df.measures_batch())
 
     # Index refers to the bin, that the elite belongs to
@@ -303,13 +307,10 @@ def select_samples(self: SailRun, improved_elites, new_bin_elites, acq_flag=Fals
         n_samples = PRED_N_OBJ_EVALS//PREDICTION_VERIFICATIONS
 
     if self.acq_ucb_flag:
-        new_bin_elites = new_bin_elites.sample(frac=1, random_state=self.initial_seed)
-
-    if self.acq_mes_flag:
-
         # shuffle elites
-        improved_elites = improved_elites.sample(frac=1, random_state=self.initial_seed)
         new_bin_elites = new_bin_elites.sample(frac=1, random_state=self.initial_seed)
+        if self.acq_mes_flag:
+            improved_elites = improved_elites.sample(frac=1, random_state=self.initial_seed)
 
     if self.greedy_flag: # Evaluate only maximum improvement, regardeless of new/old bin
         candidate_elite_df = pandas.concat([new_bin_elites, improved_elites]).sort_values(by=['objective_improvement'], ascending=False).head(n_samples)
