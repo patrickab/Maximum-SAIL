@@ -20,7 +20,7 @@ SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 ACQ_MES_MIN_THRESHHOLD = config.ACQ_MES_MIN_THRESHHOLD
 
 
-def acq_mes(self, genomes):
+def acq_mes(self, genomes, niche_restricted_update=False):
 
     # if genomes is empty, return empty array
     if len(genomes) == 0:
@@ -30,17 +30,22 @@ def acq_mes(self, genomes):
     rng = np.random.default_rng(self.current_seed)
     cell_indices = self.acq_archive.index_of(genomes[:,1:3])
 
-    cellbounds = self.bhv_cellbounds[cell_indices]
+    if niche_restricted_update:
+        cellbounds = self.bhv_cellbounds[cell_indices]
+    else:
+        cellbounds = self.bhv_cellbounds_mutants[cell_indices]
+
+
     cellbounds[:,:1,0] = cellbounds[:,:1,0]
     cellbounds[:,:1,1] = cellbounds[:,:1,1]
     solutionbounds = np.array(SOL_VALUE_RANGE)
     cell_solutionbounds = np.repeat(solutionbounds[np.newaxis,:,:], len(genomes), axis=0)    # create copies of solutionbounds
     cell_solutionbounds[:, 1:3] = cellbounds                                                 # insert niche-specific cellbounds
 
-    # mutate each genome 300 times using gaussian noise scaled to cell_solutionbounds
-    genomes = np.repeat(genomes, 300, axis=0).reshape(len(genomes), 300, SOL_DIMENSION)   
+    # mutate each genome 1200 times using gaussian noise scaled to cell_solutionbounds
+    genomes = np.repeat(genomes, 1200, axis=0).reshape(len(genomes), 1200, SOL_DIMENSION)   
     for i in range(len(genomes)):
-        scaled_noise = rng.normal(scale=np.abs(0.25 *(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), size=(300, SOL_DIMENSION))
+        scaled_noise = rng.normal(scale=np.abs(0.25 *(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), size=(1200, SOL_DIMENSION))
         genomes[i] = np.clip(genomes[i] + scaled_noise, cell_solutionbounds[i,:,0], cell_solutionbounds[i,:,1])
 
     genomes_tensor = tensor(genomes, dtype=float64)          # Shape: 8 x BATCH_SIZE x SOL_DIMENSION

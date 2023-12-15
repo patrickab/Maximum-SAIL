@@ -138,7 +138,11 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
             if consumed_obj_evals >= total_eval_budget//6:
                 CURIOSITY = 7
 
-        if consumed_obj_evals % 100 == 0:
+        if consumed_obj_evals % BATCH_SIZE*4 == 0:
+
+            if self.acq_mes_flag and not pred_loop:
+                self.update_cellgrids()
+                self.update_mutant_cellgrids(-0.005)
 
             obj_elite_df = self.obj_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False)
             acq_elite_df = self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False)
@@ -152,8 +156,8 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
             acq_elite_df = acq_elite_df.sort_values(by=['index', 'objective'], ascending=False)                         # for duplicate indices index
             acq_elite_df = acq_elite_df.drop_duplicates(subset=['index'], keep='first')                                 # delete the one with the lower objective
 
-            acq_elite_df = acq_elite_df[acq_elite_df.index.isin(obj_elite_indices)]                                                                 # for all obj_elites with objective < mean_objective
-            eval_xfoil_loop(self, solution_batch=acq_elite_df.solution_batch(), measures_batch=acq_elite_df.measures_batch(), acq_flag=True)        # evaluate acq_elites
+            acq_elite_df = acq_elite_df[acq_elite_df.index.isin(obj_elite_indices)]                                                                                  # for all obj_elites with objective < mean_objective
+            eval_xfoil_loop(self, solution_batch=acq_elite_df.solution_batch(), measures_batch=acq_elite_df.measures_batch(), acq_flag=True, visualize_flag=False)   # evaluate acq_elites
 
 
 
@@ -350,6 +354,10 @@ def initialize_archive(self):
     mes_flag = self.acq_mes_flag
     ucb_flag = self.acq_ucb_flag
 
+    if self.acq_mes_flag:
+        self.update_cellgrids()
+        self.update_mutant_cellgrids(-0.005)
+
     # for vanilla sail, random sail & random init just draw sobol samples
     if self.vanilla_flag or self.random_flag or self.random_init:
 
@@ -381,7 +389,6 @@ def initialize_archive(self):
         for i in range(0, INIT_N_EVALS, BATCH_SIZE):
             self.visualize_archive(self.acq_archive, acq_flag=True)
             
-        self.update_cellgrids()
 
         # initialize obj archive with sobol samples
         solution_batch = create_sobol_samples(order=INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed)

@@ -165,9 +165,14 @@ class SailRun:
         return
     
 
-    def update_cellgrids(self, mutant_cellrange=MUTANT_CELLRANGE):
+    def update_cellgrids(self=MUTANT_CELLRANGE):
 
-        self.bhv_cellbounds, self.bhv_sobol_cellgrids, self.mes_sobol_cellgrid = mes_sobol_cellgrids(self, mutant_cellrange)
+        self.bhv_cellbounds, self.bhv_sobol_cellgrids, self.mes_sobol_cellgrid = mes_sobol_cellgrids(self)
+        return
+    
+    def update_mutant_cellgrids(self, mutant_cellrange):
+
+        self.bhv_cellbounds_mutants, self.bhv_sobol_cellgrids_mutants, self.mes_sobol_cellgrid_mutants = mes_sobol_cellgrids(self, mutant_cellrange=mutant_cellrange)
         return
 
     def update_seed(self):
@@ -199,7 +204,7 @@ class SailRun:
         if map_flag:
             self.map_current_iteration += 1
 
-    def update_archive(self, candidate_sol=None, candidate_obj=None, candidate_bhv=None, obj_flag=False, acq_flag=False, pred_flag=False, evaluate_prediction_archive=False):
+    def update_archive(self, candidate_sol=None, candidate_obj=None, candidate_bhv=None, obj_flag=False, acq_flag=False, pred_flag=False, evaluate_prediction_archive=False, niche_restricted_update=False):
         """"
         Input:
             Option 1: Call with archive & archive flag
@@ -244,6 +249,8 @@ class SailRun:
                 elif self.acq_mes_flag:
                     i_candidate_sol = candidate_sol[i:i+BATCH_SIZE]
                     i_candidate_acq = self.acq_function(self=self, genomes=i_candidate_sol)
+                    if niche_restricted_update:
+                        self.acq_function(self=self, genomes=i_candidate_sol, niche_restricted_update=True)
 
                     if i_candidate_sol.shape[0] != 0:
                         i_candidate_sol = self.mes_elites                 
