@@ -27,7 +27,7 @@ xfoil_path = r"xfoil"
 np.set_printoptions(precision=4, suppress=True, floatmode='fixed', linewidth=120)
 
 
-def xfoil(iterations, surface_batch):
+def xfoil(iterations):
 
     """Executes xfoil with given parameters, implements Thread counting errors on stdout"""
 
@@ -65,7 +65,7 @@ def xfoil(iterations, surface_batch):
             if drag < 0: print("\n")
             success_indices.remove(index)
         else:
-            obj = calculate_obj(drag, lift, surface_batch[index])
+            obj = calculate_obj(drag, lift)
             obj_batch.append(obj)
 
     obj_batch = np.array(obj_batch)
@@ -144,7 +144,7 @@ def calculate_obj_seed(drag, lift, surface_area):
     return obj
 
 
-def calculate_obj(drag, lift, surface):
+def calculate_obj(drag, lift):
 
     # for some reason the authors calculate logarithm of drag
     obj = -np.log(drag/lift)
@@ -168,7 +168,7 @@ def capture_errors(process, queue, i):
 
     while True:
         try:
-            line = queue.get(timeout=1.2)
+            line = queue.get(timeout=2.5)
             #print(line.strip())
 
             if not line: # empty line

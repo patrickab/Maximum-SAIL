@@ -61,7 +61,7 @@ def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_pred
     if self.custom_flag and self.obj_current_iteration % 5 == 0 and not evaluate_prediction_archive:
 
         new_x, max_mean = maximize_mean(self.gp_model)
-        _, success_index, converged_obj = xfoil(iterations=1, surface_batch=new_x)
+        _, success_index, converged_obj = xfoil(iterations=1)
         self.obj_archive.add_single(new_x[0], converged_obj, measures=new_x[0,1:3])
         print(f"Max Mean: {max_mean} - Max Mean Objective: {converged_obj}")
 
@@ -76,8 +76,8 @@ def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_pred
         n_solutions = iter_solutions.shape[0]
 
         # evaluate samples & extract converged solutions
-        _, surface_batch = generate_parsec_coordinates(iter_solutions)
-        _, success_indices, converged_obj = xfoil(iterations=n_solutions, surface_batch=surface_batch)
+        _, _ = generate_parsec_coordinates(iter_solutions)
+        _, success_indices, converged_obj = xfoil(iterations=n_solutions)
         success_indices = success_indices[:n_solutions]
         converged_sol = iter_solutions[success_indices]
         converged_bhv = measures_batch[sample_index:sample_index+BATCH_SIZE][success_indices]
@@ -125,13 +125,6 @@ def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_pred
 
 
     if (not evaluate_prediction_archive) and (not self.random_flag):
-        if solution_batch.shape[0] >= 800:
-            self.obj_archive.as_pandas(include_solutions=True).to_csv(f"sobol_10000.csv")
-            self.sol_array = np.empty((0, SOL_DIMENSION))
-            self.obj_array = np.empty((0, OBJ_DIMENSION))
-            sol = self.obj_archive.as_pandas(include_solutions=True).solution_batch()
-            obj = self.obj_archive.as_pandas(include_solutions=True).objective_batch()
-            self.update_gp_data(new_solutions=sol, new_objectives=obj)
         self.update_gp_model()
 
 
@@ -182,11 +175,6 @@ def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_pred
         # Update prediction elites under new GP
         self.pred_archive.add(obj_elite_df.solution_batch(), obj_elite_df.objective_batch(), obj_elite_df.measures_batch())
         self.update_archive(candidate_sol=pred_elite_df.solution_batch(), candidate_bhv=pred_elite_df.measures_batch(), pred_flag=True)
-
-    # Remove all variables from RAM and Cache, that are not needed anymore 
-    # list all variables in dir() on console
-    del candidate_targetvalues, converged_bhv, converged_obj, converged_sol, i_errors, iteration, n_solutions, remaining_samples, sample_index, success_indices, target, objective_values, new_objectives
-    gc.collect()
 
     obj_t1 = self.obj_archive.stats.num_elites
     self.convergence_errors = n_errors

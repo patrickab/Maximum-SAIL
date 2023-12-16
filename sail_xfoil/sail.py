@@ -117,9 +117,9 @@ if __name__ == "__main__":
         benchmark_domains = []
 
         sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, hybrid_flag=True, acq_mes_flag=True, ucb_init=True)
-        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, hybrid_flag=True, acq_ucb_flag=True, ucb_init=True)
+        #sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, hybrid_flag=True, acq_ucb_flag=True, ucb_init=True)
         #sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, greedy_flag=True, acq_mes_flag=True, ucb_init=True)
-        #sail(initial_seed=i, sail_vanilla_flag=True, acq_ucb_flag=True)
+        sail(initial_seed=i, sail_vanilla_flag=True, acq_ucb_flag=True)
         gc.collect()
 
         img_filenames = [f"imgs/final_heatmaps_{i}_{benchmark_domain}.png" for benchmark_domain in benchmark_domains]
@@ -144,3 +144,7 @@ if __name__ == "__main__":
     exec_end = time.time()
     exec_time = exec_end - exec_start
     print("\nExecution time (minutes): " + str(exec_time/60))
+
+
+# use c profile to check for memory leaks and optimize code update every 60 seconds
+# python -m cProfile -o profile_stats.dat sail.py
