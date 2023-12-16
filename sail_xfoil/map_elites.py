@@ -105,7 +105,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None, ne
             progress.update(1)
             valid_indices = np.empty(0, dtype=int)
 
-            sigma_emitter = SIGMA_EMITTER + 0.1*(remaining_evals/n_evals)
+            sigma_emitter = SIGMA_EMITTER + 0.25*(remaining_evals/n_evals)
             emitter = update_emitter(self, target_archive=target_archive, sigma_emitter=sigma_emitter)
             scheduler = _Scheduler(target_archive, emitter)
 

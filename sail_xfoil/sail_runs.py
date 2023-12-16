@@ -60,7 +60,7 @@ def run_random_sail(self: SailRun):
 
     for i in range(n_obj_evals//BATCH_SIZE):
         self.visualize_archive(self.acq_archive, acq_flag=True)
-    
+
     self.update_gp_model()
 
     return
@@ -133,12 +133,12 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
 
     while(current_eval_budget >= i_obj_evals):
 
-        if consumed_obj_evals >= total_eval_budget//2:
+        if consumed_obj_evals == 320:
             CURIOSITY = 5
-            if consumed_obj_evals >= total_eval_budget//6:
-                CURIOSITY = 7
+        if consumed_obj_evals == 480:
+            CURIOSITY = 4
 
-        if consumed_obj_evals % BATCH_SIZE*4 == 0:
+        if consumed_obj_evals % (BATCH_SIZE*4) == 0:
 
             if self.acq_mes_flag and not pred_loop:
                 self.update_cellgrids()
@@ -263,7 +263,7 @@ def prepare_sample_elites(self: SailRun, new_elite_archive: GridArchive, old_eli
     # Index refers to the bin, that the elite belongs to
     # Therefore the index can be used to seperate improved elites from new bin elites
     is_improved_new_elite = np.isin(new_elite_indices, old_elite_df['index'])
-    
+
     improved_elites = new_elite_df[is_improved_new_elite]
     new_bin_elites   = new_elite_df[~is_improved_new_elite]
 
@@ -283,7 +283,7 @@ def prepare_sample_elites(self: SailRun, new_elite_archive: GridArchive, old_eli
     improved_old_elites = improved_old_elites.sort_values(by=['index'])
 
     new_bin_elites = new_bin_elites.assign(objective_improvement = np.array(new_bin_elites['objective'])).sort_values(by=['objective_improvement'], ascending=False)
-    
+
     if self.acq_ucb_flag:
         improved_elites = improved_elites.assign(objective_improvement = np.array(improved_elites['objective'] - np.array(improved_old_elites['objective']))).sort_values(by=['objective_improvement'], ascending=False)
 
@@ -432,7 +432,7 @@ def initialize_archive(self):
             eval_xfoil_loop(self, solution_batch=best_elite_solutions, measures_batch=best_elite_measures, acq_flag=True, candidate_targetvalues=np.vstack(best_elite_objectives))
             print(f"Best Objective: {self.obj_archive.best_elite.objective}")
 
-            remaining_evals -= BATCH_SIZE            
+            remaining_evals -= BATCH_SIZE
 
     # use UCB to fill obj archive
     if self.custom_flag and self.ucb_init:
@@ -491,7 +491,7 @@ def initialize_archive(self):
             print(f"Best Objective: {self.obj_archive.best_elite.objective}")
 
             remaining_evals -= BATCH_SIZE
-        
+
         # reset to original flags
         self.greedy_flag = greedy_flag
         self.hybrid_flag = hybrid_flag

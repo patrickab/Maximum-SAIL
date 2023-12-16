@@ -58,7 +58,7 @@ def acq_mes(self, genomes, niche_restricted_update=False):
 
         cellgrid = assamble_cellgrid(self, genomes_tensor[i,0])
         cellgrid = tensor(cellgrid, dtype=float64)                   # Shape: 4000 x SOL_DIMENSION
-        MES = qLowerBoundMaxValueEntropy(model=gp_model, candidate_set=cellgrid, num_mv_samples=100)
+        MES = qLowerBoundMaxValueEntropy(model=gp_model, candidate_set=cellgrid, num_mv_samples=40)
         acq_entropy = MES(transformed_genomes[i].permute(1, 0, 2))
 
         elite_index = acq_entropy.argmax()
@@ -93,7 +93,7 @@ def simple_mes(self, genomes):
 
         cellgrid = assamble_cellgrid(self, genomes_tensor[i,0])
         cellgrid = tensor(cellgrid, dtype=float64)      # Shape: 4000 x SOL_DIMENSION
-        MES = qLowerBoundMaxValueEntropy(model=self.gp_model, candidate_set=cellgrid, num_y_samples=256)
+        MES = qLowerBoundMaxValueEntropy(model=self.gp_model, candidate_set=cellgrid, num_y_samples=40)
         acq_entropy = MES(transformed_genomes[i].permute(1, 0, 2))
         
         elite_index = acq_entropy.argmax()
@@ -208,15 +208,19 @@ def mes_sobol_cellgrids(self):
 
 def optimize_mes(self, init_flag=False, map_flag=False):
 
-    np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
-
     gp_model = self.gp_model
-    n_bins = np.prod(self.acq_archive.dims)
-    n_samples = n_bins // 20
+    n_samples = 20
 
-    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=True)
+    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
     acq_elite_df = acq_elite_df.sample(frac=1, random_state=self.current_seed)
     acq_elite_df = acq_elite_df.head(n=n_samples)
+
+    print("\nOptimize MES: n_samples", n_samples)
+
+    sum_perc_improvement = 0
+
+    genomes = acq_elite_df.solution_batch()
+    objectives = acq_elite_df.objective_batch()
 
     if init_flag:
         self.acq_archive.clear()
@@ -247,7 +251,7 @@ def optimize_mes(self, init_flag=False, map_flag=False):
 
         cellgrid = assamble_cellgrid(self, genomes_tensor[i])
         cellgrid = tensor(cellgrid, dtype=float64)      # Shape: 4000 x SOL_DIMENSION
-        MES = qLowerBoundMaxValueEntropy(model=gp_model, candidate_set=cellgrid, num_mv_samples=50)
+        MES = qLowerBoundMaxValueEntropy(model=gp_model, candidate_set=cellgrid, num_mv_samples=40)
 
         new_genome, new_acquisition = optimize_acqf(
             acq_function=MES,
@@ -264,6 +268,7 @@ def optimize_mes(self, init_flag=False, map_flag=False):
         perc_improvement = ((new_acquisition)-objectives[i])/objectives[i] * 100
         sum_perc_improvement += perc_improvement
         print("Old Acquisition: ", objectives[i], "  New Acquisition: ", new_acquisition,  "  Improvement (Percent): ", perc_improvement)
+
         self.acq_archive.add_single(new_genome[0], new_acquisition, new_genome[0,1:3]) 
 
     mean_perc_improvement = sum_perc_improvement / n_samples
