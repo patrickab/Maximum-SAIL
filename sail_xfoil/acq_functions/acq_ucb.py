@@ -11,12 +11,12 @@ config = Config('config/config.ini')
 SIGMA_UCB = config.SIGMA_UCB
 
 
-def acq_ucb(self, genomes):
+def acq_ucb(self, genomes, gp_model):
 
     genomes = tensor(genomes, dtype=float64)          # Shape: PARALLEL_BATCH_SIZE x SOL_DIMENSION
     transformed_genomes = genomes.unsqueeze(1)        # Shape: PARALLEL_BATCH_SIZE x 1 x SOL_DIMENSION
 
-    UCB = UpperConfidenceBound(self.gp_model, beta=SIGMA_UCB)
+    UCB = UpperConfidenceBound(gp_model, beta=SIGMA_UCB)
     ucb_tensor = UCB(transformed_genomes)
     ucb_ndarray = ucb_tensor.detach().numpy()
 

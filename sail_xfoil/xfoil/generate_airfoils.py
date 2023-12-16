@@ -13,69 +13,6 @@ BATCH_SIZE = config.BATCH_SIZE
 N_XY_COORDINATES = int(config.N_XY_COORDINATES)
 
 
-def export_parsec_coordinates(upper_xy, lower_xy, io_flag):
-    """
-    Writes PARSEC-encoded coordinates in 'airfoil_{i}.dat'
-
-    input:      upper & lower coordinates
-    output:     .dat file containing coordinates
-    """
-
-    valid_indices = []
-
-    for index in range(upper_xy.shape[0]):
-        if os.path.exists("airfoil_{index}.dat"):
-            os.remove("airfoil_{index}.dat")
-
-        if os.path.exists("airfoil_{index}.log"):
-            os.remove("airfoil_{index}.log")
-
-    all_samples_invalid = True
-    surface_batch = np.empty(0)
-    for index in range(upper_xy.shape[0]):
-
-        upper_y = upper_xy[index,:,1]
-        lower_y = lower_xy[index,:,1]
-        delta_y = upper_y - lower_y
-
-        dy = np.diff(upper_y)
-        sign_changes = np.where(np.diff(np.sign(dy)))[0]
-        num_optima = len(sign_changes)
-        is_rollercoaster_airfoil = True if num_optima > 1 else False
-        is_itersecting_airfoil = True if np.any(delta_y < 0) else False
-        is_negative_upper_y = True if np.any(upper_y < 0) else False
-
-        is_invalid_airfoil = False # Disable constraints for now
-        # is_invalid_airfoil = True if is_rollercoaster_airfoil or is_itersecting_airfoil or is_negative_upper_y else False
-
-        if not is_invalid_airfoil:
-
-            all_samples_invalid = False
-
-            valid_indices.append(index)
-            stacked_xy = np.vstack((upper_xy[index], lower_xy[index][::-1]))
-            np.savetxt(f'airfoil_{index}.dat', stacked_xy, fmt='%f', delimiter=' ', newline='\n', header=f'airfoil_{index}', comments='') if io_flag else None
-
-            # Calculate the surface area using the trapezoidal rule in a vectorized manner
-            dx = 1/N_XY_COORDINATES
-            y_avg = (np.abs(stacked_xy[1:,1]) + np.abs(stacked_xy[:-1,1])) / 2.0
-            surface = np.sum(dx * y_avg)
-            surface_batch = np.append(surface_batch, surface)
-
-        else:
-            surface_batch = np.append(surface_batch, -1337)
-            if io_flag:
-                with open(f'airfoil_{index}.dat', 'w') as f:
-                    f.write(f'airfoil_{index}\n\n')
-                    f.write("Invalid Airfoil\n")
-
-    if all_samples_invalid:
-        print("All samples invalid")
-        return np.array([], dtype=int), np.array([], dtype=int)
-    
-    return np.array(valid_indices), surface_batch
-
-
 def generate_parsec_coordinates(samples, xte=1.0, io_flag=True): # 'x trailing edge'
     """
     Generates Polynomial (x,y) coordinates for sample genomes
@@ -109,6 +46,69 @@ def generate_parsec_coordinates(samples, xte=1.0, io_flag=True): # 'x trailing e
     valid_indices, surface_batch = export_parsec_coordinates(upper_xy, lower_xy, io_flag=io_flag)
 
     return valid_indices, surface_batch
+
+
+def export_parsec_coordinates(upper_xy, lower_xy, io_flag):
+    """
+    Writes PARSEC-encoded coordinates in 'airfoil_{i}.dat'
+
+    input:      upper & lower coordinates
+    output:     .dat file containing coordinates
+    """
+
+    valid_indices = []
+
+    for index in range(upper_xy.shape[0]):
+        if os.path.exists("airfoil_{index}.dat"):
+            os.remove("airfoil_{index}.dat")
+
+        if os.path.exists("airfoil_{index}.log"):
+            os.remove("airfoil_{index}.log")
+
+    all_samples_invalid = True
+    surface_batch = np.empty(0)
+    for index in range(upper_xy.shape[0]):
+
+        upper_y = upper_xy[index,:,1]
+        lower_y = lower_xy[index,:,1]
+        delta_y = upper_y - lower_y
+
+        dy = np.diff(upper_y)
+        sign_changes = np.where(np.diff(np.sign(dy)))[0]
+        num_optima = len(sign_changes)
+        is_multimodal_upperairfoil = True if num_optima > 1 else False
+        is_itersecting_airfoil = True if np.any(delta_y < 0) else False
+        is_negative_upper_y = True if np.any(upper_y < 0) else False
+
+        is_invalid_airfoil = False # Disable constraints for now
+        # is_invalid_airfoil = True if is_multimodal_upperairfoil or is_itersecting_airfoil or is_negative_upper_y else False
+
+        if not is_invalid_airfoil:
+
+            all_samples_invalid = False
+
+            valid_indices.append(index)
+            stacked_xy = np.vstack((upper_xy[index], lower_xy[index][::-1]))
+            np.savetxt(f'airfoil_{index}.dat', stacked_xy, fmt='%f', delimiter=' ', newline='\n', header=f'airfoil_{index}', comments='') if io_flag else None
+
+            # Calculate the surface area using the trapezoidal rule in a vectorized manner
+            dx = 1/N_XY_COORDINATES
+            y_avg = (np.abs(stacked_xy[1:,1]) + np.abs(stacked_xy[:-1,1])) / 2.0
+            surface = np.sum(dx * y_avg)
+            surface_batch = np.append(surface_batch, surface)
+
+        else:
+            surface_batch = np.append(surface_batch, -1337)
+            if io_flag:
+                with open(f'airfoil_{index}.dat', 'w') as f:
+                    f.write(f'airfoil_{index}\n\n')
+                    f.write("Invalid Airfoil\n")
+
+    if all_samples_invalid:
+        print("All samples invalid")
+        return np.array([], dtype=int), np.array([], dtype=int)
+    
+    return np.array(valid_indices), surface_batch
 
 
 def generate_polynomial_coefficients(samples):
@@ -208,7 +208,7 @@ def lower_y_solutions(lower_polynomial_parameters, n_pts=N_XY_COORDINATES):
 
 def get_upper_y_vector(args):
     """Calculates Solution Values for Linear Equations"""
-    z_trailing_edge, dz_trailing_edge, z_up, alpha_up, alpha_low, upper_curvature, upper_le_radius = args[0], args[1], args[2], args[3], args[4], args[5], args[6]
+    z_trailing_edge, dz_trailing_edge, z_up, alpha_up, alpha_low, upper_curvature, upper_le_radius = args
     alpha_up = np.deg2rad(alpha_up)
     alpha_low = np.deg2rad(alpha_low)
     return np.array([ z_trailing_edge + (dz_trailing_edge/2),  z_up, tan(alpha_up - (alpha_low/2)), 0, upper_curvature, sqrt(2*upper_le_radius)])
@@ -216,7 +216,7 @@ def get_upper_y_vector(args):
 
 def get_lower_y_vector(args):
     """Calculates Solution Values for Linear Equations"""
-    z_trailing_edge, dz_trailing_edge, z_low, alpha_up, alpha_low, lower_curvature, lower_le_radius = args[0], args[1], args[2], args[3], args[4], args[5], args[6]
+    z_trailing_edge, dz_trailing_edge, z_low, alpha_up, alpha_low, lower_curvature, lower_le_radius = args
     alpha_up = np.deg2rad(alpha_up)
     alpha_low = np.deg2rad(alpha_low)
 

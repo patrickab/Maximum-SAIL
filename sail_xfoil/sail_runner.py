@@ -17,6 +17,7 @@ INIT_N_EVALS = config.INIT_N_EVALS
 SOL_DIMENSION = config.SOL_DIMENSION
 OBJ_DIMENSION = config.OBJ_DIMENSION
 BHV_DIMENSION = config.BHV_DIMENSION
+MES_GRID_SIZE = config.MES_GRID_SIZE
 BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 MUTANT_CELLRANGE = config.MUTANT_CELLRANGE
@@ -204,16 +205,22 @@ class SailRun:
         if map_flag:
             self.map_current_iteration += 1
 
-    def update_archive(self, candidate_sol=None, candidate_obj=None, candidate_bhv=None, obj_flag=False, acq_flag=False, pred_flag=False, evaluate_prediction_archive=False, niche_restricted_update=False):
+    def update_archive(self, candidate_sol=None, candidate_obj=None, candidate_bhv=None, obj_flag=False, acq_flag=False, pred_flag=False, eval_pred_archive=False, niche_restricted_update=False):
         """"
         Input:
             Option 1: Call with archive & archive flag
             Option 2: Call with candidate_sol, candidate_obj, candidate_bhv & archive flag
         """            
 
+        gp = self.gp_model
         if candidate_sol.shape[0] == 0:
             return
         
+        target_function = self.acq_function if acq_flag else predict_objective
+        target_archive = self.acq_archive if acq_flag else self.pred_archive
+        ucb_flag = self.acq_ucb_flag
+        mes_flag = self.acq_mes_flag
+
         if obj_flag:
 
             candidate_obj = candidate_obj.ravel()
@@ -233,34 +240,23 @@ class SailRun:
         if candidate_obj is not None and (acq_flag or pred_flag):
             raise ValueError("update_archive: candidate_obj != None and acq_flag or pred_flag")
         
-        if evaluate_prediction_archive:
+        if eval_pred_archive:
             self.evaluated_predictions_archive.add(candidate_sol, candidate_obj, candidate_bhv)
             return
 
         if acq_flag:
-            n = BATCH_SIZE
-            for i in range(0, candidate_sol.shape[0], n):
 
-                if self.acq_ucb_flag:
-                    i_candidate_sol = candidate_sol[i:i+n]
-                    i_candidate_bhv = candidate_bhv[i:i+n]
-                    i_candidate_acq = self.acq_function(self=self, genomes=i_candidate_sol)
-                    self.acq_archive.add(i_candidate_sol, i_candidate_acq, i_candidate_bhv)
+            for i in range(0, candidate_sol.shape[0], BATCH_SIZE):
 
-                elif self.acq_mes_flag:
-                    i_candidate_sol = candidate_sol[i:i+n]
-                    i_candidate_acq = self.acq_function(self=self, genomes=i_candidate_sol)
-                    if niche_restricted_update:
-                        self.acq_function(self=self, genomes=i_candidate_sol, niche_restricted_update=True)
+                i_candidate_sol = candidate_sol[i:i+BATCH_SIZE]
+                i_candidate_bhv = candidate_bhv[i:i+BATCH_SIZE]
 
-                    if i_candidate_sol.shape[0] != 0:
-                        i_candidate_sol = self.mes_elites                 
-                    else:
-                        break
+                if ucb_flag:
+                    i_candidate_acq = target_function(self=self, genomes=i_candidate_sol, gp_model=gp)
+                elif mes_flag:
+                    i_candidate_acq = target_function(self=self, genomes=i_candidate_sol, niche_restricted_update=niche_restricted_update, gp_model=gp)
 
-                    i_candidate_bhv = candidate_bhv[i:i+n]
-                    self.acq_archive.add(i_candidate_sol, i_candidate_acq, i_candidate_bhv)
-
+                target_archive.add(i_candidate_sol, i_candidate_acq, i_candidate_bhv)
 
         if pred_flag:
             candidate_pred = predict_objective(self=self, genomes=candidate_sol)
@@ -274,7 +270,6 @@ class SailRun:
         # https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/lift-to-drag-ratio/
 
         # therefore, in order to produce qualitative results, it makes sense to set a minimum threshold
-        # in future work (for generalization), this threshold could be set as a hyperparameter or class attribute
 
         min_obj_threshhold = OBJ_MIN_THRESHHOLD
         min_pred_threshhold = OBJ_MIN_THRESHHOLD
@@ -417,7 +412,7 @@ def evaluate_prediction_archive(self: SailRun):
     unevaluated_prediction_objectives = unevaluated_prediction_elites.objective_batch()
     unevaluated_prediction_solutions = unevaluated_prediction_elites.solution_batch()
     unevaluated_prediction_measures = unevaluated_prediction_elites.measures_batch()
-    eval_xfoil_loop(self, solution_batch=unevaluated_prediction_solutions, measures_batch=unevaluated_prediction_measures, evaluate_prediction_archive=True, candidate_targetvalues=unevaluated_prediction_objectives)
+    eval_xfoil_loop(self, solution_batch=unevaluated_prediction_solutions, measures_batch=unevaluated_prediction_measures, eval_pred_archive=True, candidate_targetvalues=unevaluated_prediction_objectives)
 
     # Extract all elites from the evaluated predictions archive - (sorted by index for comparison)
     evaluated_prediction_elites = self.evaluated_predictions_archive.as_pandas(include_solutions=True)
@@ -522,7 +517,7 @@ def mes_sobol_cellgrids(self, mutant_cellrange=MUTANT_CELLRANGE):
     # why would this approach be naive? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.mp4
 
     """
-    sobol_cellgrid = create_sobol_samples(order=2000, dim=SOL_DIMENSION, seed=self.current_seed).T
+    sobol_cellgrid = create_sobol_samples(order=MES_GRID_SIZE, dim=SOL_DIMENSION, seed=self.current_seed).T
 
     archive = self.acq_archive
     n_cells = np.prod(archive.dims)
@@ -543,7 +538,7 @@ def mes_sobol_cellgrids(self, mutant_cellrange=MUTANT_CELLRANGE):
     cell_range_1 = np.diff(boundaries_1)[0]
 
     # 625 bins, 9000 samples, 2 dimensions
-    bhv_cellgrids = np.empty((n_cells, 2000, BHV_DIMENSION))
+    bhv_cellgrids = np.empty((n_cells, MES_GRID_SIZE, BHV_DIMENSION))
     bhv_cellbounds = np.empty((n_cells, BHV_DIMENSION, 2))
 
     for i in range(n_cells):

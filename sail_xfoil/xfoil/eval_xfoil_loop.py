@@ -50,17 +50,19 @@ ACQ_MES_MIN_THRESHHOLD = config.ACQ_MES_MIN_THRESHHOLD
 
 def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_prediction_archive=False, acq_flag=False, pred_flag=False, visualize_flag=True, candidate_targetvalues=None):
 
+    target = "Acquisition" if acq_flag else "Prediction"
+    new_objectives = np.empty((0, 1))
+    obj_t0 = self.obj_archive.stats.num_elites
+
     n_errors = 0
     iteration = 0
     n_new_obj_elites = 0
-    new_objectives = np.empty((0, 1))
     remaining_samples = solution_batch.shape[0]
-    obj_t0 = self.obj_archive.stats.num_elites
-    target = "Acquisition" if acq_flag else "Prediction"
 
     if self.custom_flag and self.obj_current_iteration % 5 == 0 and not evaluate_prediction_archive:
 
         new_x, max_mean = maximize_mean(self.gp_model)
+        generate_parsec_coordinates(new_x)
         _, success_index, converged_obj = xfoil(iterations=1)
         self.obj_archive.add_single(new_x[0], converged_obj, measures=new_x[0,1:3])
         print(f"Max Mean: {max_mean} - Max Mean Objective: {converged_obj}")
@@ -76,8 +78,12 @@ def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_pred
         n_solutions = iter_solutions.shape[0]
 
         # evaluate samples & extract converged solutions
-        _, _ = generate_parsec_coordinates(iter_solutions)
+        generate_parsec_coordinates(iter_solutions)
         _, success_indices, converged_obj = xfoil(iterations=n_solutions)
+
+        if len(success_indices) == 0:
+             continue
+
         success_indices = success_indices[:n_solutions]
         converged_sol = iter_solutions[success_indices]
         converged_bhv = measures_batch[sample_index:sample_index+BATCH_SIZE][success_indices]
@@ -110,6 +116,11 @@ def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_pred
         else:
             self.update_archive(candidate_sol=converged_sol, candidate_obj=converged_obj, candidate_bhv=converged_bhv, evaluate_prediction_archive=True)
 
+    # end xfoil loop
+
+    if (not evaluate_prediction_archive) and (not self.random_flag):
+        self.update_gp_model()
+
     if np.any(new_objectives >= 5.2):
         # write to csv vile
         print("\nWriting to csv file")
@@ -123,11 +134,6 @@ def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_pred
             target_objectives = np.vstack(np.hstack(candidate_targetvalues))
             true_objectives = np.vstack(new_objectives)
             pprint(target_objectives, true_objectives)
-
-
-    if (not evaluate_prediction_archive) and (not self.random_flag):
-        self.update_gp_model()
-
 
     if acq_flag:
 
@@ -153,8 +159,7 @@ def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_pred
             obj_elites_measures = obj_elite_df.measures_batch()
 
             self.acq_archive.clear()
-            self.update_archive(candidate_sol=acq_elites_solutions, candidate_bhv=acq_elites_measures, acq_flag=True)
-            print(self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).head(20).objective_batch())
+            self.update_archive(candidate_sol=acq_elites_solutions, candidate_bhv=acq_elites_measures, acq_flag=True, niche_restricted_update=True)
 
             print("acq archive size after update: ", self.acq_archive.stats.num_elites)
 

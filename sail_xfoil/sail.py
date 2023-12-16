@@ -104,10 +104,8 @@ def sail(initial_seed, acq_ucb_flag=False, acq_mes_flag=False, sail_vanilla_flag
 
     return
 
-
 if __name__ == "__main__":
 
-    subprocess.run("clean", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) # custom bash command to remove all files from last run
     exec_start = time.time()
 
     for i in range(TEST_RUNS):
@@ -144,7 +142,3 @@ if __name__ == "__main__":
     exec_end = time.time()
     exec_time = exec_end - exec_start
     print("\nExecution time (minutes): " + str(exec_time/60))
-
-
-# use c profile to check for memory leaks and optimize code update every 60 seconds
-# python -m cProfile -o profile_stats.dat sail.py
