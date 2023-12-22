@@ -104,7 +104,7 @@ def mes_map_elites(self, acq_archive: GridArchive, acq_flag=False, new_elite_arc
             progress.update(1)
             valid_indices = np.empty(0, dtype=int)
 
-            sigma_emitter = SIGMA_EMITTER + 0.45*(remaining_evals/n_evals)
+            sigma_emitter = SIGMA_EMITTER + 0.35*(remaining_evals/n_evals)
             emitter = update_emitter(self, acq_archive=acq_archive, sigma_emitter=sigma_emitter)
             scheduler = _Scheduler(acq_archive, emitter)
 
@@ -116,13 +116,13 @@ def mes_map_elites(self, acq_archive: GridArchive, acq_flag=False, new_elite_arc
                 mes_cellgrid=mes_cellgrid_mutants, 
                 bhv_cellbounds=bhv_cellbounds_mutants)
 
-            if remaining_evals % ((n_evals)//8) == 0:
+            if remaining_evals % ((n_evals)//4) == 0:
 
                 # 1. Visualize Acquisition Archive
                 # 2. Update Acquisition Archive 
                 #        *before* visualisation
 
-                if remaining_evals % ((n_evals)//4) == 0:
+                if remaining_evals % ((n_evals)//2) == 0:
 
                     # Mutant Update
                     print(f"Mutant t_0: {np.sum(acq_archive.as_pandas().objective_batch())}")
@@ -154,6 +154,171 @@ def mes_map_elites(self, acq_archive: GridArchive, acq_flag=False, new_elite_arc
     print(f"Map-Elites Time: {(end_time-start_time)/60} minutes")
     print("[...] End Map-Elites\n\n")
     return new_elite_archive, size_t0, size_t1
+
+
+def acq_mes(self, gp_model, genomes, cellgrids, cellbounds):
+
+    rng = np.random.default_rng(self.current_seed)
+
+    solutionbounds = np.array(SOL_VALUE_RANGE)
+    cell_solutionbounds = np.repeat(solutionbounds[np.newaxis,:,:], len(genomes), axis=0)
+    cell_solutionbounds[:, 1:3] = cellbounds
+
+    # Generate n=MES_MUTANTS using Gaussian Noise
+    genomes = np.repeat(genomes, MES_MUTANTS, axis=0).reshape(len(genomes), MES_MUTANTS, SOL_DIMENSION)
+   
+    for i in range(len(genomes)):
+        scaled_noise = rng.normal(
+                            scale=np.abs(SIGMA_MUTANTS *(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), 
+                            size=(MES_MUTANTS, SOL_DIMENSION))
+
+        genomes[i] = np.clip(genomes[i] + scaled_noise, cell_solutionbounds[i,:,0], cell_solutionbounds[i,:,1])
+        if np.isnan(genomes[i]).any(): raise ValueError("NaN in genomes")
+
+    acq_entropy = torch.tensor([])
+    cellgrids_tensor = torch.tensor(cellgrids)
+    genomes_tensor = torch.tensor(genomes)
+
+    # calculate MES for each mutant batch & select best mutant
+    for i in range(genomes.shape[0]):
+
+        i_transformed_genomes = genomes_tensor[i].unsqueeze(1)
+        MES = qLowerBoundMaxValueEntropy(model=gp_model, candidate_set=cellgrids_tensor[i], num_mv_samples=NUM_MV_SAMPLES)
+        i_acq_entropy_tensor = MES(i_transformed_genomes)
+        acq_entropy = torch.cat((acq_entropy, i_acq_entropy_tensor))
+
+    genomes = genomes.reshape(-1, 11)
+    return genomes, acq_entropy.detach().numpy(), genomes[:,1:3]
+
+
+
+def optimize_mes(self, acq_archive, bhv_cellgrid, mes_cellgrid, bhv_cellbounds):
+
+    np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
+
+    gp_model = self.gp_model
+    n_bins = np.prod(acq_archive.dims)
+    n_samples = n_bins // 15
+
+    acq_elite_df = acq_archive.as_pandas(include_solutions=True)
+    acq_elite_df = acq_elite_df.sample(frac=1, random_state=self.current_seed)  # shuffle elites
+    acq_elite_df = acq_elite_df.head(n=n_samples)                               # sample elites
+
+    print("\nOptimize MES: n_samples", n_samples)
+
+    sum_perc_improvement = 0
+
+    genomes = acq_elite_df.solution_batch()
+    objectives = acq_elite_df.objective_batch()
+
+    cell_indices = acq_archive.index_of(genomes[:,1:3])
+
+    _mes_cellgrids = mes_cellgrid.copy()
+    _mes_cellgrids = np.repeat(_mes_cellgrids[np.newaxis,:,:], len(cell_indices), axis=0)
+    _bhv_cellgrids = bhv_cellgrid[cell_indices].copy()
+    _mes_cellgrids[:,:,1:3] = _bhv_cellgrids
+    _cellbounds = bhv_cellbounds[cell_indices].copy()
+
+    solutionbounds = np.array(SOL_VALUE_RANGE)
+    cell_solutionbounds = np.repeat(solutionbounds[np.newaxis,:,:], len(genomes), axis=0)    # create copies of solutionbounds
+    cell_solutionbounds[:, 1:3] = _cellbounds                                                # insert niche-specific cellbounds
+
+    # track time
+    import time
+    start = time.time()
+
+    new_genomes = np.empty((n_samples, SOL_DIMENSION))
+
+    # optimize MES for each mutant batch & select best mutant
+    for i in range(genomes.shape[0]):
+
+        _mes_cellgrid = torch.tensor(_mes_cellgrids[i], dtype=torch.float64)      # Shape: MES_GRIDSIZE x SOL_DIMENSION
+        MES = qLowerBoundMaxValueEntropy(model=gp_model, candidate_set=_mes_cellgrid, num_mv_samples=NUM_MV_SAMPLES)
+
+        new_genome, new_acquisition = optimize_acqf(
+            acq_function=MES,
+            bounds=torch.tensor(cell_solutionbounds[i].T, dtype=torch.float64),
+            q=1,
+            num_restarts=10,
+            raw_samples=1024,
+            #batch_initial_conditions=genomes_tensor[i].unsqueeze(0) 
+        )
+
+        new_genome = new_genome.detach().numpy()
+        new_genomes[i] = new_genome
+        new_acquisition = new_acquisition.detach().numpy()
+
+        acq_archive.add_single(new_genome[0], new_acquisition, new_genome[0,1:3])
+
+        perc_improvement = ((new_acquisition)-objectives[i])/objectives[i] * 500
+        sum_perc_improvement += perc_improvement
+        print("MES SAIL: {:.3f}  botorch.optimize_acqf(): {:.3f}  Improvement (Percent): {:.3f}".format(objectives[i], new_acquisition, perc_improvement))
+
+    mean_perc_improvement = sum_perc_improvement / n_samples
+    print("Mean Improvement (Percent): ", mean_perc_improvement)
+    print("Optimize MES Time: ", time.time() - start)
+
+    return acq_archive
+
+
+def mes_sobol_cellgrids(self, mutant_cellrange, cell_indices=None):
+    """Included in this module only for efficienty - detailled documentation in acq_functions/acq_mes.py"""
+
+    sobol_cellgrid = create_sobol_samples(order=MES_GRID_SIZE, dim=SOL_DIMENSION, seed=self.current_seed).T
+
+    archive = self.acq_archive
+
+    if cell_indices is None:
+        n_cells = np.prod(archive.dims)
+        archive_indices = range(n_cells)
+        idx = archive.int_to_grid_index(archive_indices)
+    else:
+        n_cells = cell_indices.shape[0]
+        idx = archive.int_to_grid_index(cell_indices)
+
+    lower_bounds = np.array(SOL_VALUE_RANGE)[:, 0]
+    upper_bounds = np.array(SOL_VALUE_RANGE)[:, 1]
+
+    bhv_cellgrid = sobol_cellgrid[:, 1:3]
+    mes_cellgrid = sobol_cellgrid * (upper_bounds - lower_bounds) + lower_bounds
+
+    boundaries_0 = archive.boundaries[0]
+    boundaries_1 = archive.boundaries[1]
+
+    cell_range_0 = np.diff(boundaries_0)[0]
+    cell_range_1 = np.diff(boundaries_1)[0]
+
+    # 625 bins, MES_GRID_SIZE samples, 2 dimensions
+    bhv_cellgrids = np.empty((n_cells, MES_GRID_SIZE, BHV_DIMENSION))
+    bhv_cellbounds = np.empty((n_cells, BHV_DIMENSION, 2))
+
+    for i in range(n_cells):
+
+        measure_0_idx, measure_1_idx = idx[i]
+
+        # Allow mutants by scaling cellbounds
+        cell_bounds_0 = (boundaries_0[measure_0_idx] - cell_range_0*mutant_cellrange,
+                         boundaries_0[measure_0_idx+1] + cell_range_0*mutant_cellrange)
+
+        cell_bounds_1 = (boundaries_1[measure_1_idx] - cell_range_1*mutant_cellrange,
+                         boundaries_1[measure_1_idx+1] + cell_range_1*mutant_cellrange)
+
+        # Restrict cellbounds to solution space boundaries
+        cell_bounds_0 = np.clip(cell_bounds_0, boundaries_0[0], boundaries_0[-1])
+        cell_bounds_1 = np.clip(cell_bounds_1, boundaries_1[0], boundaries_1[-1])
+
+        cell_bounds_i = np.array([cell_bounds_0, cell_bounds_1])
+        bhv_cellbounds[i] = cell_bounds_i
+
+        lower_bounds = cell_bounds_i[:, 0]
+        upper_bounds = cell_bounds_i[:, 1]
+        cell_bound_ranges = upper_bounds - lower_bounds
+
+        bhv_cellgrid_i = bhv_cellgrid.copy()        
+        bhv_cellgrid_i = bhv_cellgrid_i * cell_bound_ranges.T + lower_bounds   # scale sobol cellgrid to cellbounds
+        bhv_cellgrids[i] = bhv_cellgrid_i                                      # insert bhv cellgrid into mes cellgrid
+
+    return bhv_cellbounds, bhv_cellgrids, mes_cellgrid
 
 
 def update_archive(self, gp, archive: GridArchive, bhv_cellgrid, mes_cellgrid, bhv_cellbounds, candidate_sol):
