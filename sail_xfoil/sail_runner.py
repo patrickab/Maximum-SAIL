@@ -1,5 +1,4 @@
 ###### Import Foreign Scripts ######
-from chaospy import create_sobol_samples
 from ribs.archives import GridArchive
 import gc
 import numpy as np
@@ -164,17 +163,7 @@ class SailRun:
 
         self.gp_model = fit_gp_model(self.sol_array, self.obj_array)
         return
-    
 
-    def update_cellgrids(self):
-
-        self.bhv_cellbounds, self.bhv_sobol_cellgrids, self.mes_sobol_cellgrid = mes_sobol_cellgrids(self)
-        return
-    
-    def update_mutant_cellgrids(self, mutant_cellrange=MUTANT_CELLRANGE):
-
-        self.bhv_cellbounds_mutants, self.bhv_sobol_cellgrids_mutants, self.mes_sobol_cellgrid_mutants = mes_sobol_cellgrids(self, mutant_cellrange=mutant_cellrange)
-        return
 
     def update_seed(self):
 
@@ -189,7 +178,7 @@ class SailRun:
 
         if self.acq_mes_flag and (acq_flag or map_flag):
             vmin = 0.0
-            vmax = 0.4
+            vmax = 0.6
 
         # all visualisations of the acquisition archive represent the state of the archive, which candidate solutions are sampled from for objective evaluations
 
@@ -205,14 +194,17 @@ class SailRun:
         if map_flag:
             self.map_current_iteration += 1
 
-    def update_archive(self, candidate_sol=None, candidate_obj=None, candidate_bhv=None, obj_flag=False, acq_flag=False, pred_flag=False, eval_pred_archive=False, niche_restricted_update=False):
+    def update_archive(self, gp=None, candidate_sol=None, candidate_obj=None, candidate_bhv=None, obj_flag=False, acq_flag=False, pred_flag=False, eval_pred_archive=False, niche_restricted_update=False, acq_archive=None):
         """"
         Input:
             Option 1: Call with archive & archive flag
             Option 2: Call with candidate_sol, candidate_obj, candidate_bhv & archive flag
         """            
 
-        gp = self.gp_model
+        if acq_archive is not None:
+            self.acq_archive = acq_archive
+            return
+
         if candidate_sol.shape[0] == 0:
             return
         
@@ -236,15 +228,16 @@ class SailRun:
             self.n_new_obj_elites = self.new_archive.stats.num_elites
 
             return
-        
-        if candidate_obj is not None and (acq_flag or pred_flag):
-            raise ValueError("update_archive: candidate_obj != None and acq_flag or pred_flag")
-        
+                
         if eval_pred_archive:
             self.evaluated_predictions_archive.add(candidate_sol, candidate_obj, candidate_bhv)
             return
 
-        if acq_flag:
+        if self.acq_mes_flag and acq_flag:
+            target_archive.add(solution_batch=candidate_sol, objective_batch=candidate_obj, measures_batch=candidate_bhv)
+            return
+
+        if self.acq_ucb_flag and acq_flag:
 
             for i in range(0, candidate_sol.shape[0], BATCH_SIZE):
 
@@ -339,19 +332,9 @@ class SailRun:
         return obj_archive, acq_archive, pred_archive, new_archive, evaluated_predictions_archive, prediction_error_archive
 
 
-def scale_samples(samples, boundaries=SOL_VALUE_RANGE):
-    """Scales Samples to boundaries"""
-
-    lower_bounds = np.array([boundaries[i][0] for i in range(len(boundaries))])
-    upper_bounds = np.array([boundaries[i][1] for i in range(len(boundaries))])
-
-    samples = samples * (upper_bounds - lower_bounds) + lower_bounds    
-    return samples
-
-
 def store_final_data(self: SailRun):
 
-    max_acq_threshhold = 5.0 if self.acq_ucb_flag else 0.25
+    max_acq_threshhold = 5.0 if self.acq_ucb_flag else 0.6
     
     min_obj_threshhold = OBJ_MIN_THRESHHOLD
     min_pred_threshhold = OBJ_MIN_THRESHHOLD
@@ -473,111 +456,3 @@ def evaluate_prediction_archive(self: SailRun):
 
     gc.collect()
     return
-
-
-def mes_sobol_cellgrids(self, mutant_cellrange=MUTANT_CELLRANGE):
-
-    """
-    Creates a Sobol Cellgrid that can be used for all cells
-
-        This function is called once before every MAP-Elites-Loop.
-    
-        Among non-measure dimensions, all sobol samples are equal.
-        Therefore we need to draw only one sobol sample for all grids.
-
-        Seperation of bhv_cellgrids and mes_cellgrids allows us to
-        scale the behavior space independently from the solution space,
-        which accelerates calculation, while reducing also reducing
-        memory consumption significantly.
-
-        Mes/Bhv Cellgrids are stored within the SailRunner class.
-        Mes Cellgrid is constant across all bins.
-        Bhv Cellgrid can be accessed by index.
-
-        Therefore, we can rapidly assamble the final cellgrid
-        for each sample within the MAP-Loop
-
-    Mutant Cellrange:
-        Defines the boundaries where mutants are allowed to be sampled
-
-        For example:
-            mutant_cellrange = 0.1 -> mutants may exceed cellbounds by 10%
-            mutant_cellrange = 0.0 -> mutants are not allowed to exceed cellbounds
-            mutant_cellrange = -0.01 -> mutants are not allowed to exceed cellbounds, but are allowed to be sampled from a smaller cell
-
-        Setting mutant_cellrange to -0.01 avoids edge cases
-
-    Returns:
-
-        bhv_cellbounds : 625 bins x 2  dimensions x 2 boundaries
-        bhv_cellgrids  : 625 bins x 6000 samples x 2 dimensions
-        mes_cellgrid   :   1      x 6000 samples x 11 dimensions
-
-    # how does the naive approach work? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.pdf
-    # why would this approach be naive? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.mp4
-
-    """
-    sobol_cellgrid = create_sobol_samples(order=MES_GRID_SIZE, dim=SOL_DIMENSION, seed=self.current_seed).T
-
-    archive = self.acq_archive
-    n_cells = np.prod(archive.dims)
-
-    archive_indices = range(n_cells)
-    idx = archive.int_to_grid_index(archive_indices)
-
-    lower_bounds = np.array(SOL_VALUE_RANGE)[:, 0]
-    upper_bounds = np.array(SOL_VALUE_RANGE)[:, 1]
-
-    bhv_cellgrid = sobol_cellgrid[:, 1:3]
-    mes_cellgrid = sobol_cellgrid * (upper_bounds - lower_bounds) + lower_bounds
-
-    boundaries_0 = archive.boundaries[0]
-    boundaries_1 = archive.boundaries[1]
-
-    cell_range_0 = np.diff(boundaries_0)[0]
-    cell_range_1 = np.diff(boundaries_1)[0]
-
-    # 625 bins, 9000 samples, 2 dimensions
-    bhv_cellgrids = np.empty((n_cells, MES_GRID_SIZE, BHV_DIMENSION))
-    bhv_cellbounds = np.empty((n_cells, BHV_DIMENSION, 2))
-
-    for i in range(n_cells):
-
-        measure_0_idx, measure_1_idx = idx[i]
-
-        # Allow mutants by scaling cellbounds
-        cell_bounds_0 = (boundaries_0[measure_0_idx] - cell_range_0*mutant_cellrange,
-                         boundaries_0[measure_0_idx+1] + cell_range_0*mutant_cellrange)
-
-        cell_bounds_1 = (boundaries_1[measure_1_idx] - cell_range_1*mutant_cellrange,
-                         boundaries_1[measure_1_idx+1] + cell_range_1*mutant_cellrange)
-
-        # Restrict cellbounds to solution space boundaries
-        cell_bounds_0 = np.clip(cell_bounds_0, boundaries_0[0], boundaries_0[-1])
-        cell_bounds_1 = np.clip(cell_bounds_1, boundaries_1[0], boundaries_1[-1])
-
-        cell_bounds_i = np.array([cell_bounds_0, cell_bounds_1])
-        bhv_cellbounds[i] = cell_bounds_i
-
-        lower_bounds = cell_bounds_i[:, 0]
-        upper_bounds = cell_bounds_i[:, 1]
-        cell_bound_ranges = upper_bounds - lower_bounds
-
-        bhv_cellgrid_i = bhv_cellgrid.copy()        
-        bhv_cellgrid_i = bhv_cellgrid_i * cell_bound_ranges.T + lower_bounds   # scale sobol cellgrid to cellbounds
-        bhv_cellgrids[i] = bhv_cellgrid_i                                      # insert bhv cellgrid into mes cellgrid
-
-    # Explicitly delete variables to free up memory
-    del sobol_cellgrid, idx, lower_bounds, upper_bounds, bhv_cellgrid, boundaries_0, boundaries_1, cell_range_0, cell_range_1, cell_bounds_0, cell_bounds_1, cell_bounds_i, cell_bound_ranges, bhv_cellgrid_i
-    gc.collect()
-
-    return bhv_cellbounds, bhv_cellgrids, mes_cellgrid
-
-if __name__ == "__main__":
-    from utils.csv_to_archive import csv_to_archive
-    from xfoil.eval_xfoil_loop import eval_xfoil_loop
-
-    dummy_sail_run = SailRun(initial_seed=123, sail_vanilla_flag=True, acq_ucb_flag=True, acq_mes_flag=False)
-    archive = csv_to_archive("0_hybrid_ucb_init_mes_acq_archive.csv")
-    archive_df = archive.as_pandas(include_solutions=True)
-    eval_xfoil_loop(dummy_sail_run, solution_batch=archive_df.solution_batch(), measures_batch=archive_df.measures_batch(), evaluate_prediction_archive=True, candidate_targetvalues=archive_df.objective_batch(), visualize_flag=True)

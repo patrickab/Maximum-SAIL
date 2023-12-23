@@ -58,6 +58,9 @@ def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_pred
             print(f"Max Mean: {max_mean} - Max Mean Objective: {converged_obj}")
             self.update_gp_data(new_solutions=new_x, new_objectives=converged_obj)
 
+    if np.any(np.isin(solution_batch, self.sol_array).all(1)):
+        raise ValueError("Duplicate Solution Error: Solution Candidate already exist in GP Data")
+
     for i in range(0, solution_batch.shape[0], BATCH_SIZE):
 
         i_solutions = solution_batch[i:i+BATCH_SIZE]

@@ -88,7 +88,7 @@ def sail(initial_seed, acq_ucb_flag=False, acq_mes_flag=False, sail_vanilla_flag
     obj_elites_solutions = obj_elites_df.solution_batch()
     obj_elites_measures = obj_elites_df.measures_batch()
 
-    current_run.update_archive(candidate_sol=acq_elites_solutions, candidate_bhv=acq_elites_measures, pred_flag=True)
+    current_run.update_archive(gp=current_run.gp_model, candidate_sol=acq_elites_solutions, candidate_bhv=acq_elites_measures, pred_flag=True)
     current_run.update_archive(candidate_sol=obj_elites_solutions, candidate_bhv=obj_elites_measures, pred_flag=True)
 
     if current_run.pred_verific_flag:

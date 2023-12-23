@@ -29,8 +29,7 @@ CSV_BUFFERSIZE = (n_obj_evals/BATCH_SIZE) / 8
 
 ###### Import Custom Scripts ######
 
-from xfoil.eval_xfoil_loop import eval_xfoil_loop, xfoil
-from acq_functions.acq_mes import optimize_mes
+from xfoil.eval_xfoil_loop import eval_xfoil_loop
 from utils.pprint_nd import pprint
 from utils.anytime_metrics import initialize_anytime_metrics, calculate_anytime_metrics, store_anytime_metrics
 from xfoil.generate_airfoils import generate_parsec_coordinates
@@ -153,9 +152,8 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
 
         # Produce new acquisition elites
         target_t0 = target_archive.stats.num_elites
-        new_target_elites, _, _ = map_loop(self, target_archive, acq_flag=acq_loop, pred_flag=pred_loop)
-        if new_target_elites.stats.num_elites < BATCH_SIZE: new_target_elites = ensure_n_new_elites(self=self, new_elite_archive=new_target_elites, acq_flag=acq_loop, pred_flag=pred_loop)   # Sample until enough new acquisition elites are found
-        improved_elites, new_bin_elites = prepare_sample_elites(self=self, new_elite_archive=new_target_elites, old_elite_archive=self.obj_archive, pred_flag=pred_loop)                      # Split new_target_elites into improved elites & new bin elites, then (if self.acq_ucb_flag or pred_flag) calculate objective improvement (else) objective_improvement = objective
+        _, _ = map_loop(self, target_archive, acq_flag=acq_loop, pred_flag=pred_loop)
+        improved_elites, new_bin_elites = prepare_sample_elites(self=self, target_archive=target_archive, pred_flag=pred_loop)      # Split target archive into improved elites & new bin elites, then (if self.acq_ucb_flag or pred_flag) calculate objective improvement
         candidate_solutions_df = select_samples(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, acq_flag=acq_loop, pred_flag=pred_loop, curiosity=CURIOSITY)            # Select samples based on exploration behavior defined in the class constructor
         target_t1 = target_archive.stats.num_elites
 
@@ -233,7 +231,7 @@ def ensure_n_new_elites(self: SailRun, new_elite_archive, acq_flag=False, pred_f
     return new_elite_archive
 
 
-def prepare_sample_elites(self: SailRun, new_elite_archive: GridArchive, old_elite_archive: GridArchive, pred_flag=False):
+def prepare_sample_elites(self: SailRun, target_archive: GridArchive, pred_flag=False):
     """
     - extracts all elites from new_elite_archive
     - splits them into improved elites and new bin elites
@@ -246,25 +244,29 @@ def prepare_sample_elites(self: SailRun, new_elite_archive: GridArchive, old_eli
         New Elite Archive
     """
 
-    old_elite_df = old_elite_archive.as_pandas(include_solutions=True).sort_values(by=['index'])
+    obj_archive_df = self.obj_archive.as_pandas(include_solutions=True)
+    target_archive_df = target_archive.as_pandas(include_solutions=True)
 
-    new_elite_df = new_elite_archive.as_pandas(include_solutions=True)
+    # Remove invalid designs
+    valid_indices, _ = generate_parsec_coordinates(target_archive_df.solution_batch(), io_flag=False)
+    target_archive_df = target_archive_df.iloc[valid_indices]
+
     if self.acq_mes_flag:
-        new_elite_df = new_elite_df.sort_values(by=['objective'], ascending=False)
+        target_archive_df = target_archive_df.sort_values(by=['objective'], ascending=False).head(int(target_archive_df.shape[0]*0.98))
 
-    # Remove all candidate solutions from new_elite_df, that have already been evaluated
-    new_elite_df = new_elite_df[~np.isin(new_elite_df.solution_batch(), self.sol_array).all(1)]
+    # Remove all candidate solutions from target_archive_df, that have already been evaluated
+    target_archive_df = target_archive_df[~np.isin(target_archive_df.solution_batch(), self.sol_array).all(1)]
 
     # Map Acquisition Elites to Objective Archive Indices 
     # (allows different archive resolutions for acq and obj archive)
-    new_elite_indices = self.obj_archive.index_of(new_elite_df.measures_batch())
+    new_elite_indices = self.obj_archive.index_of(target_archive_df.measures_batch())
 
     # Index refers to the bin, that the elite belongs to
     # Therefore the index can be used to seperate improved elites from new bin elites
-    is_improved_new_elite = np.isin(new_elite_indices, old_elite_df['index'])
+    is_improved_new_elite = np.isin(new_elite_indices, obj_archive_df['index'])
 
-    improved_elites = new_elite_df[is_improved_new_elite]
-    new_bin_elites   = new_elite_df[~is_improved_new_elite]
+    improved_elites = target_archive_df[is_improved_new_elite]
+    new_bin_elites   = target_archive_df[~is_improved_new_elite]
 
     # Map improved elites to objective archive indices
     improved_elites = improved_elites.assign(index = self.obj_archive.index_of(improved_elites.measures_batch()))
@@ -280,8 +282,8 @@ def prepare_sample_elites(self: SailRun, new_elite_archive: GridArchive, old_eli
     improved_elites = improved_elites.drop_duplicates(subset=['index'], keep='first')
 
     # Select old elites that have been improved
-    is_improved_old_elite = np.isin(old_elite_df['index'], new_elite_indices)
-    improved_old_elites = old_elite_df[is_improved_old_elite]
+    is_improved_old_elite = np.isin(obj_archive_df['index'], new_elite_indices)
+    improved_old_elites = obj_archive_df[is_improved_old_elite]
 
     improved_elites = improved_elites.sort_values(by=['index'])
     improved_old_elites = improved_old_elites.sort_values(by=['index'])
@@ -370,13 +372,14 @@ def initialize_archive(self):
 
     # calculate initial sobol sample
     solution_batch = create_sobol_samples(order=INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed)
-    solution_batch = solution_batch.T
-    solution_batch = scale_samples(solution_batch)
+    solution_batch = scale_samples(solution_batch.T)
     measures_batch = solution_batch[:, 1:3]
     generate_parsec_coordinates(solution_batch)
-    conv_errors, success_indices, obj_batch = xfoil(iterations=INIT_N_EVALS)
-    self.update_gp_data(new_solutions=solution_batch[success_indices], new_objectives=obj_batch)
-    self.update_gp_model()
+    eval_xfoil_loop(self, solution_batch=solution_batch, measures_batch=measures_batch, acq_flag=False)
+
+    for i in range(0, INIT_N_EVALS, BATCH_SIZE):
+        self.visualize_archive(self.acq_archive, acq_flag=True)
+
     gp = self.gp_model
 
     # for vanilla sail, random sail & random init just draw sobol samples
@@ -399,13 +402,6 @@ def initialize_archive(self):
         solution_batch = scale_samples(solution_batch)
         measures_batch = solution_batch[:, 1:3]
         self.update_archive(candidate_sol=solution_batch, candidate_bhv=measures_batch, acq_flag=True)
-
-        # fill acq archive with random solutions
-        solution_batch = create_sobol_samples(order=10, dim=len(SOL_VALUE_RANGE), seed=self.current_seed)
-        solution_batch = solution_batch.T
-        solution_batch = scale_samples(solution_batch)
-        measures_batch = solution_batch[:, 1:3]
-        self.acq_archive.add(solution_batch, np.zeros((solution_batch.shape[0]))+0.0000001, measures_batch)
 
         remaining_evals = INIT_N_ACQ_EVALS
         while remaining_evals > 0:

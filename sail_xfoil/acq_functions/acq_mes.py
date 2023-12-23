@@ -20,6 +20,7 @@ SIGMA_MUTANTS = config.SIGMA_MUTANTS
 
 
 def acq_mes(self, gp_model, genomes, niche_restricted_update=False):
+    """This function is used only in MES-Map-Elites and may not be up to date"""
 
     rng = np.random.default_rng(self.current_seed)
     cell_indices = self.acq_archive.index_of(genomes[:,1:3])    # Shape: BATCH_SIZE x 1 
@@ -220,3 +221,109 @@ def simple_mes(self, genomes):
     mes_ndarray = acq_entropy_tensor.detach().numpy()
 
     return np.hstack(mes_ndarray)
+
+
+def mes_sobol_cellgrids(self, mutant_cellrange, cell_indices=None):
+
+    """
+    In this module included only for documentation.
+    The module is used within mes_map_elites.py
+
+    Creates a Sobol Cellgrid that can be used for all cells
+
+        This function is called once before every MAP-Elites-Loop.
+    
+        Among non-measure dimensions, all sobol samples are equal.
+        Therefore we need to draw only one sobol sample for all grids.
+
+        Seperation of bhv_cellgrids and mes_cellgrids allows us to
+        scale the behavior space independently from the solution space,
+        which accelerates calculation, while reducing also reducing
+        memory consumption significantly.
+
+        Mes/Bhv Cellgrids are stored within the SailRunner class.
+        Mes Cellgrid is constant across all bins.
+        Bhv Cellgrid can be accessed by index.
+
+        Therefore, we can rapidly assamble the final cellgrid
+        for each sample within the MAP-Loop
+
+    Mutant Cellrange:
+        Defines the boundaries where mutants are allowed to be sampled
+
+        For example:
+            mutant_cellrange = 0.1 -> mutants may exceed cellbounds by 10%
+            mutant_cellrange = 0.0 -> mutants are not allowed to exceed cellbounds
+            mutant_cellrange = -0.01 -> mutants are not allowed to exceed cellbounds, but are allowed to be sampled from a smaller cell
+
+        Setting mutant_cellrange to -0.01 avoids edge cases
+
+    Returns:
+
+        n_acq_bins     : depends on archive resolution, may differ from n_obj_bins
+
+        bhv_cellbounds : n_acq_bins x        2 dimensions       x   BHV_DIMENSION
+        bhv_cellgrids  : n_acq_bins x   MES_GRID_SIZE samples   x   SOL_DIMENSION
+        mes_cellgrid   :      1     x   MES_GRID_SIZE samples   x   SOL_DIMENSION
+
+    # how does the naive approach work? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.pdf
+    # why would this approach be naive? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.mp4
+
+    """
+    from chaospy import create_sobol_samples
+    sobol_cellgrid = create_sobol_samples(order=MES_GRID_SIZE, dim=SOL_DIMENSION, seed=self.current_seed).T
+
+    archive = self.acq_archive
+
+    if cell_indices is None:
+        n_cells = np.prod(archive.dims)
+        archive_indices = range(n_cells)
+        idx = archive.int_to_grid_index(archive_indices)
+    else:
+        n_cells = cell_indices.shape[0]
+        idx = archive.int_to_grid_index(cell_indices)
+
+    lower_bounds = np.array(SOL_VALUE_RANGE)[:, 0]
+    upper_bounds = np.array(SOL_VALUE_RANGE)[:, 1]
+
+    bhv_cellgrid = sobol_cellgrid[:, 1:3]
+    mes_cellgrid = sobol_cellgrid * (upper_bounds - lower_bounds) + lower_bounds
+
+    boundaries_0 = archive.boundaries[0]
+    boundaries_1 = archive.boundaries[1]
+
+    cell_range_0 = np.diff(boundaries_0)[0]
+    cell_range_1 = np.diff(boundaries_1)[0]
+
+    # 625 bins, MES_GRID_SIZE samples, 2 dimensions
+    BHV_DIMENSION = 42
+    bhv_cellgrids = np.empty((n_cells, MES_GRID_SIZE, BHV_DIMENSION))
+    bhv_cellbounds = np.empty((n_cells, BHV_DIMENSION, 2))
+
+    for i in range(n_cells):
+
+        measure_0_idx, measure_1_idx = idx[i]
+
+        # Allow mutants by scaling cellbounds
+        cell_bounds_0 = (boundaries_0[measure_0_idx] - cell_range_0*mutant_cellrange,
+                         boundaries_0[measure_0_idx+1] + cell_range_0*mutant_cellrange)
+
+        cell_bounds_1 = (boundaries_1[measure_1_idx] - cell_range_1*mutant_cellrange,
+                         boundaries_1[measure_1_idx+1] + cell_range_1*mutant_cellrange)
+
+        # Restrict cellbounds to solution space boundaries
+        cell_bounds_0 = np.clip(cell_bounds_0, boundaries_0[0], boundaries_0[-1])
+        cell_bounds_1 = np.clip(cell_bounds_1, boundaries_1[0], boundaries_1[-1])
+
+        cell_bounds_i = np.array([cell_bounds_0, cell_bounds_1])
+        bhv_cellbounds[i] = cell_bounds_i
+
+        lower_bounds = cell_bounds_i[:, 0]
+        upper_bounds = cell_bounds_i[:, 1]
+        cell_bound_ranges = upper_bounds - lower_bounds
+
+        bhv_cellgrid_i = bhv_cellgrid.copy()        
+        bhv_cellgrid_i = bhv_cellgrid_i * cell_bound_ranges.T + lower_bounds   # scale sobol cellgrid to cellbounds
+        bhv_cellgrids[i] = bhv_cellgrid_i                                      # insert bhv cellgrid into mes cellgrid
+
+    return bhv_cellbounds, bhv_cellgrids, mes_cellgrid
