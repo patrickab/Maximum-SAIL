@@ -37,6 +37,7 @@ from xfoil.generate_airfoils import generate_parsec_coordinates
 from acq_functions.acq_mes import acq_mes
 from acq_functions.acq_ucb import acq_ucb
 
+from mes_map_elites import mes_map_elites
 from map_elites import map_elites
 from sail_runner import SailRun
 from chaospy import create_sobol_samples
@@ -117,6 +118,10 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
 
     if not pred_loop:
         initialize_archive(self)
+        if self.acq_mes_flag:
+            map_loop = mes_map_elites
+        else:
+            map_loop = map_elites
 
     CURIOSITY = 2 # For Hybrid Approach: 'CURIOSITY//BATCH_SIZE' new bin elites are to be sampled
 
@@ -148,7 +153,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
 
         # Produce new acquisition elites
         target_t0 = target_archive.stats.num_elites
-        new_target_elites, _, _ = map_elites(self, acq_flag=acq_loop, pred_flag=pred_loop)
+        new_target_elites, _, _ = map_loop(self, target_archive, acq_flag=acq_loop, pred_flag=pred_loop)
         if new_target_elites.stats.num_elites < BATCH_SIZE: new_target_elites = ensure_n_new_elites(self=self, new_elite_archive=new_target_elites, acq_flag=acq_loop, pred_flag=pred_loop)   # Sample until enough new acquisition elites are found
         improved_elites, new_bin_elites = prepare_sample_elites(self=self, new_elite_archive=new_target_elites, old_elite_archive=self.obj_archive, pred_flag=pred_loop)                      # Split new_target_elites into improved elites & new bin elites, then (if self.acq_ucb_flag or pred_flag) calculate objective improvement (else) objective_improvement = objective
         candidate_solutions_df = select_samples(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, acq_flag=acq_loop, pred_flag=pred_loop, curiosity=CURIOSITY)            # Select samples based on exploration behavior defined in the class constructor
@@ -200,9 +205,16 @@ def ensure_n_new_elites(self: SailRun, new_elite_archive, acq_flag=False, pred_f
     """
 
     target = "Acq" if acq_flag else "Pred"
+    target_archive = self.acq_archive if acq_flag else self.pred_archive
 
     if acq_flag:
         n_samples = BATCH_SIZE
+        target_archive = self.acq_archive
+        if self.acq_mes_flag:
+            map_loop = mes_map_elites
+        else:
+            map_loop = map_elites
+
     if pred_flag and self.pred_verific_flag:
         n_samples = PRED_N_OBJ_EVALS//PREDICTION_VERIFICATIONS
     if pred_flag and not self.pred_verific_flag:
@@ -215,7 +227,7 @@ def ensure_n_new_elites(self: SailRun, new_elite_archive, acq_flag=False, pred_f
 
         print(f'\n\nNot enough {target} Improvements: Re-entering {target}')
         print(f'New {target} Elites (before): {new_elite_archive.stats.num_elites}')
-        new_elite_archive, _, _ = map_elites(self, new_elite_archive=new_elite_archive, acq_flag=acq_flag, pred_flag=pred_flag, re_enter_flag=True)
+        new_elite_archive, _, _ = map_loop(self, target_archive, new_elite_archive=new_elite_archive, acq_flag=acq_flag, pred_flag=pred_flag, re_enter_flag=True)
         print(f'New {target} Elites (after):  {new_elite_archive.stats.num_elites}')
 
     return new_elite_archive
@@ -387,6 +399,13 @@ def initialize_archive(self):
         solution_batch = scale_samples(solution_batch)
         measures_batch = solution_batch[:, 1:3]
         self.update_archive(candidate_sol=solution_batch, candidate_bhv=measures_batch, acq_flag=True)
+
+        # fill acq archive with random solutions
+        solution_batch = create_sobol_samples(order=10, dim=len(SOL_VALUE_RANGE), seed=self.current_seed)
+        solution_batch = solution_batch.T
+        solution_batch = scale_samples(solution_batch)
+        measures_batch = solution_batch[:, 1:3]
+        self.acq_archive.add(solution_batch, np.zeros((solution_batch.shape[0]))+0.0000001, measures_batch)
 
         remaining_evals = INIT_N_ACQ_EVALS
         while remaining_evals > 0:
