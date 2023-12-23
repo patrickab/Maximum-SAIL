@@ -89,6 +89,12 @@ def mes_map_elites(self, acq_archive: GridArchive, acq_flag=False, new_elite_arc
 
     acq_archive = optimize_mes(self, acq_archive, bhv_cellgrids_mutants, mes_cellgrid_mutants, bhv_cellbounds_mutants)
 
+    acq_elite_df = acq_archive.as_pandas(include_solutions=True)
+    acq_archive = update_archive(self, archive=acq_archive, gp=gp_model, candidate_sol=acq_elite_df.solution_batch(),
+        bhv_cellgrid=bhv_cellgrids_mutants, 
+        mes_cellgrid=mes_cellgrid_mutants, 
+        bhv_cellbounds=bhv_cellbounds_mutants)
+
     self.visualize_archive(acq_archive, map_flag=True)
 
     size_t0 = acq_archive.stats.num_elites
@@ -122,7 +128,7 @@ def mes_map_elites(self, acq_archive: GridArchive, acq_flag=False, new_elite_arc
                 # 2. Update Acquisition Archive 
                 #        *before* visualisation
 
-                if remaining_evals % ((n_evals)//2) == 0:
+                if remaining_evals % ((n_evals)//4) == 0:
 
                     # Mutant Update
                     print(f"Mutant t_0: {np.sum(acq_archive.as_pandas().objective_batch())}")
