@@ -46,7 +46,6 @@ SOL_DIMENSION = config.SOL_DIMENSION
 BHV_DIMENSION = config.BHV_DIMENSION
 OBJ_DIMENSION = config.OBJ_DIMENSION
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
-ACQ_MES_MIN_THRESHHOLD = config.ACQ_MES_MIN_THRESHHOLD
 
 def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_prediction_archive=False, acq_flag=False, pred_flag=False, visualize_flag=True, candidate_targetvalues=None):
 
@@ -148,21 +147,11 @@ def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_pred
             acq_elites_solutions = acq_elite_df.solution_batch()
             acq_elites_measures = acq_elite_df.measures_batch()
 
-            obj_elites_solutions = obj_elite_df.solution_batch()
-            obj_elites_objectives = obj_elite_df.objective_batch() if self.acq_ucb_flag else np.full(obj_elites_solutions.shape[0], ACQ_MES_MIN_THRESHHOLD*1.001)
-            obj_elites_measures = obj_elite_df.measures_batch()
-
             self.acq_archive.clear()
             self.update_archive(candidate_sol=acq_elites_solutions, candidate_bhv=acq_elites_measures, acq_flag=True)
             print(self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).head(20).objective_batch())
 
             print("acq archive size after update: ", self.acq_archive.stats.num_elites)
-
-            if self.acq_archive.stats.num_elites < 10 or self.acq_ucb_flag:
-                if self.acq_mes_flag:
-                    obj_elite_df = obj_elite_df.head(int(n_bins*0.05))
-                    obj_elite_df = obj_elite_df.sample(n=BATCH_SIZE, random_state=self.current_seed, replace=True)
-                self.acq_archive.add(obj_elites_solutions, obj_elites_objectives, obj_elites_measures)
 
         print("Best Acq Objective: ", self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).head(1).objective_batch())
         print("Worst Acq Objective: ", self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).tail(1).objective_batch())

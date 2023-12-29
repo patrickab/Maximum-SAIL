@@ -11,8 +11,6 @@ import os
 from config.config import Config
 config = Config(os.path.join(os.path.dirname(__file__), 'config', 'config.ini'))
 PREDICTION_VERIFICATIONS = config.PREDICTION_VERIFICATIONS
-ACQ_UCB_MIN_THRESHHOLD = config.ACQ_UCB_MIN_THRESHHOLD
-ACQ_MES_MIN_THRESHHOLD = config.ACQ_MES_MIN_THRESHHOLD
 INIT_N_ACQ_EVALS = config.INIT_N_ACQ_EVALS
 INIT_N_SOBOL_ACQ = config.INIT_N_SOBOL_ACQ
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
@@ -122,10 +120,11 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
 
     anytime_metric_kwargs = initialize_anytime_metrics(self=self, acq_flag=acq_loop, pred_flag=pred_loop)
 
-    total_eval_budget = anytime_metric_kwargs['total_eval_budget']
     current_eval_budget = anytime_metric_kwargs['current_eval_budget']
     consumed_obj_evals = anytime_metric_kwargs['consumed_obj_evals']
     iteration = anytime_metric_kwargs['iteration']
+    total_eval_budget = anytime_metric_kwargs['total_eval_budget']
+    total_iterations = total_eval_budget//BATCH_SIZE
 
     if acq_loop:
         i_obj_evals = BATCH_SIZE
@@ -136,14 +135,16 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
 
     while(current_eval_budget >= i_obj_evals):
 
-        if consumed_obj_evals == 720:
+        if iteration == total_iterations - 5:
+            # Increase archive resolution for final 5 iterations
             acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
             self.acq_archive = GridArchive(
                 solution_dim=SOL_DIMENSION,
                 dims=OBJ_BHV_NUMBER_BINS,
                 ranges=BHV_VALUE_RANGE,
-                qd_score_offset=-600,
-                threshold_min = ACQ_MES_MIN_THRESHHOLD)
+                dtype=np.float64)
+            self.update_cellgrids()
+            self.update_mutant_cellgrids()
             self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
 
         # Produce new acquisition elites

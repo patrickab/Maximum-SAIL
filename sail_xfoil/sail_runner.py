@@ -20,12 +20,9 @@ BHV_DIMENSION = config.BHV_DIMENSION
 BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 MUTANT_CELLRANGE = config.MUTANT_CELLRANGE
-INIT_N_ACQ_EVALS = config.INIT_N_ACQ_EVALS
-OBJ_MIN_THRESHHOLD = config.OBJ_MIN_THRESHHOLD
 OBJ_BHV_NUMBER_BINS = config.OBJ_BHV_NUMBER_BINS
 ACQ_BHV_NUMBER_BINS = config.ACQ_BHV_NUMBER_BINS
-ACQ_MES_MIN_THRESHHOLD = config.ACQ_MES_MIN_THRESHHOLD
-ACQ_UCB_MIN_THRESHHOLD = config.ACQ_UCB_MIN_THRESHHOLD
+MES_GRID_SIZE = config.MES_GRID_SIZE
 
 ###### Import Custom Scripts ######
 from utils.anytime_archive_visualizer import anytime_archive_visualizer, archive_visualizer
@@ -183,12 +180,12 @@ class SailRun:
 
     def visualize_archive(self, archive, obj_flag=False, acq_flag=False, pred_flag=False, new_flag=False, map_flag=False):
 
-        vmin = OBJ_MIN_THRESHHOLD
+        vmin = 0
         vmax = MAX_RENDER_THRESHHOLD
 
         if self.acq_mes_flag and (acq_flag or map_flag):
             vmin = 0.0
-            vmax = 0.4
+            vmax = 0.6
 
         # all visualisations of the acquisition archive represent the state of the archive, which candidate solutions are sampled from for objective evaluations
 
@@ -238,17 +235,16 @@ class SailRun:
             return
 
         if acq_flag:
-            n = BATCH_SIZE
-            for i in range(0, candidate_sol.shape[0], n):
+            for i in range(0, candidate_sol.shape[0], BATCH_SIZE):
 
                 if self.acq_ucb_flag:
-                    i_candidate_sol = candidate_sol[i:i+n]
-                    i_candidate_bhv = candidate_bhv[i:i+n]
+                    i_candidate_sol = candidate_sol[i:i+BATCH_SIZE]
+                    i_candidate_bhv = candidate_bhv[i:i+BATCH_SIZE]
                     i_candidate_acq = self.acq_function(self=self, genomes=i_candidate_sol)
                     self.acq_archive.add(i_candidate_sol, i_candidate_acq, i_candidate_bhv)
 
                 elif self.acq_mes_flag:
-                    i_candidate_sol = candidate_sol[i:i+n]
+                    i_candidate_sol = candidate_sol[i:i+BATCH_SIZE]
                     i_candidate_acq = self.acq_function(self=self, genomes=i_candidate_sol)
                     if niche_restricted_update:
                         self.acq_function(self=self, genomes=i_candidate_sol, niche_restricted_update=True)
@@ -258,7 +254,7 @@ class SailRun:
                     else:
                         break
 
-                    i_candidate_bhv = candidate_bhv[i:i+n]
+                    i_candidate_bhv = candidate_bhv[i:i+BATCH_SIZE]
                     self.acq_archive.add(i_candidate_sol, i_candidate_acq, i_candidate_bhv)
 
 
@@ -274,71 +270,51 @@ class SailRun:
         # https://www1.grc.nasa.gov/beginners-guide-to-aeronautics/lift-to-drag-ratio/
 
         # therefore, in order to produce qualitative results, it makes sense to set a minimum threshold
-        # in future work (for generalization), this threshold could be set as a hyperparameter or class attribute
 
-        min_obj_threshhold = OBJ_MIN_THRESHHOLD
-        min_pred_threshhold = OBJ_MIN_THRESHHOLD
-
-        if self.acq_function == acq_ucb:
-            min_acq_threshhold = ACQ_UCB_MIN_THRESHHOLD
-        if self.acq_function == acq_mes:
-            min_acq_threshhold = ACQ_MES_MIN_THRESHHOLD
-
-        # ToDO:does not work yet
-        class _GridArchive(GridArchive):
-            def set_threshold(self, threshold_min):
-                self._threshold_min = threshold_min
-
-        obj_archive = _GridArchive(
+        obj_archive = GridArchive(
             solution_dim=SOL_DIMENSION,
             dims=OBJ_BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
-            qd_score_offset=-600,
-            threshold_min = min_obj_threshhold
+            dtype=np.float64,
         )
 
         ACQ_BINS = ACQ_BHV_NUMBER_BINS if self.acq_mes_flag else OBJ_BHV_NUMBER_BINS
-        acq_archive = _GridArchive(
+        acq_archive = GridArchive(
             solution_dim=SOL_DIMENSION,
             dims=ACQ_BINS,
             ranges=BHV_VALUE_RANGE,
-            qd_score_offset=-600,
-            threshold_min = min_acq_threshhold
+            dtype=np.float64,
         )
 
-        pred_archive = _GridArchive(
+        pred_archive = GridArchive(
             solution_dim=SOL_DIMENSION,
             dims=OBJ_BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
-            qd_score_offset=-600,
-            threshold_min = min_pred_threshhold
+            dtype=np.float64,
         )
 
         # Used for visualizing new elites (improved + new bin discoveries)
-        new_archive = _GridArchive(
+        new_archive = GridArchive(
             solution_dim=SOL_DIMENSION,
             dims=OBJ_BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
-            qd_score_offset=-600,
-            threshold_min = min_obj_threshhold
+            dtype=np.float64,
         )
 
         # Used for evaluating quality of results
-        evaluated_predictions_archive = _GridArchive(
+        evaluated_predictions_archive = GridArchive(
             solution_dim=SOL_DIMENSION,
             dims=OBJ_BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
-            qd_score_offset=-600,
-            threshold_min = -1000 # low perfoming predictions shall be stored under any circumstances
+            dtype=np.float64,
         )
 
         # Used for visualizing prediction errors
-        prediction_error_archive = _GridArchive(
+        prediction_error_archive = GridArchive(
             solution_dim=SOL_DIMENSION,
             dims=OBJ_BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
-            qd_score_offset=-600,
-            threshold_min = -0.01 # percentual errors are always positive
+            dtype=np.float64
         )
 
         return obj_archive, acq_archive, pred_archive, new_archive, evaluated_predictions_archive, prediction_error_archive
@@ -356,21 +332,18 @@ def scale_samples(samples, boundaries=SOL_VALUE_RANGE):
 
 def store_final_data(self: SailRun):
 
-    max_acq_threshhold = 5.0 if self.acq_ucb_flag else 0.25
-    
-    min_obj_threshhold = OBJ_MIN_THRESHHOLD
-    min_pred_threshhold = OBJ_MIN_THRESHHOLD
+    max_acq_threshhold = MAX_RENDER_THRESHHOLD if self.acq_ucb_flag else 0.6
 
-    if self.acq_function == acq_ucb:
-        min_acq_threshhold = ACQ_UCB_MIN_THRESHHOLD
-    if self.acq_function == acq_mes:
-        min_acq_threshhold = 0
+    min_obj_threshhold = 0
+    min_pred_threshhold = 0
+    min_acq_threshhold = 0
 
     archive_visualizer(self=self, archive=self.obj_archive, prefix="obj", name="Objective Archive", min_val=min_obj_threshhold, max_val=MAX_RENDER_THRESHHOLD)
     archive_visualizer(self=self, archive=self.acq_archive, prefix="acq", name="Acquisition Archive", min_val=min_acq_threshhold, max_val=max_acq_threshhold)
     archive_visualizer(self=self, archive=self.pred_archive, prefix="pred", name="Prediction Archive (unevaluated)", min_val=min_pred_threshhold, max_val=MAX_RENDER_THRESHHOLD)
     archive_visualizer(self=self, archive=self.evaluated_predictions_archive, prefix="evaluted_pred", name="Prediction Archive (evaluated)", min_val=min_pred_threshhold, max_val=MAX_RENDER_THRESHHOLD)
-    archive_visualizer(self=self, archive=self.prediction_error_archive, prefix="error", name="Prediction Error Archive (percentual)", min_val=0, max_val=0.10) # render maximum of 10% error (for better visualization) - errors above 10% are stored in stats_log
+    archive_visualizer(self=self, archive=self.prediction_error_archive, prefix="error", name="Prediction Error Archive (percentual)", min_val=0, max_val=0.10)
+    #                                                        render maximum of 10% error (for better visualization) - errors above 10% are stored in stats_log
 
     initial_seed = self.initial_seed
     domain = self.domain
@@ -417,6 +390,7 @@ def evaluate_prediction_archive(self: SailRun):
     unevaluated_prediction_objectives = unevaluated_prediction_elites.objective_batch()
     unevaluated_prediction_solutions = unevaluated_prediction_elites.solution_batch()
     unevaluated_prediction_measures = unevaluated_prediction_elites.measures_batch()
+
     eval_xfoil_loop(self, solution_batch=unevaluated_prediction_solutions, measures_batch=unevaluated_prediction_measures, evaluate_prediction_archive=True, candidate_targetvalues=unevaluated_prediction_objectives)
 
     # Extract all elites from the evaluated predictions archive - (sorted by index for comparison)
@@ -425,13 +399,13 @@ def evaluate_prediction_archive(self: SailRun):
     unevaluated_prediction_elites = unevaluated_prediction_elites.sort_values(by=['index'], ascending=True)
 
     # Calculate mask for converged prediction elites
-    evaluated_solution_batch = evaluated_prediction_elites.solution_batch()
-    unevaluated_solution_batch = unevaluated_prediction_elites.solution_batch()
-    is_converged_prediction_elite = np.isin(unevaluated_solution_batch, evaluated_solution_batch).all(1)
+    evaluated_solution_indices = evaluated_prediction_elites['index']
+    unevaluated_solution_indices = unevaluated_prediction_elites['index']
+    is_converged_prediction_elite = np.isin(unevaluated_solution_indices, evaluated_solution_indices)
 
-    # Extract converged prediction elites
-    unevaluated_predictions = unevaluated_prediction_elites[np.isin(unevaluated_prediction_elites.solution_batch(), evaluated_prediction_elites.solution_batch()).all(1)]
-    evaluated_predictions = evaluated_prediction_elites[np.isin(evaluated_prediction_elites.solution_batch(), unevaluated_predictions.solution_batch()).all(1)]
+    # Drop all non-converged prediction elites
+    unevaluated_predictions = unevaluated_prediction_elites[is_converged_prediction_elite]
+    evaluated_predictions = evaluated_prediction_elites
 
     prediction_error = unevaluated_predictions.objective_batch() - evaluated_predictions.objective_batch()
     percentual_error = np.abs(prediction_error)/evaluated_predictions.objective_batch()
@@ -468,9 +442,9 @@ def evaluate_prediction_archive(self: SailRun):
         file.write(verified_elites_stats)
         file.write(error_str)
 
-    true_objective = evaluated_prediction_elites.objective_batch()
-    predicted_objective = unevaluated_prediction_elites.objective_batch()
-    pprint(predicted_objective, true_objective, percentual_error)
+    true_obj = evaluated_predictions.objective_batch()
+    pred_obj = unevaluated_predictions.objective_batch()
+    pprint(true_obj, pred_obj, percentual_error)
     print("\nMAE Error: ", mae_error, "\n", "MSE Error: ", mse_error, "\n", "Mean Percentual Error: ", mpe_error, "\n")
 
     os.makedirs("csv") if not os.path.exists("csv") else None
@@ -522,7 +496,7 @@ def mes_sobol_cellgrids(self, mutant_cellrange=MUTANT_CELLRANGE):
     # why would this approach be naive? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.mp4
 
     """
-    sobol_cellgrid = create_sobol_samples(order=2000, dim=SOL_DIMENSION, seed=self.current_seed).T
+    sobol_cellgrid = create_sobol_samples(order=MES_GRID_SIZE, dim=SOL_DIMENSION, seed=self.current_seed).T
 
     archive = self.acq_archive
     n_cells = np.prod(archive.dims)
@@ -543,7 +517,7 @@ def mes_sobol_cellgrids(self, mutant_cellrange=MUTANT_CELLRANGE):
     cell_range_1 = np.diff(boundaries_1)[0]
 
     # 625 bins, 9000 samples, 2 dimensions
-    bhv_cellgrids = np.empty((n_cells, 2000, BHV_DIMENSION))
+    bhv_cellgrids = np.empty((n_cells, MES_GRID_SIZE, BHV_DIMENSION))
     bhv_cellbounds = np.empty((n_cells, BHV_DIMENSION, 2))
 
     for i in range(n_cells):

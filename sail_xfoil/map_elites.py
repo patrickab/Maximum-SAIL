@@ -59,9 +59,8 @@ BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 ACQ_N_MAP_EVALS = config.ACQ_N_MAP_EVALS
 PRED_N_MAP_EVALS = config.PRED_N_MAP_EVALS
 PREDICTION_VERIFICATIONS = config.PREDICTION_VERIFICATIONS
-ACQ_MES_MIN_THRESHHOLD = config.ACQ_MES_MIN_THRESHHOLD
 
-def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None, new_elite_threshold=0):
+def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
 
     print("\n\nInitialize Map-Elites [...]")
 
@@ -72,9 +71,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None, ne
         new_elite_archive = GridArchive(
             solution_dim=SOL_DIMENSION,
             dims=number_bins,
-            ranges=BHV_VALUE_RANGE,
-            qd_score_offset=-600,
-            threshold_min = new_elite_threshold,)
+            ranges=BHV_VALUE_RANGE,)
 
     mes_flag = self.acq_mes_flag
     if acq_flag:
@@ -142,7 +139,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None, ne
                 if remaining_evals % (BATCH_SIZE*3) == 0:
                     self.visualize_archive(archive=self.acq_archive, map_flag=True)
                     acquisition_sum = np.sum(self.acq_archive.as_pandas().objective_batch())
-                    print(f"Acquisition Value Sum: {acquisition_sum}")
+                    print(f"Acquisition Value Sum: {acquisition_sum:.3f}")
                     acq_sum_t0 = np.sum(self.acq_archive.as_pandas().objective_batch())
                     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
                     target_archive.clear()
@@ -150,7 +147,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None, ne
                     target_archive = self.acq_archive
                     acq_sum_t1 = np.sum(self.acq_archive.as_pandas().objective_batch())
                     improvement = acq_sum_t1 - acq_sum_t0
-                    print(f"Acquisition Value Sum (after update): {acq_sum_t1}")
+                    print(f"Acquisition Value Sum (after update): {acq_sum_t1:.3f}")
                     print(f"Improvement: {improvement}")
 
             # Break loop if improvement is too small
@@ -173,6 +170,13 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None, ne
     print(f"\n{target} Size: ", str(size_t1))
     print("[...] End Map-Elites\n\n")
     if self.acq_mes_flag and acq_flag: self.mes_sobol_cellgrids = None # free RAM
+
+    # For benchmarking purposes only:
+    #   -> optimize MES using botorch.acqf()
+    #   -> compare results to MES optimization
+    if self.acq_mes_flag:
+        optimize_mes(self, map_flag=True)
+
     return new_elite_archive, size_t0, size_t1
 
 
