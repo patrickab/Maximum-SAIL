@@ -19,8 +19,6 @@ For SAIL these are
     - Acquisition Values
     - Prediction Values
 
-
-
 In order to generalize this function for problem domains
 different than XFOIL, the generate_parsec_coordinates()
 function and the codeblock checking for validity can be
@@ -33,17 +31,16 @@ from ribs.schedulers import Scheduler
 from ribs.archives import GridArchive
 from ribs.emitters import GaussianEmitter
 from ribs.emitters._emitter_base import EmitterBase
+from chaospy import create_sobol_samples
+from botorch.acquisition import qLowerBoundMaxValueEntropy, qMaxValueEntropy
 from botorch.optim import optimize_acqf
 from tqdm import tqdm
 import numpy as np
 
 ##### Import custom scripts #####
-from chaospy import create_sobol_samples
 from xfoil.generate_airfoils import generate_parsec_coordinates
-from botorch.acquisition import qLowerBoundMaxValueEntropy, qMaxValueEntropy
 from utils.pprint_nd import pprint
 import torch
-
 from config.config import Config
 import numpy as np
 import time
@@ -58,7 +55,6 @@ OBJ_BHV_NUMBER_BINS = config.OBJ_BHV_NUMBER_BINS
 ACQ_BHV_NUMBER_BINS = config.ACQ_BHV_NUMBER_BINS
 BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 ACQ_N_MAP_EVALS = config.ACQ_N_MAP_EVALS
-ACQ_MES_MIN_THRESHHOLD = config.ACQ_MES_MIN_THRESHHOLD
 
 # MES Parameters
 MES_MUTANTS = config.MES_MUTANTS
@@ -93,8 +89,6 @@ def mes_map_elites(self, acq_archive: GridArchive, acq_flag=None, pred_flag=None
         bhv_cellgrid=bhv_cellgrids_mutants, 
         mes_cellgrid=mes_cellgrid_mutants, 
         bhv_cellbounds=bhv_cellbounds_mutants)
-
-    self.visualize_archive(acq_archive, map_flag=True)
 
     size_t0 = acq_archive.stats.num_elites
     print(f"Acq Size: ", str(size_t0))
@@ -142,7 +136,6 @@ def mes_map_elites(self, acq_archive: GridArchive, acq_flag=None, pred_flag=None
                         mes_cellgrid=mes_cellgrid_restricted, 
                         bhv_cellbounds=bhv_cellbounds_restricted)
                     print(f"Mutant t_1: {np.sum(acq_archive.as_pandas().objective_batch())}")
-
                 self.visualize_archive(archive=acq_archive, map_flag=True)
 
             remaining_evals -= BATCH_SIZE
@@ -333,7 +326,7 @@ def mes_sobol_cellgrids(self, mutant_cellrange, cell_indices=None):
 def update_archive(self, gp, archive: GridArchive, bhv_cellgrid, mes_cellgrid, bhv_cellbounds, candidate_sol):
 
     acq_sum_t0 = np.sum(archive.as_pandas().objective_batch())
-    acq_t0_df = archive.as_pandas(include_solutions=True)
+    acq_t0_df = archive.as_pandas(include_solutions=True).sort_index()
 
     if candidate_sol.shape[0] == 0:
         return
@@ -357,10 +350,12 @@ def update_archive(self, gp, archive: GridArchive, bhv_cellgrid, mes_cellgrid, b
         
         archive.add(solution_batch, acquisition_batch, measure_batch)
 
-    archive.add(acq_t0_df.solution_batch(), acq_t0_df.objective_batch(), acq_t0_df.measures_batch())
     acq_sum_t1 = np.sum(archive.as_pandas().objective_batch())
+    acq_t1_df = archive.as_pandas(include_solutions=True).sort_index()
 
     if acq_sum_t0 > acq_sum_t1:
+        acq_t1_df = acq_t1_df.assign(objective_difference=acq_t1_df.objective_batch() - acq_t0_df.objective_batch())
+        acq_t1_df = acq_t1_df.assign(objective_increase=(acq_t1_df.objective_batch() / acq_t0_df.objective_batch()) - 1)
         raise ValueError("acq_sum_t0 < acq_sum_t1")
 
     return archive
@@ -482,17 +477,3 @@ class _Scheduler(Scheduler):
         "One potential cause is that `threshold_min` is too high in this "
         "archive, i.e., solutions are not being inserted because their "
         "objective value does not exceed `threshold_min`.")
-    
-
-def create_new_elite_archive(acq_flag=False, new_elite_archive=None, new_elite_threshold=0, pred_flag=None):
-
-    number_bins = ACQ_BHV_NUMBER_BINS if acq_flag else OBJ_BHV_NUMBER_BINS
-
-    new_elite_archive = GridArchive(
-        solution_dim=SOL_DIMENSION,
-        dims=number_bins,
-        ranges=BHV_VALUE_RANGE,
-        qd_score_offset=-600,
-        threshold_min = new_elite_threshold,)
-    
-    return new_elite_archive

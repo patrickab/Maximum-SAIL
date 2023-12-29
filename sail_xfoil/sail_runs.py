@@ -11,8 +11,6 @@ import os
 from config.config import Config
 config = Config(os.path.join(os.path.dirname(__file__), 'config', 'config.ini'))
 PREDICTION_VERIFICATIONS = config.PREDICTION_VERIFICATIONS
-ACQ_UCB_MIN_THRESHHOLD = config.ACQ_UCB_MIN_THRESHHOLD
-ACQ_MES_MIN_THRESHHOLD = config.ACQ_MES_MIN_THRESHHOLD
 INIT_N_ACQ_EVALS = config.INIT_N_ACQ_EVALS
 INIT_N_SOBOL_ACQ = config.INIT_N_SOBOL_ACQ
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE

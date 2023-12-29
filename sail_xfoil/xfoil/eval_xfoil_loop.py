@@ -34,7 +34,6 @@ SOL_DIMENSION = config.SOL_DIMENSION
 BHV_DIMENSION = config.BHV_DIMENSION
 OBJ_DIMENSION = config.OBJ_DIMENSION
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
-ACQ_MES_MIN_THRESHHOLD = config.ACQ_MES_MIN_THRESHHOLD
 
 def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_prediction_archive=False, acq_flag=False, pred_flag=False, visualize_flag=True, candidate_targetvalues=None):
 

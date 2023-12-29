@@ -55,7 +55,6 @@ BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 ACQ_N_MAP_EVALS = config.ACQ_N_MAP_EVALS
 PRED_N_MAP_EVALS = config.PRED_N_MAP_EVALS
 PREDICTION_VERIFICATIONS = config.PREDICTION_VERIFICATIONS
-ACQ_MES_MIN_THRESHHOLD = config.ACQ_MES_MIN_THRESHHOLD
 
 def map_elites(self, target_archive, acq_flag=False, pred_flag=False):
 

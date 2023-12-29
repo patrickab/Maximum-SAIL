@@ -20,12 +20,8 @@ MES_GRID_SIZE = config.MES_GRID_SIZE
 BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 MUTANT_CELLRANGE = config.MUTANT_CELLRANGE
-INIT_N_ACQ_EVALS = config.INIT_N_ACQ_EVALS
-OBJ_MIN_THRESHHOLD = config.OBJ_MIN_THRESHHOLD
 OBJ_BHV_NUMBER_BINS = config.OBJ_BHV_NUMBER_BINS
 ACQ_BHV_NUMBER_BINS = config.ACQ_BHV_NUMBER_BINS
-ACQ_MES_MIN_THRESHHOLD = config.ACQ_MES_MIN_THRESHHOLD
-ACQ_UCB_MIN_THRESHHOLD = config.ACQ_UCB_MIN_THRESHHOLD
 
 ###### Import Custom Scripts ######
 from utils.anytime_archive_visualizer import anytime_archive_visualizer, archive_visualizer
@@ -173,7 +169,7 @@ class SailRun:
 
     def visualize_archive(self, archive, obj_flag=False, acq_flag=False, pred_flag=False, new_flag=False, map_flag=False):
 
-        vmin = OBJ_MIN_THRESHHOLD
+        vmin = 0
         vmax = MAX_RENDER_THRESHHOLD
 
         if self.acq_mes_flag and (acq_flag or map_flag):
@@ -264,69 +260,51 @@ class SailRun:
 
         # therefore, in order to produce qualitative results, it makes sense to set a minimum threshold
 
-        min_obj_threshhold = OBJ_MIN_THRESHHOLD
-        min_pred_threshhold = OBJ_MIN_THRESHHOLD
-
-        if self.acq_function == acq_ucb:
-            min_acq_threshhold = ACQ_UCB_MIN_THRESHHOLD
-        if self.acq_function == acq_mes:
-            min_acq_threshhold = ACQ_MES_MIN_THRESHHOLD
-
-        # ToDO:does not work yet
-        class _GridArchive(GridArchive):
-            def set_threshold(self, threshold_min):
-                self._threshold_min = threshold_min
-
-        obj_archive = _GridArchive(
+        obj_archive = GridArchive(
             solution_dim=SOL_DIMENSION,
             dims=OBJ_BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
             qd_score_offset=-600,
-            threshold_min = min_obj_threshhold
+            dtype=np.float64,
         )
 
         ACQ_BINS = ACQ_BHV_NUMBER_BINS if self.acq_mes_flag else OBJ_BHV_NUMBER_BINS
-        acq_archive = _GridArchive(
+        acq_archive = GridArchive(
             solution_dim=SOL_DIMENSION,
             dims=ACQ_BINS,
             ranges=BHV_VALUE_RANGE,
-            qd_score_offset=-600,
-            threshold_min = min_acq_threshhold
+            dtype=np.float64,
         )
 
-        pred_archive = _GridArchive(
+        pred_archive = GridArchive(
             solution_dim=SOL_DIMENSION,
             dims=OBJ_BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
-            qd_score_offset=-600,
-            threshold_min = min_pred_threshhold
+            dtype=np.float64,
         )
 
         # Used for visualizing new elites (improved + new bin discoveries)
-        new_archive = _GridArchive(
+        new_archive = GridArchive(
             solution_dim=SOL_DIMENSION,
             dims=OBJ_BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
-            qd_score_offset=-600,
-            threshold_min = min_obj_threshhold
+            dtype=np.float64,
         )
 
         # Used for evaluating quality of results
-        evaluated_predictions_archive = _GridArchive(
+        evaluated_predictions_archive = GridArchive(
             solution_dim=SOL_DIMENSION,
             dims=OBJ_BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
-            qd_score_offset=-600,
-            threshold_min = -1000 # low perfoming predictions shall be stored under any circumstances
+            dtype=np.float64,
         )
 
         # Used for visualizing prediction errors
-        prediction_error_archive = _GridArchive(
+        prediction_error_archive = GridArchive(
             solution_dim=SOL_DIMENSION,
             dims=OBJ_BHV_NUMBER_BINS,
             ranges=BHV_VALUE_RANGE,
-            qd_score_offset=-600,
-            threshold_min = -0.01 # percentual errors are always positive
+            dtype=np.float64
         )
 
         return obj_archive, acq_archive, pred_archive, new_archive, evaluated_predictions_archive, prediction_error_archive
@@ -334,21 +312,18 @@ class SailRun:
 
 def store_final_data(self: SailRun):
 
-    max_acq_threshhold = 5.0 if self.acq_ucb_flag else 0.6
-    
-    min_obj_threshhold = OBJ_MIN_THRESHHOLD
-    min_pred_threshhold = OBJ_MIN_THRESHHOLD
+    max_acq_threshhold = MAX_RENDER_THRESHHOLD if self.acq_ucb_flag else 0.6
 
-    if self.acq_function == acq_ucb:
-        min_acq_threshhold = ACQ_UCB_MIN_THRESHHOLD
-    if self.acq_function == acq_mes:
-        min_acq_threshhold = 0
+    min_obj_threshhold = 0
+    min_pred_threshhold = 0
+    min_acq_threshhold = 0
 
     archive_visualizer(self=self, archive=self.obj_archive, prefix="obj", name="Objective Archive", min_val=min_obj_threshhold, max_val=MAX_RENDER_THRESHHOLD)
     archive_visualizer(self=self, archive=self.acq_archive, prefix="acq", name="Acquisition Archive", min_val=min_acq_threshhold, max_val=max_acq_threshhold)
     archive_visualizer(self=self, archive=self.pred_archive, prefix="pred", name="Prediction Archive (unevaluated)", min_val=min_pred_threshhold, max_val=MAX_RENDER_THRESHHOLD)
     archive_visualizer(self=self, archive=self.evaluated_predictions_archive, prefix="evaluted_pred", name="Prediction Archive (evaluated)", min_val=min_pred_threshhold, max_val=MAX_RENDER_THRESHHOLD)
-    archive_visualizer(self=self, archive=self.prediction_error_archive, prefix="error", name="Prediction Error Archive (percentual)", min_val=0, max_val=0.10) # render maximum of 10% error (for better visualization) - errors above 10% are stored in stats_log
+    archive_visualizer(self=self, archive=self.prediction_error_archive, prefix="error", name="Prediction Error Archive (percentual)", min_val=0, max_val=0.10)
+    #                                                        render maximum of 10% error (for better visualization) - errors above 10% are stored in stats_log
 
     initial_seed = self.initial_seed
     domain = self.domain
