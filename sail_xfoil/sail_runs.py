@@ -12,22 +12,22 @@ from config.config import Config
 config = Config(os.path.join(os.path.dirname(__file__), 'config', 'config.ini'))
 PREDICTION_VERIFICATIONS = config.PREDICTION_VERIFICATIONS
 INIT_N_ACQ_EVALS = config.INIT_N_ACQ_EVALS
-INIT_N_SOBOL_ACQ = config.INIT_N_SOBOL_ACQ
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 ACQ_N_OBJ_EVALS = config.ACQ_N_OBJ_EVALS
 ACQ_N_MAP_EVALS = config.ACQ_N_MAP_EVALS
 PRED_N_OBJ_EVALS = config.PRED_N_OBJ_EVALS
 PRED_N_MAP_EVALS = config.PRED_N_MAP_EVALS
 SOL_DIMENSION = config.SOL_DIMENSION
-INIT_N_EVALS = config.INIT_N_EVALS
+INIT_N_SOBOL_EVALS = config.INIT_N_SOBOL_EVALS
+INIT_N_SOBOL_EVALS = config.INIT_N_SOBOL_EVALS
 BATCH_SIZE = config.BATCH_SIZE
 
-n_obj_evals = INIT_N_EVALS + ACQ_N_OBJ_EVALS + PRED_N_OBJ_EVALS + INIT_N_ACQ_EVALS
+n_obj_evals = INIT_N_SOBOL_EVALS + ACQ_N_OBJ_EVALS + PRED_N_OBJ_EVALS + INIT_N_ACQ_EVALS
 CSV_BUFFERSIZE = (n_obj_evals/BATCH_SIZE) / 8
 
 ###### Import Custom Scripts ######
 
-from xfoil.eval_xfoil_loop import eval_xfoil_loop
+from xfoil.eval_xfoil_loop import eval_xfoil_loop, xfoil
 from utils.pprint_nd import pprint
 from utils.anytime_metrics import initialize_anytime_metrics, calculate_anytime_metrics, store_anytime_metrics
 from xfoil.generate_airfoils import generate_parsec_coordinates
@@ -75,14 +75,13 @@ def run_vanilla_sail(self: SailRun):
 
         # Produce new acquisition elites
         target_t0 = self.acq_archive.stats.num_elites
-        new_acq_elites, _, _ = map_elites(self, acq_flag=True)
-        if new_acq_elites.stats.num_elites < BATCH_SIZE: ensure_n_new_elites(self=self, new_elite_archive=new_acq_elites, acq_flag=True)                  # Sample until enough new acquisition elites are found
+        map_elites(self, target_archive=self.acq_archive, acq_flag=True)
         candidate_solutions_df = self.acq_archive.as_pandas(include_solutions=True).sample(n=BATCH_SIZE, random_state=self.initial_seed, replace=False)   # IMPORTANT ToDo: sobol sample in seed paper
         target_t1 = self.acq_archive.stats.num_elites
 
         self.visualize_archive(archive=self.acq_archive, acq_flag=True)
 
-        improved_elites, new_bin_elites = prepare_sample_elites(self=self, new_elite_archive=new_acq_elites, old_elite_archive=self.obj_archive)  # Seperate new acq elites for calculating anytime metrics (not used for sampling)
+        improved_elites, new_bin_elites = prepare_sample_elites(self=self, target_archive=self.acq_archive)  # Seperate new acq elites for calculating anytime metrics (not used for sampling)
 
         solution_batch = candidate_solutions_df.solution_batch()
         objective_batch = candidate_solutions_df.objective_batch()
@@ -132,6 +131,12 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
     if acq_loop:
         i_obj_evals = BATCH_SIZE
         target_archive = self.acq_archive
+        if self.acq_mes_flag:
+            n_bins = np.prod(self.acq_archive.dims)
+            obj_elite_df = self.obj_archive.as_pandas(include_solutions=True).sample(frac=1, random_state=self.current_seed)
+            obj_elite_df = obj_elite_df.head(int(n_bins*0.6))
+            self.sol_array = obj_elite_df.solution_batch()
+            self.obj_array = np.vstack(obj_elite_df.objective_batch())
     if pred_loop:
         i_obj_evals = PRED_N_OBJ_EVALS//PREDICTION_VERIFICATIONS
         target_archive = self.pred_archive
@@ -143,9 +148,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
             self.acq_archive = GridArchive(
                 solution_dim=SOL_DIMENSION,
                 dims=OBJ_BHV_NUMBER_BINS,
-                ranges=BHV_VALUE_RANGE,
-                qd_score_offset=-600,
-                threshold_min = ACQ_MES_MIN_THRESHHOLD)
+                ranges=BHV_VALUE_RANGE,)
             self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
 
         # Produce new acquisition elites
@@ -223,7 +226,7 @@ def ensure_n_new_elites(self: SailRun, new_elite_archive, acq_flag=False, pred_f
 
         print(f'\n\nNot enough {target} Improvements: Re-entering {target}')
         print(f'New {target} Elites (before): {new_elite_archive.stats.num_elites}')
-        new_elite_archive, _, _ = map_loop(self, target_archive, new_elite_archive=new_elite_archive, acq_flag=acq_flag, pred_flag=pred_flag, re_enter_flag=True)
+        new_elite_archive, _, _ = map_loop(self, target_archive, acq_flag=acq_flag, pred_flag=pred_flag, re_enter_flag=True)
         print(f'New {target} Elites (after):  {new_elite_archive.stats.num_elites}')
 
     return new_elite_archive
@@ -365,17 +368,21 @@ def initialize_archive(self):
     ucb_flag = self.acq_ucb_flag
 
     # visualize empty acquisition archive to ensure videos of equal length
-    for i in range(0, INIT_N_EVALS, BATCH_SIZE):
+    for i in range(0, INIT_N_SOBOL_EVALS, BATCH_SIZE):
         self.visualize_archive(self.acq_archive, acq_flag=True)
 
     # calculate initial sobol sample
-    solution_batch = create_sobol_samples(order=INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed)
-    solution_batch = scale_samples(solution_batch.T)
+    solution_batch = create_sobol_samples(order=INIT_N_SOBOL_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed)
+    solution_batch = solution_batch.T
+    solution_batch = scale_samples(solution_batch)
     measures_batch = solution_batch[:, 1:3]
     generate_parsec_coordinates(solution_batch)
-    eval_xfoil_loop(self, solution_batch=solution_batch, measures_batch=measures_batch, acq_flag=False)
+    conv_errors, success_indices, obj_batch = xfoil(iterations=INIT_N_SOBOL_EVALS)
+    self.update_gp_data(new_solutions=solution_batch[success_indices], new_objectives=obj_batch)
+    self.update_gp_model()
+    gp = self.gp_model
 
-    for i in range(0, INIT_N_EVALS, BATCH_SIZE):
+    for i in range(0, INIT_N_SOBOL_EVALS, BATCH_SIZE):
         self.visualize_archive(self.acq_archive, acq_flag=True)
 
     gp = self.gp_model
@@ -405,8 +412,8 @@ def initialize_archive(self):
         while remaining_evals > 0:
 
             # calculate MES Acquisition Elites
-            new_elite_archive, _, _ = map_elites(self, acq_flag=True)
-            improved_elites, new_bin_elites = prepare_sample_elites(self=self, new_elite_archive=new_elite_archive, old_elite_archive=self.obj_archive)
+            new_elite_archive, _, _ = map_elites(self, acq_flag=True, target_archive=self.acq_archive)
+            improved_elites, new_bin_elites = prepare_sample_elites(self=self, target_archive=self.acq_archive)      # Split new_target_elites into improved elites & new bin elites, then calculate acquisition improvement
             candidate_solutions_df = select_samples(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, acq_flag=True, curiosity=7)            # Select samples based on exploration behavior defined in the class constructor
 
             self.visualize_archive(archive=self.acq_archive, acq_flag=True)
@@ -438,8 +445,8 @@ def initialize_archive(self):
         while remaining_evals > 0:
 
             # calculate UCB Acquisition Elites
-            new_elite_archive, _, _ = map_elites(self, acq_flag=True)
-            improved_elites, new_bin_elites = prepare_sample_elites(self=self, new_elite_archive=new_elite_archive, old_elite_archive=self.obj_archive)                                           # Split new_target_elites into improved elites & new bin elites, then calculate acquisition improvement
+            _, _ = map_elites(self, acq_flag=True, target_archive=self.acq_archive)
+            improved_elites, new_bin_elites = prepare_sample_elites(self=self, target_archive=self.acq_archive)                                           # Split new_target_elites into improved elites & new bin elites, then calculate acquisition improvement
             candidate_solutions_df = select_samples(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, acq_flag=True, curiosity=3)     # Select samples based on exploration behavior defined in the class constructor
 
             self.visualize_archive(archive=self.acq_archive, acq_flag=True)
@@ -465,13 +472,18 @@ def initialize_archive(self):
         self.acq_mes_flag = True
         self.acq_ucb_flag = False
 
-    if self.acq_mes_flag:
-        self.update_cellgrids()
-        self.update_mutant_cellgrids()
     acq_archive_df = self.acq_archive.as_pandas(include_solutions=True)
-    acq_archive_solutions = acq_archive_df.solution_batch()
-    acq_archive_measures = acq_archive_df.measures_batch()
     self.acq_archive.clear()
-    self.update_archive(candidate_sol=acq_archive_solutions, candidate_bhv=acq_archive_measures, acq_flag=True)
+
+    if not self.acq_mes_flag:
+        self.update_archive(candidate_sol=acq_archive_df.solution_batch(), candidate_bhv=acq_archive_df.measures_batch(), acq_flag=True)
+    else:
+        # Randomly select 10 bins & add them to acq archive
+        # These 10 bins will be used for initializing the
+        # acquisition archive with MES values by applying
+        # botorch.acqf()
+        acq_archive_df = acq_archive_df.sample(frac=1, random_state=self.initial_seed)
+        acq_archive_df = acq_archive_df.head(10)
+        self.acq_archive.add(acq_archive_df.solution_batch(), np.zeros(acq_archive_df.shape[0])+0.00000001, acq_archive_df.measures_batch())
 
     print("\n[...] Terminate init_archive()\n")

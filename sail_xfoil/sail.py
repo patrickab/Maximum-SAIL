@@ -94,7 +94,7 @@ def sail(initial_seed, acq_ucb_flag=False, acq_mes_flag=False, sail_vanilla_flag
     if current_run.pred_verific_flag:
         run_custom_sail(current_run, pred_loop=True)
     else:
-        map_elites(current_run, pred_flag=True)
+        map_elites(current_run, target_archive=current_run.pred_archive, pred_flag=True)
 
     evaluate_prediction_archive(current_run)
     store_final_data(current_run)

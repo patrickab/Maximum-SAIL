@@ -62,6 +62,7 @@ MES_GRID_SIZE = config.MES_GRID_SIZE
 SIGMA_MUTANTS = config.SIGMA_MUTANTS
 NUM_MV_SAMPLES = config.NUM_MV_SAMPLES
 MUTANT_CELLRANGE = config.MUTANT_CELLRANGE
+N_BOTORCH_SAMPLES = config.N_BOTORCH_SAMPLES
 
 
 def mes_map_elites(self, acq_archive: GridArchive, acq_flag=None, pred_flag=None):
@@ -86,9 +87,21 @@ def mes_map_elites(self, acq_archive: GridArchive, acq_flag=None, pred_flag=None
     acq_elite_df = acq_archive.as_pandas(include_solutions=True)
     acq_archive.clear()
     acq_archive = update_archive(self, archive=acq_archive, gp=gp_model, candidate_sol=acq_elite_df.solution_batch(),
-        bhv_cellgrid=bhv_cellgrids_mutants, 
-        mes_cellgrid=mes_cellgrid_mutants, 
-        bhv_cellbounds=bhv_cellbounds_mutants)
+        bhv_cellgrid=bhv_cellgrids_restricted, 
+        mes_cellgrid=mes_cellgrid_restricted, 
+        bhv_cellbounds=bhv_cellbounds_restricted)
+
+    for i in range(2):    
+        # mutants Update
+        print(f"Mutant t_0: {np.sum(acq_archive.as_pandas().objective_batch())}")
+        acq_elite_df = acq_archive.as_pandas(include_solutions=True)
+        acq_archive = update_archive(self, archive=acq_archive, gp=gp_model, candidate_sol=acq_elite_df.solution_batch(),
+            bhv_cellgrid=bhv_cellgrids_restricted, 
+            mes_cellgrid=mes_cellgrid_restricted, 
+            bhv_cellbounds=bhv_cellbounds_restricted)
+        print(f"Mutant t_1: {np.sum(acq_archive.as_pandas().objective_batch())}")
+
+    self.visualize_archive(archive=acq_archive, map_flag=True)
 
     size_t0 = acq_archive.stats.num_elites
     print(f"Acq Size: ", str(size_t0))
@@ -102,7 +115,7 @@ def mes_map_elites(self, acq_archive: GridArchive, acq_flag=None, pred_flag=None
 
             progress.update(1)
 
-            sigma_emitter = SIGMA_EMITTER + 0.15*(remaining_evals/n_evals)
+            sigma_emitter = SIGMA_EMITTER + 0.3*(remaining_evals/n_evals)
             emitter = update_emitter(self, acq_archive=acq_archive, sigma_emitter=sigma_emitter)
             scheduler = _Scheduler(acq_archive, emitter)
 
@@ -116,25 +129,24 @@ def mes_map_elites(self, acq_archive: GridArchive, acq_flag=None, pred_flag=None
                 mes_cellgrid=mes_cellgrid_mutants,
                 bhv_cellbounds=bhv_cellbounds_mutants)
 
-            if remaining_evals % ((n_evals)//8) == 0:
+            if remaining_evals % ((n_evals)//16) == 0:
 
                 # 1. Visualize Acquisition Archive
                 # 2. Update Acquisition Archive 
                 #        *before* visualisation
 
-                if remaining_evals % ((n_evals)//4) == 0:
+                if remaining_evals % ((n_evals)//8) == 0:
 
                     # Mutant Update
                     print(f"Mutant t_0: {np.sum(acq_archive.as_pandas().objective_batch())}")
                     acq_elite_df = acq_archive.as_pandas(include_solutions=True)
                     valid_indices, _ = generate_parsec_coordinates(acq_elite_df.solution_batch(), io_flag=False)
                     acq_elite_df = acq_elite_df.iloc[valid_indices]
-                    acq_archive.clear()
                     acq_archive = update_archive(self, archive=acq_archive, gp=gp_model, 
                         candidate_sol=acq_elite_df.solution_batch(), 
-                        bhv_cellgrid=bhv_cellgrids_restricted, 
-                        mes_cellgrid=mes_cellgrid_restricted, 
-                        bhv_cellbounds=bhv_cellbounds_restricted)
+                        bhv_cellgrid=bhv_cellgrids_mutants, 
+                        mes_cellgrid=mes_cellgrid_mutants, 
+                        bhv_cellbounds=bhv_cellbounds_mutants)
                     print(f"Mutant t_1: {np.sum(acq_archive.as_pandas().objective_batch())}")
                 self.visualize_archive(archive=acq_archive, map_flag=True)
 
@@ -192,8 +204,7 @@ def optimize_mes(self, acq_archive, bhv_cellgrid, mes_cellgrid, bhv_cellbounds):
     np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
 
     gp_model = self.gp_model
-    n_bins = np.prod(acq_archive.dims)
-    n_samples = n_bins // 16
+    n_samples = N_BOTORCH_SAMPLES
 
     acq_elite_df = acq_archive.as_pandas(include_solutions=True)
     acq_elite_df = acq_elite_df.sample(frac=1, random_state=self.current_seed)  # shuffle elites
@@ -347,7 +358,7 @@ def update_archive(self, gp, archive: GridArchive, bhv_cellgrid, mes_cellgrid, b
 
         # evaluate mes & add solutions
         solution_batch, acquisition_batch, measure_batch = acq_mes(self=self, archive=archive, genomes=i_candidate_sol, gp_model=gp, cellgrids=_mes_cellgrids, cellbounds=_cellbounds)
-        
+
         archive.add(solution_batch, acquisition_batch, measure_batch)
 
     acq_sum_t1 = np.sum(archive.as_pandas().objective_batch())

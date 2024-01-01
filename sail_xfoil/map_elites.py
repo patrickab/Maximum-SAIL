@@ -42,18 +42,17 @@ from gp.predict_objective import predict_objective
 from utils.pprint_nd import pprint
 
 from config.config import Config
-import numpy as np
 config = Config('config/config.ini')
 TEST_RUNS = config.TEST_RUNS
 BATCH_SIZE = config.BATCH_SIZE
 SIGMA_EMITTER = config.SIGMA_EMITTER
 SOL_DIMENSION = config.SOL_DIMENSION
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
-OBJ_BHV_NUMBER_BINS = config.OBJ_BHV_NUMBER_BINS
-ACQ_BHV_NUMBER_BINS = config.ACQ_BHV_NUMBER_BINS
 BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 ACQ_N_MAP_EVALS = config.ACQ_N_MAP_EVALS
 PRED_N_MAP_EVALS = config.PRED_N_MAP_EVALS
+OBJ_BHV_NUMBER_BINS = config.OBJ_BHV_NUMBER_BINS
+ACQ_BHV_NUMBER_BINS = config.ACQ_BHV_NUMBER_BINS
 PREDICTION_VERIFICATIONS = config.PREDICTION_VERIFICATIONS
 
 def map_elites(self, target_archive, acq_flag=False, pred_flag=False):
@@ -75,7 +74,7 @@ def map_elites(self, target_archive, acq_flag=False, pred_flag=False):
     target_archive.clear()
     target_archive.add(obj_elite_df.solution_batch(), obj_elite_df.objective_batch(), obj_elite_df.measures_batch())
     if self.custom_flag:
-        self.update_archive(gp=self.gp_model, candidate_sol=target_archive_df.solution_batch(), candidate_bhv=target_archive_df.measures_batch(), acq_flag=acq_flag, pred_flag=pred_flag)
+        self.update_archive(candidate_sol=target_archive_df.solution_batch(), candidate_bhv=target_archive_df.measures_batch(), acq_flag=acq_flag, pred_flag=pred_flag)
 
     print(f"Best {target} Objective: ", target_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).head(1).objective_batch())
     print(f"Worst {target} Objective: ", target_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).tail(1).objective_batch())

@@ -12,14 +12,12 @@ from config.config import Config
 config = Config(os.path.join(os.path.dirname(__file__), 'config', 'config.ini'))
 TEST_RUNS = config.TEST_RUNS
 BATCH_SIZE = config.BATCH_SIZE
-INIT_N_EVALS = config.INIT_N_EVALS
 SOL_DIMENSION = config.SOL_DIMENSION
 OBJ_DIMENSION = config.OBJ_DIMENSION
 BHV_DIMENSION = config.BHV_DIMENSION
 MES_GRID_SIZE = config.MES_GRID_SIZE
 BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
-MUTANT_CELLRANGE = config.MUTANT_CELLRANGE
 OBJ_BHV_NUMBER_BINS = config.OBJ_BHV_NUMBER_BINS
 ACQ_BHV_NUMBER_BINS = config.ACQ_BHV_NUMBER_BINS
 
@@ -155,7 +153,7 @@ class SailRun:
             raise ValueError("GP Data Update Error")
 
 
-    def update_gp_model(self, new_solutions=None, new_objectives=None):
+    def update_gp_model(self):
 
         self.gp_model = fit_gp_model(self.sol_array, self.obj_array)
         return
@@ -190,12 +188,14 @@ class SailRun:
         if map_flag:
             self.map_current_iteration += 1
 
-    def update_archive(self, gp=None, candidate_sol=None, candidate_obj=None, candidate_bhv=None, obj_flag=False, acq_flag=False, pred_flag=False, eval_pred_archive=False, niche_restricted_update=False, acq_archive=None):
+    def update_archive(self, candidate_sol=None, candidate_obj=None, candidate_bhv=None, obj_flag=False, acq_flag=False, pred_flag=False, evaluate_prediction_archive=False, niche_restricted_update=False, acq_archive=None):
         """"
         Input:
             Option 1: Call with archive & archive flag
             Option 2: Call with candidate_sol, candidate_obj, candidate_bhv & archive flag
         """            
+
+        gp = self.gp_model
 
         if acq_archive is not None:
             self.acq_archive = acq_archive
@@ -225,7 +225,7 @@ class SailRun:
 
             return
                 
-        if eval_pred_archive:
+        if evaluate_prediction_archive:
             self.evaluated_predictions_archive.add(candidate_sol, candidate_obj, candidate_bhv)
             return
 
@@ -248,7 +248,7 @@ class SailRun:
                 target_archive.add(i_candidate_sol, i_candidate_acq, i_candidate_bhv)
 
         if pred_flag:
-            candidate_pred = predict_objective(self=self, genomes=candidate_sol)
+            candidate_pred = predict_objective(self=self, genomes=candidate_sol, gp_model=gp)
             self.pred_archive.add(candidate_sol, candidate_pred, candidate_bhv)
 
 
@@ -370,7 +370,8 @@ def evaluate_prediction_archive(self: SailRun):
     unevaluated_prediction_objectives = unevaluated_prediction_elites.objective_batch()
     unevaluated_prediction_solutions = unevaluated_prediction_elites.solution_batch()
     unevaluated_prediction_measures = unevaluated_prediction_elites.measures_batch()
-    eval_xfoil_loop(self, solution_batch=unevaluated_prediction_solutions, measures_batch=unevaluated_prediction_measures, eval_pred_archive=True, candidate_targetvalues=unevaluated_prediction_objectives)
+    
+    eval_xfoil_loop(self, solution_batch=unevaluated_prediction_solutions, measures_batch=unevaluated_prediction_measures, evaluate_prediction_archive=True, candidate_targetvalues=unevaluated_prediction_objectives)
 
     # Extract all elites from the evaluated predictions archive - (sorted by index for comparison)
     evaluated_prediction_elites = self.evaluated_predictions_archive.as_pandas(include_solutions=True)
@@ -378,9 +379,9 @@ def evaluate_prediction_archive(self: SailRun):
     unevaluated_prediction_elites = unevaluated_prediction_elites.sort_values(by=['index'], ascending=True)
 
     # Calculate mask for converged prediction elites
-    evaluated_solution_batch = evaluated_prediction_elites.solution_batch()
-    unevaluated_solution_batch = unevaluated_prediction_elites.solution_batch()
-    is_converged_prediction_elite = np.isin(unevaluated_solution_batch, evaluated_solution_batch).all(1)
+    evaluated_solutions = evaluated_prediction_elites.solution_batch()
+    unevaluated_solutions = unevaluated_prediction_elites.solution_batch()
+    is_converged_prediction_elite = np.isin(unevaluated_solutions, evaluated_solutions).all(1)
 
     # Extract converged prediction elites
     unevaluated_predictions = unevaluated_prediction_elites[np.isin(unevaluated_prediction_elites.solution_batch(), evaluated_prediction_elites.solution_batch()).all(1)]
@@ -421,9 +422,9 @@ def evaluate_prediction_archive(self: SailRun):
         file.write(verified_elites_stats)
         file.write(error_str)
 
-    true_objective = evaluated_prediction_elites.objective_batch()
-    predicted_objective = unevaluated_prediction_elites.objective_batch()
-    pprint(predicted_objective, true_objective, percentual_error)
+    true_obj = evaluated_predictions.objective_batch()
+    pred_obj = unevaluated_predictions.objective_batch()
+    pprint(true_obj, pred_obj, percentual_error)
     print("\nMAE Error: ", mae_error, "\n", "MSE Error: ", mse_error, "\n", "Mean Percentual Error: ", mpe_error, "\n")
 
     os.makedirs("csv") if not os.path.exists("csv") else None
@@ -431,3 +432,13 @@ def evaluate_prediction_archive(self: SailRun):
 
     gc.collect()
     return
+
+
+if __name__ == "__main__":
+    from utils.csv_to_archive import csv_to_archive
+    from xfoil.eval_xfoil_loop import eval_xfoil_loop
+
+    dummy_sail_run = SailRun(initial_seed=123, sail_vanilla_flag=True, acq_ucb_flag=True, acq_mes_flag=False)
+    archive = csv_to_archive("0_hybrid_verification_ucb_init_mes_pred_archive.csv")
+    archive_df = archive.as_pandas(include_solutions=True)
+    eval_xfoil_loop(dummy_sail_run, solution_batch=archive_df.solution_batch(), measures_batch=archive_df.measures_batch(), evaluate_prediction_archive=True, candidate_targetvalues=archive_df.objective_batch())

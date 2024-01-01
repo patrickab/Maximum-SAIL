@@ -57,12 +57,13 @@ def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_pred
             print(f"Max Mean: {max_mean} - Max Mean Objective: {converged_obj}")
             self.update_gp_data(new_solutions=new_x, new_objectives=converged_obj)
 
-    if np.any(np.isin(solution_batch, self.sol_array).all(1)):
+    if np.any(np.isin(solution_batch, self.sol_array).all(1)) and not evaluate_prediction_archive and not self.vanilla_flag:
         raise ValueError("Duplicate Solution Error: Solution Candidate already exist in GP Data")
 
-    for i in range(0, solution_batch.shape[0], BATCH_SIZE):
+    batch_size = BATCH_SIZE if not evaluate_prediction_archive else solution_batch.shape[0]
+    for i in range(0, solution_batch.shape[0], batch_size):
 
-        i_solutions = solution_batch[i:i+BATCH_SIZE]
+        i_solutions = solution_batch[i:i+batch_size]
         i_solutions = np.vstack(i_solutions)
         n_solutions = i_solutions.shape[0]
 
@@ -75,7 +76,7 @@ def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_pred
 
         success_indices = success_indices[:n_solutions]
         converged_sol = i_solutions[success_indices]
-        converged_bhv = measures_batch[i:i+BATCH_SIZE][success_indices]
+        converged_bhv = measures_batch[i:i+batch_size][success_indices]
 
         i_errors = n_solutions - len(success_indices)
         n_errors += i_errors
@@ -102,7 +103,7 @@ def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_pred
             n_new_obj_elites += self.n_new_obj_elites
 
         else:
-            self.update_archive(candidate_sol=converged_sol, candidate_obj=converged_obj, candidate_bhv=converged_bhv, evaluate_prediction_archive=True)
+            self.update_archive(candidate_sol=converged_sol, candidate_obj=converged_obj, candidate_bhv=converged_bhv, evaluate_prediction_archive=evaluate_prediction_archive)
 
     if (not evaluate_prediction_archive) and (not self.random_flag):
         self.update_gp_model()

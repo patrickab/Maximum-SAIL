@@ -16,13 +16,13 @@ REYNOLDS = config.REYNOLDS
 
 def predict_objective(self, genomes, gp_model):
 
-    gp_model.eval()
+    self.gp_model.eval()
     genomes_tensor = torch.tensor(genomes, dtype=float64)           # Shape: PARALLEL_BATCH_SIZE x SOL_DIMENSION
     transformed_genomes = genomes_tensor.unsqueeze(1)               # Shape: PARALLEL_BATCH_SIZE x 1 x SOL_DIMENSION
 
     # Get the predictive posterior distribution
     with gpytorch.settings.fast_pred_var(), torch.no_grad():
-        posterior = gp_model.posterior(transformed_genomes)
+        posterior = self.gp_model.posterior(transformed_genomes)
 
     posterior_mean_predictions = posterior.mean.numpy()
     posterior_mean_predictions = numpy.array([prediction[0] for prediction_array in posterior_mean_predictions for prediction in prediction_array]).T
