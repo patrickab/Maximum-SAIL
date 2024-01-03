@@ -521,7 +521,7 @@ def mes_sobol_cellgrids(self, mutant_cellrange=MUTANT_CELLRANGE):
     # why would this approach be naive? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.mp4
 
     """
-    sobol_cellgrid = create_sobol_samples(order=4000, dim=SOL_DIMENSION, seed=self.current_seed).T
+    sobol_cellgrid = create_sobol_samples(order=5000, dim=SOL_DIMENSION, seed=self.current_seed).T
 
     archive = self.acq_archive
     n_cells = np.prod(archive.dims)
@@ -542,7 +542,7 @@ def mes_sobol_cellgrids(self, mutant_cellrange=MUTANT_CELLRANGE):
     cell_range_1 = np.diff(boundaries_1)[0]
 
     # 625 bins, 9000 samples, 2 dimensions
-    bhv_cellgrids = np.empty((n_cells, 4000, BHV_DIMENSION))
+    bhv_cellgrids = np.empty((n_cells, 5000, BHV_DIMENSION))
     bhv_cellbounds = np.empty((n_cells, BHV_DIMENSION, 2))
 
     for i in range(n_cells):

@@ -42,10 +42,10 @@ def acq_mes(self, genomes, niche_restricted_update=False):
     cell_solutionbounds = np.repeat(solutionbounds[np.newaxis,:,:], len(genomes), axis=0)    # create copies of solutionbounds
     cell_solutionbounds[:, 1:3] = cellbounds                                                 # insert niche-specific cellbounds
 
-    # mutate each genome 1200 times using gaussian noise scaled to cell_solutionbounds
-    genomes = np.repeat(genomes, 1200, axis=0).reshape(len(genomes), 1200, SOL_DIMENSION)   
+    # mutate each genome 1000 times using gaussian noise scaled to cell_solutionbounds
+    genomes = np.repeat(genomes, 1000, axis=0).reshape(len(genomes), 1000, SOL_DIMENSION)   
     for i in range(len(genomes)):
-        scaled_noise = rng.normal(scale=np.abs(0.25 *(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), size=(1200, SOL_DIMENSION))
+        scaled_noise = rng.normal(scale=np.abs(0.25 *(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), size=(1000, SOL_DIMENSION))
         genomes[i] = np.clip(genomes[i] + scaled_noise, cell_solutionbounds[i,:,0], cell_solutionbounds[i,:,1])
 
     genomes_tensor = tensor(genomes, dtype=float64)          # Shape: 8 x BATCH_SIZE x SOL_DIMENSION
@@ -58,7 +58,7 @@ def acq_mes(self, genomes, niche_restricted_update=False):
 
         cellgrid = assamble_cellgrid(self, genomes_tensor[i,0])
         cellgrid = tensor(cellgrid, dtype=float64)                   # Shape: 4000 x SOL_DIMENSION
-        MES = qLowerBoundMaxValueEntropy(model=gp_model, candidate_set=cellgrid, num_mv_samples=40)
+        MES = qLowerBoundMaxValueEntropy(model=gp_model, candidate_set=cellgrid, num_mv_samples=100)
         acq_entropy = MES(transformed_genomes[i].permute(1, 0, 2))
 
         elite_index = acq_entropy.argmax()
@@ -93,7 +93,7 @@ def simple_mes(self, genomes):
 
         cellgrid = assamble_cellgrid(self, genomes_tensor[i,0])
         cellgrid = tensor(cellgrid, dtype=float64)      # Shape: 4000 x SOL_DIMENSION
-        MES = qLowerBoundMaxValueEntropy(model=self.gp_model, candidate_set=cellgrid, num_y_samples=40)
+        MES = qLowerBoundMaxValueEntropy(model=self.gp_model, candidate_set=cellgrid, num_y_samples=100)
         acq_entropy = MES(transformed_genomes[i].permute(1, 0, 2))
         
         elite_index = acq_entropy.argmax()
@@ -209,7 +209,7 @@ def mes_sobol_cellgrids(self):
 def optimize_mes(self, init_flag=False, map_flag=False):
 
     gp_model = self.gp_model
-    n_samples = 20
+    n_samples = 10
 
     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
     acq_elite_df = acq_elite_df.sample(frac=1, random_state=self.current_seed)
@@ -251,7 +251,7 @@ def optimize_mes(self, init_flag=False, map_flag=False):
 
         cellgrid = assamble_cellgrid(self, genomes_tensor[i])
         cellgrid = tensor(cellgrid, dtype=float64)      # Shape: 4000 x SOL_DIMENSION
-        MES = qLowerBoundMaxValueEntropy(model=gp_model, candidate_set=cellgrid, num_mv_samples=40)
+        MES = qLowerBoundMaxValueEntropy(model=gp_model, candidate_set=cellgrid, num_mv_samples=100)
 
         new_genome, new_acquisition = optimize_acqf(
             acq_function=MES,
