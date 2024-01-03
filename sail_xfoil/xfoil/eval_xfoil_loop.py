@@ -114,6 +114,7 @@ def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_pred
         # write to csv vile
         print("\nWriting to csv file")
         self.obj_archive.as_pandas(include_solutions=True).to_csv(f"exceptional_obj_archive_{self.domain}_{self.initial_seed}_{self.current_seed}.csv")
+        self.acq_archive.as_pandas(include_solutions=True).to_csv(f"exceptional_acq_archive_{self.domain}_{self.initial_seed}_{self.current_seed}.csv")
 
     if candidate_targetvalues is not None:
         if candidate_targetvalues.shape[0] != 0:
