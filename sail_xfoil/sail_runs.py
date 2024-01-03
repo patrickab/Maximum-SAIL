@@ -251,6 +251,11 @@ def prepare_sample_elites(self: SailRun, new_elite_archive: GridArchive, old_eli
 
     # Map Acquisition Elites to Objective Archive Indices (may differ if resolution of acquisition archive differs)
     new_elite_df = new_elite_archive.as_pandas(include_solutions=True)
+<<<<<<< HEAD
+=======
+    if self.acq_mes_flag:
+        new_elite_df = new_elite_df.sort_values(by=['objective'], ascending=False)
+>>>>>>> 4a489ab (Only sample from highestperforming 85% of MES Elites)
 
     # remove all candidate solutions from new_elite_df, that have already been evaluated
     new_elite_df = new_elite_df[~np.isin(new_elite_df.solution_batch(), self.sol_array).all(1)]
@@ -266,6 +271,11 @@ def prepare_sample_elites(self: SailRun, new_elite_archive: GridArchive, old_eli
     # Map improved elites to objective archive indices
     improved_elites = improved_elites.assign(index = self.obj_archive.index_of(improved_elites.measures_batch()))
     new_bin_elites = new_bin_elites.assign(index = self.acq_archive.index_of(new_bin_elites.measures_batch()))
+
+    if self.acq_mes_flag and not pred_flag:
+        # Consider only highest 85% of elites as worthy for sampling
+        improved_elites = improved_elites.sort_values(by=['objective'], ascending=False).head(int(0.85*improved_elites.shape[0]))
+        new_bin_elites = new_bin_elites.sort_values(by=['objective'], ascending=False).head(int(0.85*new_bin_elites.shape[0]))
 
     # If duplicate indices exist, delete the one with the higher objective
     improved_elites = improved_elites.sort_values(by=['index'], ascending=False)
