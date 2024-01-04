@@ -83,9 +83,9 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None, ne
         target_archive = self.acq_archive
         if self.acq_mes_flag: # allows to reduce number of acquisition evaluations for MES
             optimize_mes(self, map_flag=True)
-            n_evals = ACQ_N_MAP_EVALS//8
-        else:
             n_evals = ACQ_N_MAP_EVALS
+        else:
+            n_evals = ACQ_N_MAP_EVALS*20
 
     if pred_flag:
         target = "Pred Archive"
@@ -140,7 +140,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None, ne
                     target_archive.add(solution_batch=acq_elite_df.solution_batch(), objective_batch=acq_elite_df.objective_batch(), measures_batch=acq_elite_df.measures_batch())
 
                 if remaining_evals % (n_evals//4) == 0:
-                    if remaining_evals % (n_evals//2) == 0:
+                    if remaining_evals % (n_evals//4) == 0:
 
                         acquisition_sum = np.sum(self.acq_archive.as_pandas().objective_batch())
                         print(f"Acquisition Value Sum (before update): {acquisition_sum}")
