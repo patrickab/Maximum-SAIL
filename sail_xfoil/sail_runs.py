@@ -115,7 +115,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
     if not pred_loop:
         initialize_archive(self)
 
-    CURIOSITY = 6 # For Hybrid Approach: 'CURIOSITY//BATCH_SIZE' new bin elites are to be sampled
+    CURIOSITY = 4 # For Hybrid Approach: 'CURIOSITY//BATCH_SIZE' new bin elites are to be sampled
 
     anytime_metric_kwargs = initialize_anytime_metrics(self=self, acq_flag=acq_loop, pred_flag=pred_loop)
 
@@ -133,14 +133,46 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
 
     while(current_eval_budget >= i_obj_evals):
 
-        if consumed_obj_evals >= 200:
-            CURIOSITY = 10
-        if consumed_obj_evals >= 480:
+        if iteration == 6:
+            self.sol_array = self.sol_array[len(self.sol_array)//2:]
+            self.obj_array = self.obj_array[len(self.obj_array)//2:]
+
+        if iteration == 7:
+            CURIOSITY = 0
+        if iteration == 8:
             CURIOSITY = 10
 
-        if consumed_obj_evals % (BATCH_SIZE*4) == 0:
+        if iteration == 11:
+            self.sol_array = self.sol_array[len(self.sol_array)//2:]
+            self.obj_array = self.obj_array[len(self.obj_array)//2:]
+
+        if iteration == 12:
+
+            BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
+            acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+            self.acq_archive = GridArchive(
+                solution_dim=SOL_DIMENSION,
+                dims=[25,25],
+                ranges=BHV_VALUE_RANGE,
+                qd_score_offset=-600,
+                threshold_min = ACQ_MES_MIN_THRESHHOLD)
+
+            self.acq_archive.add(
+                solution_batch  = acq_elite_df.solution_batch(), 
+                objective_batch = acq_elite_df.objective_batch(),
+                measures_batch  = acq_elite_df.measures_batch())
 
             if self.acq_mes_flag and not pred_loop:
+                print("\nupdate cellgrids with new dims\n")
+                self.update_cellgrids()
+                self.update_mutant_cellgrids(-0.005)
+                print(self.acq_archive.dims)
+
+
+        if iteration % (4*BATCH_SIZE/10) == 0:
+
+            if self.acq_mes_flag and not pred_loop:
+                print("\nupdate cellgrids\n")
                 self.update_cellgrids()
                 self.update_mutant_cellgrids(-0.005)
 
@@ -157,8 +189,6 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
             acq_elite_df = acq_elite_df.drop_duplicates(subset=['index'], keep='first')                                 # delete the one with the lower objective
 
             acq_elite_df = acq_elite_df[acq_elite_df.index.isin(obj_elite_indices)]                                                                                  # for all obj_elites with objective < mean_objective
-            eval_xfoil_loop(self, solution_batch=acq_elite_df.solution_batch(), measures_batch=acq_elite_df.measures_batch(), acq_flag=True, visualize_flag=False)   # evaluate acq_elites
-
 
 
         # Produce new acquisition elites
