@@ -582,6 +582,6 @@ if __name__ == "__main__":
     from xfoil.eval_xfoil_loop import eval_xfoil_loop
 
     dummy_sail_run = SailRun(initial_seed=123, sail_vanilla_flag=True, acq_ucb_flag=True, acq_mes_flag=False)
-    archive = csv_to_archive("0_hybrid_verification_ucb_init_mes_pred_archive.csv")
+    archive = csv_to_archive("0_hybrid_ucb_init_mes_acq_archive.csv")
     archive_df = archive.as_pandas(include_solutions=True)
-    eval_xfoil_loop(dummy_sail_run, solution_batch=archive_df.solution_batch(), measures_batch=archive_df.measures_batch(), evaluate_prediction_archive=True, candidate_targetvalues=archive_df.objective_batch())
+    eval_xfoil_loop(dummy_sail_run, solution_batch=archive_df.solution_batch(), measures_batch=archive_df.measures_batch(), evaluate_prediction_archive=True, candidate_targetvalues=archive_df.objective_batch(), visualize_flag=True)

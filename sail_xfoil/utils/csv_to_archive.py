@@ -5,7 +5,7 @@ import pandas
 from config.config import Config
 config = Config('config/config.ini')
 SOL_DIMENSION = config.SOL_DIMENSION
-BHV_NUMBER_BINS = config.BHV_NUMBER_BINS
+OBJ_BHV_NUMBER_BINS = config.OBJ_BHV_NUMBER_BINS
 BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 
 def csv_to_archive(csv_path: str):
@@ -17,7 +17,7 @@ def csv_to_archive(csv_path: str):
 
     archive = GridArchive(
         solution_dim=SOL_DIMENSION,
-        dims=BHV_NUMBER_BINS,
+        dims=OBJ_BHV_NUMBER_BINS,
         ranges=BHV_VALUE_RANGE,
         qd_score_offset=-600,
         threshold_min = min_obj_threshhold

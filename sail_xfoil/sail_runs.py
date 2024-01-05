@@ -142,33 +142,6 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
         if iteration == 8:
             CURIOSITY = 10
 
-        if iteration == 11:
-            self.sol_array = self.sol_array[len(self.sol_array)//2:]
-            self.obj_array = self.obj_array[len(self.obj_array)//2:]
-
-        if iteration == 12:
-
-            BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
-            acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
-            self.acq_archive = GridArchive(
-                solution_dim=SOL_DIMENSION,
-                dims=[25,25],
-                ranges=BHV_VALUE_RANGE,
-                qd_score_offset=-600,
-                threshold_min = ACQ_MES_MIN_THRESHHOLD)
-
-            self.acq_archive.add(
-                solution_batch  = acq_elite_df.solution_batch(), 
-                objective_batch = acq_elite_df.objective_batch(),
-                measures_batch  = acq_elite_df.measures_batch())
-
-            if self.acq_mes_flag and not pred_loop:
-                print("\nupdate cellgrids with new dims\n")
-                self.update_cellgrids()
-                self.update_mutant_cellgrids(-0.005)
-                print(self.acq_archive.dims)
-
-
         if iteration % (4*BATCH_SIZE/10) == 0:
 
             if self.acq_mes_flag and not pred_loop:
