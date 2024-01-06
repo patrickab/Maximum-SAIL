@@ -133,6 +133,16 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
 
     while(current_eval_budget >= i_obj_evals):
 
+        if consumed_obj_evals == total_eval_budget * 0.75:
+            acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+            self.acq_archive = GridArchive(
+                solution_dim=SOL_DIMENSION,
+                dims=OBJ_BHV_NUMBER_BINS,
+                ranges=BHV_VALUE_RANGE,
+                qd_score_offset=-600,
+                threshold_min = ACQ_MES_MIN_THRESHHOLD)
+            self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
+
         # Produce new acquisition elites
         target_t0 = target_archive.stats.num_elites
         new_target_elites, _, _ = map_elites(self, acq_flag=acq_loop, pred_flag=pred_loop)
