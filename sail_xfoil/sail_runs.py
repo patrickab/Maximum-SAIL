@@ -104,6 +104,9 @@ def run_vanilla_sail(self: SailRun):
 
     return
 
+OBJ_BHV_NUMBER_BINS = config.OBJ_BHV_NUMBER_BINS
+BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
+
 
 def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
     """
@@ -133,7 +136,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
 
     while(current_eval_budget >= i_obj_evals):
 
-        if consumed_obj_evals == total_eval_budget * 0.75:
+        if consumed_obj_evals == 720:
             acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
             self.acq_archive = GridArchive(
                 solution_dim=SOL_DIMENSION,
@@ -311,6 +314,8 @@ def select_samples(self: SailRun, improved_elites, new_bin_elites, acq_flag=Fals
     if self.hybrid_flag: # Evenly balance sampling of best new_bin_elites & best improved_elites
         n_new_bin_elites = new_bin_elites.shape[0]
         n_improved_elites = improved_elites.shape[0]
+
+        print(f"Evaluating --- New Bin Elites: {n_new_bin_elites} - Improved Elites: {n_improved_elites}")
 
         n_new_bin_samples = round((curiosity/10)*n_samples)
         n_improved_samples = n_samples - n_new_bin_samples
