@@ -98,6 +98,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None, ne
 
     size_t0 = target_archive.stats.num_elites
     print(f"{target} Size: ", str(size_t0))
+    improvement = 123456
 
     with tqdm(total=total_iterations) as progress:
         while((remaining_evals-BATCH_SIZE >= 0)):
