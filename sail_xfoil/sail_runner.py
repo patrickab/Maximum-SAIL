@@ -238,16 +238,17 @@ class SailRun:
             return
 
         if acq_flag:
-            for i in range(0, candidate_sol.shape[0], 10):
+            n = BATCH_SIZE
+            for i in range(0, candidate_sol.shape[0], n):
 
                 if self.acq_ucb_flag:
-                    i_candidate_sol = candidate_sol[i:i+BATCH_SIZE]
-                    i_candidate_bhv = candidate_bhv[i:i+BATCH_SIZE]
+                    i_candidate_sol = candidate_sol[i:i+n]
+                    i_candidate_bhv = candidate_bhv[i:i+n]
                     i_candidate_acq = self.acq_function(self=self, genomes=i_candidate_sol)
                     self.acq_archive.add(i_candidate_sol, i_candidate_acq, i_candidate_bhv)
 
                 elif self.acq_mes_flag:
-                    i_candidate_sol = candidate_sol[i:i+BATCH_SIZE]
+                    i_candidate_sol = candidate_sol[i:i+n]
                     i_candidate_acq = self.acq_function(self=self, genomes=i_candidate_sol)
                     if niche_restricted_update:
                         self.acq_function(self=self, genomes=i_candidate_sol, niche_restricted_update=True)
@@ -257,7 +258,7 @@ class SailRun:
                     else:
                         break
 
-                    i_candidate_bhv = candidate_bhv[i:i+BATCH_SIZE]
+                    i_candidate_bhv = candidate_bhv[i:i+n]
                     self.acq_archive.add(i_candidate_sol, i_candidate_acq, i_candidate_bhv)
 
 
@@ -429,8 +430,8 @@ def evaluate_prediction_archive(self: SailRun):
     is_converged_prediction_elite = np.isin(unevaluated_solution_batch, evaluated_solution_batch).all(1)
 
     # Extract converged prediction elites
-    unevaluated_predictions = unevaluated_prediction_elites[is_converged_prediction_elite]
-    evaluated_predictions = evaluated_prediction_elites
+    unevaluated_predictions = unevaluated_prediction_elites[np.isin(unevaluated_prediction_elites.solution_batch(), evaluated_prediction_elites.solution_batch()).all(1)]
+    evaluated_predictions = evaluated_prediction_elites[np.isin(evaluated_prediction_elites.solution_batch(), unevaluated_predictions.solution_batch()).all(1)]
 
     prediction_error = unevaluated_predictions.objective_batch() - evaluated_predictions.objective_batch()
     percentual_error = np.abs(prediction_error)/evaluated_predictions.objective_batch()
