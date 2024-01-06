@@ -115,7 +115,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
     if not pred_loop:
         initialize_archive(self)
 
-    CURIOSITY = 4 # For Hybrid Approach: 'CURIOSITY//BATCH_SIZE' new bin elites are to be sampled
+    CURIOSITY = 2 # For Hybrid Approach: 'CURIOSITY//BATCH_SIZE' new bin elites are to be sampled
 
     anytime_metric_kwargs = initialize_anytime_metrics(self=self, acq_flag=acq_loop, pred_flag=pred_loop)
 
@@ -133,37 +133,6 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
 
     while(current_eval_budget >= i_obj_evals):
 
-        if iteration == 6:
-            self.sol_array = self.sol_array[len(self.sol_array)//2:]
-            self.obj_array = self.obj_array[len(self.obj_array)//2:]
-
-        if iteration == 7:
-            CURIOSITY = 0
-        if iteration == 8:
-            CURIOSITY = 10
-
-        if iteration % (4*BATCH_SIZE/10) == 0:
-
-            if self.acq_mes_flag and not pred_loop:
-                print("\nupdate cellgrids\n")
-                self.update_cellgrids()
-                self.update_mutant_cellgrids(-0.005)
-
-            obj_elite_df = self.obj_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False)
-            acq_elite_df = self.acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False)
-
-            mean_objective = np.mean(obj_elite_df.objective_batch())                            # calculate mean objective of obj_archive
-            obj_elite_df = obj_elite_df[obj_elite_df.objective_batch() < mean_objective]        # select all elites with objective < mean_objective
-            obj_elite_indices = self.obj_archive.index_of(obj_elite_df.measures_batch())        # determine indeces of obj_elite_df in obj_archive
-
-
-            acq_elite_df = acq_elite_df.assign(index = self.obj_archive.index_of(acq_elite_df.measures_batch()))        # map acq_elites to obj_archive indices
-            acq_elite_df = acq_elite_df.sort_values(by=['index', 'objective'], ascending=False)                         # for duplicate indices index
-            acq_elite_df = acq_elite_df.drop_duplicates(subset=['index'], keep='first')                                 # delete the one with the lower objective
-
-            acq_elite_df = acq_elite_df[acq_elite_df.index.isin(obj_elite_indices)]                                                                                  # for all obj_elites with objective < mean_objective
-
-
         # Produce new acquisition elites
         target_t0 = target_archive.stats.num_elites
         new_target_elites, _, _ = map_elites(self, acq_flag=acq_loop, pred_flag=pred_loop)
@@ -171,7 +140,6 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
         improved_elites, new_bin_elites = prepare_sample_elites(self=self, new_elite_archive=new_target_elites, old_elite_archive=self.obj_archive, pred_flag=pred_loop)                      # Split new_target_elites into improved elites & new bin elites, then (if self.acq_ucb_flag or pred_flag) calculate objective improvement (else) objective_improvement = objective
         candidate_solutions_df = select_samples(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, acq_flag=acq_loop, pred_flag=pred_loop, curiosity=CURIOSITY)            # Select samples based on exploration behavior defined in the class constructor
         target_t1 = target_archive.stats.num_elites
-
 
         # visualize resulting archives (multiple times during prediction verification to ensure videos of equal length)
         iterations = i_obj_evals//BATCH_SIZE
@@ -181,7 +149,6 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
                 self.visualize_archive(archive=self.pred_archive, pred_flag=True)
             iterations -= 1
 
-
         solution_batch = candidate_solutions_df.solution_batch()
         objective_batch = candidate_solutions_df.objective_batch()
         measures_batch = candidate_solutions_df.measures_batch()
@@ -189,6 +156,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
         if np.any(np.isin(solution_batch, self.sol_array).all(1)):
             raise ValueError("Duplicate Solution Error: New Solutions already exist in GP Data")
 
+        print("Curiosity: ", CURIOSITY)
         obj_t0, obj_t1, n_new_obj_elites = eval_xfoil_loop(self, solution_batch=solution_batch, measures_batch=measures_batch, candidate_targetvalues=objective_batch, acq_flag=acq_loop, pred_flag=pred_loop)       # Evaluate Acquisition Elites & Update Acq Archive under resulting GP Model
 
         # Calculate, Print & Store Anytime Metrics
@@ -197,6 +165,9 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
 
         iteration = anytime_metric_kwargs['iteration']
         current_eval_budget = anytime_metric_kwargs['current_eval_budget']
+
+        if iteration % 2 == 0:
+            CURIOSITY += 1
 
         if iteration % 20 == 0:
             gc.collect()
