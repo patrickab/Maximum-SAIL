@@ -142,7 +142,6 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None, ne
                     self.visualize_archive(archive=self.acq_archive, map_flag=True)
                     acquisition_sum = np.sum(self.acq_archive.as_pandas().objective_batch())
                     print(f"Acquisition Value Sum: {acquisition_sum}")
-                if remaining_evals % (BATCH_SIZE*6) == 0:
                     acq_sum_t0 = np.sum(self.acq_archive.as_pandas().objective_batch())
                     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
                     target_archive.clear()
