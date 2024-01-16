@@ -315,10 +315,12 @@ def select_samples(self: SailRun, improved_elites, new_bin_elites, acq_flag=Fals
         n_new_bin_elites = new_bin_elites.shape[0]
         n_improved_elites = improved_elites.shape[0]
 
-        print(f"Evaluating --- New Bin Elites: {n_new_bin_elites} - Improved Elites: {n_improved_elites}")
+        print(f"Available --- New Bin Elites: {n_new_bin_elites} - Improved Elites: {n_improved_elites}")
 
         n_new_bin_samples = round((curiosity/10)*n_samples)
         n_improved_samples = n_samples - n_new_bin_samples
+        print(f"Attempting --- New Bin Elites: {n_new_bin_samples} - Improved Elites: {n_improved_samples}")
+
         if n_new_bin_elites >= n_new_bin_samples and n_improved_elites >= n_improved_samples:
             new_bin_elites = new_bin_elites.head(n_new_bin_samples)
             candidate_elite_df = pandas.concat([new_bin_elites.head(n_new_bin_samples), improved_elites.head(n_improved_samples)])
@@ -349,9 +351,15 @@ def initialize_archive(self):
     mes_flag = self.acq_mes_flag
     ucb_flag = self.acq_ucb_flag
 
-    if self.acq_mes_flag:
-        self.update_cellgrids()
-        self.update_mutant_cellgrids(-0.005)
+    # calculate initial sobol sample
+    solution_batch = create_sobol_samples(order=INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed)
+    solution_batch = scale_samples(solution_batch.T)
+    measures_batch = solution_batch[:, 1:3]
+    generate_parsec_coordinates(solution_batch)
+    eval_xfoil_loop(self, solution_batch=solution_batch, measures_batch=measures_batch, acq_flag=False)
+
+    for i in range(0, INIT_N_EVALS, BATCH_SIZE):
+        self.visualize_archive(self.acq_archive, acq_flag=True)
 
     # for vanilla sail, random sail & random init just draw sobol samples
     if self.vanilla_flag or self.random_flag or self.random_init:
@@ -359,118 +367,28 @@ def initialize_archive(self):
         self.acq_function = acq_ucb
         self.acq_mes_flag = False
         self.acq_ucb_flag = True
-        self.acq_archive.set_threshold(threshold_min = ACQ_UCB_MIN_THRESHHOLD)
-
-        # visualize empty acquisition archive
-        for i in range(0, INIT_N_EVALS, BATCH_SIZE):
-            self.visualize_archive(self.acq_archive, acq_flag=True)
-
-        # initialize obj archive with sobol samples
-        solution_batch = create_sobol_samples(order=INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed+5)
-        solution_batch = solution_batch.T
-        solution_batch = scale_samples(solution_batch)
-        measures_batch = solution_batch[:, 1:3]
-        eval_xfoil_loop(self, solution_batch=solution_batch, measures_batch=measures_batch, acq_flag=False)
 
     # use MES to fill obj archive
     if self.custom_flag and self.mes_init:
 
-        self.acq_archive.set_threshold(threshold_min = ACQ_MES_MIN_THRESHHOLD)
         self.acq_function = acq_mes
         self.acq_mes_flag = True
         self.acq_ucb_flag = False
 
-        # visualize empty acquisition archive
-        for i in range(0, INIT_N_EVALS, BATCH_SIZE):
-            self.visualize_archive(self.acq_archive, acq_flag=True)
-            
-
-        # initialize obj archive with sobol samples
-        solution_batch = create_sobol_samples(order=INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed)
+        # fill acq archive with random solutions (will be overwritten inside mes_map_elites)
+        solution_batch = create_sobol_samples(order=10, dim=len(SOL_VALUE_RANGE), seed=self.current_seed)
         solution_batch = solution_batch.T
         solution_batch = scale_samples(solution_batch)
         measures_batch = solution_batch[:, 1:3]
-        eval_xfoil_loop(self, solution_batch=solution_batch, measures_batch=measures_batch, acq_flag=False)
-
-        # initialize acq archive with sobol samples
-        solution_batch = create_sobol_samples(order=500, dim=len(SOL_VALUE_RANGE), seed=self.current_seed)
-        solution_batch = solution_batch.T
-        solution_batch = scale_samples(solution_batch)
-        measures_batch = solution_batch[:, 1:3]
-        for i in range(0, 200, BATCH_SIZE):
-            self.update_archive(candidate_sol=solution_batch[i:i+BATCH_SIZE], candidate_bhv=measures_batch[i:i+BATCH_SIZE], acq_flag=True)
-            print(f"Initialize Acq Archive: {i+BATCH_SIZE}")
+        self.acq_archive.add(solution_batch, np.zeros((solution_batch.shape[0]))+0.0000001, measures_batch)
 
         remaining_evals = INIT_N_ACQ_EVALS
         while remaining_evals > 0:
 
             # calculate MES Acquisition Elites
-            map_elites(self=self, acq_flag=True)
-            self.visualize_archive(archive=self.acq_archive, acq_flag=True)
-            acq_elites = self.acq_archive.as_pandas(include_solutions=True).sort_values(by="objective", ascending=False)
-
-            if np.any(np.isin(acq_elites, self.sol_array).all(1)):
-                raise ValueError("Duplicate Solution Error: New Solutions already exist in GP Data")
-
-            best_elites = acq_elites.head(BATCH_SIZE)
-
-            # combine best elites with random samples
-            best_elite_objectives = np.vstack(best_elites.objective_batch())
-            best_elite_solutions = np.vstack(best_elites.solution_batch())
-            best_elite_measures = np.vstack(best_elites.measures_batch())
-
-            # if best elite solutions contains duplicate rows within itself, raise an error
-            if np.unique(best_elite_solutions, axis=1).shape[0] != best_elite_solutions.shape[0]:
-                raise ValueError("Duplicate Solution Error: New Solutions appear twice in best_elite_solutions")
-
-            eval_xfoil_loop(self, solution_batch=best_elite_solutions, measures_batch=best_elite_measures, acq_flag=True, candidate_targetvalues=np.vstack(best_elite_objectives))
-            print(f"Best Objective: {self.obj_archive.best_elite.objective}")
-
-            remaining_evals -= BATCH_SIZE
-
-    # use UCB to fill obj archive
-    if self.custom_flag and self.ucb_init:
-
-        # set to hybrid flag
-        greedy_flag = self.greedy_flag
-        hybrid_flag = self.hybrid_flag
-        self.greedy_flag = False
-        self.hybrid_flag = True
-
-        self.acq_function = acq_ucb
-        self.acq_mes_flag = False
-        self.acq_ucb_flag = True
-
-        # visualize empty acquisition archive
-        for i in range(0, INIT_N_EVALS, BATCH_SIZE):
-            self.visualize_archive(self.acq_archive, acq_flag=True)
-
-        # initialize obj archive with sobol samples
-        solution_batch = create_sobol_samples(order=INIT_N_EVALS, dim=len(SOL_VALUE_RANGE), seed=self.current_seed)
-        solution_batch = solution_batch.T
-        solution_batch = scale_samples(solution_batch)
-        measures_batch = solution_batch[:, 1:3]
-        eval_xfoil_loop(self, solution_batch=solution_batch, measures_batch=measures_batch, acq_flag=False)
-
-        # initialize acq archive with sobol samples
-        solution_batch = create_sobol_samples(order=50000, dim=len(SOL_VALUE_RANGE), seed=self.current_seed)
-        solution_batch = solution_batch.T
-        solution_batch = scale_samples(solution_batch)
-        measures_batch = solution_batch[:, 1:3]
-        self.update_archive(candidate_sol=solution_batch, candidate_bhv=measures_batch, acq_flag=True)          # initialize acq_archive with remaining sobol samples
-
-        # set high initial threshold to ensure that only good solutions are added to the archive
-        min_threshold = 3.5
-        self.acq_archive.set_threshold(threshold_min = min_threshold)
-
-        remaining_evals = INIT_N_ACQ_EVALS
-        while remaining_evals > 0:
-
-            # calculate UCB Acquisition Elites
-            new_target_elites, _, _ = map_elites(self, acq_flag=True, new_elite_threshold=min_threshold)
-            if new_target_elites.stats.num_elites < BATCH_SIZE: new_target_elites = ensure_n_new_elites(self=self, new_elite_archive=new_target_elites, acq_flag=True)   # Sample until enough new acquisition elites are found
-            improved_elites, new_bin_elites = prepare_sample_elites(self=self, new_elite_archive=new_target_elites, old_elite_archive=self.obj_archive)                  # Split new_target_elites into improved elites & new bin elites, then (if self.acq_ucb_flag or pred_flag) calculate objective improvement (else) objective_improvement = objective
-            candidate_solutions_df = select_samples(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, acq_flag=True, curiosity=3)                    # Select samples based on exploration behavior defined in the class constructor
+            new_elite_archive, _, _ = map_elites(self, acq_flag=True)
+            improved_elites, new_bin_elites = prepare_sample_elites(self=self, new_elite_archive=new_elite_archive, old_elite_archive=self.obj_archive)
+            candidate_solutions_df = select_samples(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, acq_flag=True, curiosity=7)            # Select samples based on exploration behavior defined in the class constructor
 
             self.visualize_archive(archive=self.acq_archive, acq_flag=True)
 
@@ -478,17 +396,43 @@ def initialize_archive(self):
             objective_batch = candidate_solutions_df.objective_batch()
             measures_batch = candidate_solutions_df.measures_batch()
 
-            if np.any(np.isin(solution_batch, self.sol_array).all(1)):
-                raise ValueError("Duplicate Solution Error: New Solutions already exist in GP Data")
-
             eval_xfoil_loop(self, solution_batch=solution_batch, measures_batch=measures_batch, acq_flag=True, candidate_targetvalues=objective_batch)
             print(f"Best Objective: {self.obj_archive.best_elite.objective}")
 
             remaining_evals -= BATCH_SIZE
 
-        # reset to original flags
-        self.greedy_flag = greedy_flag
-        self.hybrid_flag = hybrid_flag
+    # use UCB to fill obj archive
+    if self.custom_flag and self.ucb_init:
+
+        self.acq_function = acq_ucb
+        self.acq_mes_flag = False
+        self.acq_ucb_flag = True
+
+        # initialize acq archive with sobol samples
+        solution_batch = create_sobol_samples(order=50000, dim=len(SOL_VALUE_RANGE), seed=self.current_seed)
+        solution_batch = solution_batch.T
+        solution_batch = scale_samples(solution_batch)
+        measures_batch = solution_batch[:, 1:3]
+        self.update_archive(candidate_sol=solution_batch, candidate_bhv=measures_batch, acq_flag=True)
+
+        remaining_evals = INIT_N_ACQ_EVALS
+        while remaining_evals > 0:
+
+            # calculate UCB Acquisition Elites
+            new_elite_archive, _, _ = map_elites(self, acq_flag=True)
+            improved_elites, new_bin_elites = prepare_sample_elites(self=self, new_elite_archive=new_elite_archive, old_elite_archive=self.obj_archive)                                           # Split new_target_elites into improved elites & new bin elites, then calculate acquisition improvement
+            candidate_solutions_df = select_samples(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, acq_flag=True, curiosity=3)     # Select samples based on exploration behavior defined in the class constructor
+
+            self.visualize_archive(archive=self.acq_archive, acq_flag=True)
+
+            solution_batch = candidate_solutions_df.solution_batch()
+            objective_batch = candidate_solutions_df.objective_batch()
+            measures_batch = candidate_solutions_df.measures_batch()
+
+            eval_xfoil_loop(self, solution_batch=solution_batch, measures_batch=measures_batch, acq_flag=True, candidate_targetvalues=objective_batch)
+            print(f"Best Objective: {self.obj_archive.best_elite.objective}")
+
+            remaining_evals -= BATCH_SIZE
 
     # select acquisition function based on class constructor
     if ucb_flag:
@@ -496,39 +440,19 @@ def initialize_archive(self):
         self.acq_function = acq_ucb
         self.acq_mes_flag = False
         self.acq_ucb_flag = True
-        self.acq_archive.set_threshold(threshold_min = ACQ_UCB_MIN_THRESHHOLD)
     if mes_flag:
         print("mes entering")
         self.acq_function = acq_mes
         self.acq_mes_flag = True
         self.acq_ucb_flag = False
-        self.acq_archive.set_threshold(threshold_min = ACQ_MES_MIN_THRESHHOLD)
+    
+    if not self.acq_mes_flag:
+        acq_archive_df = self.acq_archive.as_pandas(include_solutions=True)
+        acq_archive_solutions = acq_archive_df.solution_batch()
+        acq_archive_measures = acq_archive_df.measures_batch()
+        self.update_archive(candidate_sol=acq_archive_solutions, candidate_bhv=acq_archive_measures, acq_flag=True)
+    else:
         self.update_cellgrids()
-
-    # initialize acq archive with sobol samples
-    solution_batch = create_sobol_samples(order=INIT_N_SOBOL_ACQ, dim=len(SOL_VALUE_RANGE), seed=self.current_seed)
-    solution_batch = solution_batch.T
-    solution_batch = scale_samples(solution_batch)
-    measures_batch = solution_batch[:, 1:3]
-
-    self.acq_archive.clear()
-    print(f"Acq MES Flag {self.acq_mes_flag} - Acq UCB Flag {self.acq_ucb_flag} - Acq Function {self.acq_function}")
-    for i in range(0, INIT_N_SOBOL_ACQ, BATCH_SIZE):
-        # Generate Parsec Coordinates & remove Invalid Samples
-        valid_indices, surface_batch = generate_parsec_coordinates(solution_batch[i:i+BATCH_SIZE], io_flag=False)
-        self.update_archive(candidate_sol=solution_batch[i:i+BATCH_SIZE][valid_indices], candidate_bhv=measures_batch[i:i+BATCH_SIZE][valid_indices], acq_flag=True)
-        print(f"Initialize Acq Archive: {i+BATCH_SIZE}   Size: {self.acq_archive.stats.num_elites}")
-
-    if self.acq_mes_flag:
-        print(self.acq_archive.as_pandas().sort_values(by='index').objective_batch())
-        print("Mean Acq Objective: ", self.acq_archive.as_pandas().objective_batch().mean())
-        optimize_mes(self=self, init_flag=True)
-        print("Mean Acq Objective: ", self.acq_archive.as_pandas().objective_batch().mean())
-        print(self.acq_archive.as_pandas().sort_values(by='index').objective_batch())
-
-
-    for i in range(0, 4):
-        acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
-        self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
+        self.update_mutant_cellgrids()
 
     print("\n[...] Terminate init_archive()\n")
