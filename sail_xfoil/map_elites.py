@@ -154,7 +154,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None, ne
                     print(f"Improvement: {improvement}")
 
             # Break loop if improvement is too small
-            if improvement < 0.2: remaining_evals = 0
+            if improvement < 0.2: break
             remaining_evals -= BATCH_SIZE
 
     if self.acq_mes_flag and acq_flag: new_elite_archive = self.acq_archive
