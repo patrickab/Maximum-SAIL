@@ -515,8 +515,8 @@ def mes_sobol_cellgrids(self, mutant_cellrange=MUTANT_CELLRANGE):
     Returns:
 
         bhv_cellbounds : 625 bins x 2  dimensions x 2 boundaries
-        bhv_cellgrids  : 625 bins x 9000 samples x 2 dimensions
-        mes_cellgrid   :   1      x 9000 samples x 11 dimensions
+        bhv_cellgrids  : 625 bins x 6000 samples x 2 dimensions
+        mes_cellgrid   :   1      x 6000 samples x 11 dimensions
 
     # how does the naive approach work? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.pdf
     # why would this approach be naive? : https://github.com/patrickab/thesis/blob/master/sail_xfoil/acq_functions/mes_cellgrid_documentation/MES%20Sobol%20Cellgrids.mp4

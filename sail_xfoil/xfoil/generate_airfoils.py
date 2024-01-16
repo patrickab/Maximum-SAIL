@@ -10,7 +10,7 @@ from utils.pprint_nd import pprint
 from config.config import Config
 config = Config(os.path.join(os.path.dirname(__file__), '../config', 'config.ini'))
 BATCH_SIZE = config.BATCH_SIZE
-N_XY_COORDINATES = config.N_XY_COORDINATES
+N_XY_COORDINATES = int(config.N_XY_COORDINATES)
 
 
 def export_parsec_coordinates(upper_xy, lower_xy, io_flag):
@@ -34,9 +34,6 @@ def export_parsec_coordinates(upper_xy, lower_xy, io_flag):
     surface_batch = np.empty(0)
     for index in range(upper_xy.shape[0]):
 
-        if upper_xy.shape[0] != BATCH_SIZE:
-            ValueError(f'EXPORT PARSEC: upper_xy.shape[0] != BATCH_SIZE')
-
         upper_y = upper_xy[index,:,1]
         lower_y = lower_xy[index,:,1]
         delta_y = upper_y - lower_y
@@ -48,8 +45,7 @@ def export_parsec_coordinates(upper_xy, lower_xy, io_flag):
         is_itersecting_airfoil = True if np.any(delta_y < 0) else False
         is_negative_upper_y = True if np.any(upper_y < 0) else False
 
-                        #  =  True is_rollercoaster_airfoil or is_itersecting_airfoil or is_negative_upper_y else False
-        is_invalid_airfoil = False # if is_rollercoaster_airfoil or is_itersecting_airfoil or is_negative_upper_y else False
+        is_invalid_airfoil = True if is_rollercoaster_airfoil or is_itersecting_airfoil or is_negative_upper_y else False
 
         if not is_invalid_airfoil:
 
@@ -114,7 +110,7 @@ def generate_parsec_coordinates(samples, xte=1.0, io_flag=True): # 'x trailing e
     return valid_indices, surface_batch
 
 
-def generate_polynomial_coefficients(samples):    # PARSEC API: https://github.com/dqsis/parsec-airfoils/blob/master/parsecexport.py
+def generate_polynomial_coefficients(samples):
     """
     Solves Linear Equation System
     
@@ -126,8 +122,6 @@ def generate_polynomial_coefficients(samples):    # PARSEC API: https://github.c
     vec_generate_polynomial_terms  = np.vectorize(generate_polynomial_terms, signature='()->(6,6)')
     vec_get_upper_y_vector = np.vectorize(get_upper_y_vector, signature='(7)->(6)')
     vec_get_lower_y_vector = np.vectorize(get_lower_y_vector, signature='(7)->(6)')
-
-    # how can i ensure that my sample array
 
     # Calculate Linear Equation Systems    (BATCH_SIZE x 6 x 6)
     x_up_matrices = vec_generate_polynomial_terms(samples[:,1].ravel())
@@ -176,7 +170,6 @@ def upper_y_solutions(upper_polynomial_parameters, n_pts=N_XY_COORDINATES):
     # Reverse the array for upper y coordinates (for some reason)
     x_upper_coordinates = spacing[::-1]
     x_upper_coordinates_matrix = (np.tile(x_upper_coordinates, (6, 1)))
-
     upper_parameters = upper_polynomial_parameters
     upper_parameters = upper_parameters.reshape(-1,1)
 
@@ -184,13 +177,9 @@ def upper_y_solutions(upper_polynomial_parameters, n_pts=N_XY_COORDINATES):
     # Columns contain f(x1,p1), ... , f(x1,p6)
     upper_parameters = upper_polynomial_parameters.reshape(-1,1)
     pwrs = np.array([1/2, 3/2, 5/2, 7/2, 9/2, 11/2])
-
     x_pow = np.power(x_upper_coordinates_matrix.T, pwrs)
-
     upper_solution_term = upper_polynomial_parameters * x_pow
-
     y_upper_solutions = np.sum(upper_solution_term, axis=1)
-
     upper_xy = np.array(list(zip(x_upper_coordinates, y_upper_solutions)))
 
     return upper_xy
@@ -206,11 +195,9 @@ def lower_y_solutions(lower_polynomial_parameters, n_pts=N_XY_COORDINATES):
     x_lower_coordinates_matrix = (np.tile(x_lower_coordinates, (6, 1)))
 
     pwrs = np.array([1/2, 3/2, 5/2, 7/2, 9/2, 11/2])
-
     x_pow = np.power(x_lower_coordinates_matrix.T, pwrs)
 
     lower_solution_term = lower_polynomial_parameters * x_pow
-
     y_lower_solutions = -np.sum(lower_solution_term, axis=1)
 
     lower_xy = np.array(list(zip(x_lower_coordinates, y_lower_solutions)))
@@ -235,6 +222,12 @@ def get_lower_y_vector(args):
     return np.array([-z_trailing_edge + (dz_trailing_edge/2), -z_low, tan(alpha_up + (alpha_low/2)), 0, lower_curvature, sqrt(2*lower_le_radius)])
 
 
+powers_1 = np.arange(1, 12, 2) / 2
+powers_2 = np.array([-0.5, 0.5, 1.5, 2.5, 3.5, 4.5])
+powers_3 = np.array([(-3/2), (-1/2), (1/2), (3/2), (5/2), (7/2)])
+constants_1 = np.array([1, 3, 5, 7, 9, 11]) / 2
+constants_2 = np.array([(-1/4), (3/4), (15/4), (35/4), (53/4), (99/4)])
+
 def generate_polynomial_terms(sample):
     """Generates Set of Linear Equations"""
 
@@ -242,10 +235,10 @@ def generate_polynomial_terms(sample):
 
     x_matrix = np.array([
         np.array(np.ones(6)),
-        x**((np.arange(1, 12, 2)/2)),
-        (np.arange(1, 12, 2) / 2),
-        np.array([(1/2) *x**(-1/2), (3/2)*x**(1/2) , (5/2) *x**(3/2), (7/2) *x**(5/2), (9/2) *x**(7/2), (11/2)*x**(9/2)]),
-        np.array([(-1/4)*x**(-3/2), (3/4)*x**(-1/2), (15/4)*x**(1/2), (35/4)*x**(3/2), (53/4)*x**(5/2), (99/4)*x**(7/2)]),
+        x**powers_1,
+        powers_1,
+        constants_1*x**(constants_1-1),
+        constants_2*x**(powers_3),
         np.array([1, 0, 0, 0, 0, 0])])
     
     return x_matrix
