@@ -127,7 +127,10 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
 
             if mes_flag and acq_flag:
 
-                if remaining_evals % (BATCH_SIZE*5) == 0 or remaining_evals % (BATCH_SIZE*9) == 0:
+                # prevent entering with mes_flag 
+                # this is done to leave this functionality in this module
+                # without using it at the moment
+                if not mes_flag and remaining_evals % (BATCH_SIZE*5) == 0 or remaining_evals % (BATCH_SIZE*9) == 0:
                     # Delete all acquisition elites with invalid indices
                     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
                     valid_indices, surface_batch = generate_parsec_coordinates(acq_elite_df.solution_batch(), io_flag=False)
@@ -136,14 +139,18 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
                     target_archive.clear()
                     target_archive.add(solution_batch=acq_elite_df.solution_batch(), objective_batch=acq_elite_df.objective_batch(), measures_batch=acq_elite_df.measures_batch())
 
-                if remaining_evals % (BATCH_SIZE*3) == 0:
+                if remaining_evals % (BATCH_SIZE*6) == 0:
                     self.visualize_archive(archive=self.acq_archive, map_flag=True)
                     acquisition_sum = np.sum(self.acq_archive.as_pandas().objective_batch())
                     print(f"Acquisition Value Sum: {acquisition_sum:.3f}")
                     acq_sum_t0 = np.sum(self.acq_archive.as_pandas().objective_batch())
                     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
                     target_archive.clear()
-                    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True, niche_restricted_update = False)
+
+                    # use niche restricted update after BATCH_SIZE*12 evaluations
+                    niche_restricted_update = False if remaining_evals % (BATCH_SIZE*12) != 0 else True
+                    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True, niche_restricted_update = niche_restricted_update)
+
                     target_archive = self.acq_archive
                     acq_sum_t1 = np.sum(self.acq_archive.as_pandas().objective_batch())
                     improvement = acq_sum_t1 - acq_sum_t0
@@ -156,14 +163,15 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
 
     if self.acq_mes_flag and acq_flag: new_elite_archive = self.acq_archive
 
-    # Mutant Update
+    # Niche Restricted Mutant Update
     if self.acq_mes_flag and acq_flag:
-        acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
-        valid_indices, surface_batch = generate_parsec_coordinates(acq_elite_df.solution_batch(), io_flag=False)
-        acq_elite_df = acq_elite_df.iloc[valid_indices]
-        self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True, niche_restricted_update = True)
-        target_archive = self.acq_archive
-        self.visualize_archive(archive=self.acq_archive, map_flag=True)
+        for i in range(2):
+            acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+            valid_indices, surface_batch = generate_parsec_coordinates(acq_elite_df.solution_batch(), io_flag=False)
+            acq_elite_df = acq_elite_df.iloc[valid_indices]
+            self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True, niche_restricted_update = True)
+            target_archive = self.acq_archive
+            self.visualize_archive(archive=self.acq_archive, map_flag=True)
 
     # For benchmarking purposes only:
     #   -> optimize MES using botorch.acqf()

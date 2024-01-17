@@ -135,7 +135,31 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
 
     while(current_eval_budget >= i_obj_evals):
 
-        if iteration == total_iterations - 5:
+        if iteration == total_iterations - 9:
+            # Increase archive resolution
+            acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+            self.acq_archive = GridArchive(
+                solution_dim=SOL_DIMENSION,
+                dims=[15,15],
+                ranges=BHV_VALUE_RANGE,
+                dtype=np.float64)
+            self.update_cellgrids()
+            self.update_mutant_cellgrids()
+            self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
+
+        if iteration == total_iterations - 6:
+            # Increase archive resolution
+            acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+            self.acq_archive = GridArchive(
+                solution_dim=SOL_DIMENSION,
+                dims=[20,20],
+                ranges=BHV_VALUE_RANGE,
+                dtype=np.float64)
+            self.update_cellgrids()
+            self.update_mutant_cellgrids()
+            self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
+
+        if iteration == total_iterations - 3:
             # Increase archive resolution for final 5 iterations
             acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
             self.acq_archive = GridArchive(
@@ -239,11 +263,6 @@ def prepare_sample_elites(self: SailRun, new_elite_archive: GridArchive, old_eli
 
     # Map Acquisition Elites to Objective Archive Indices (may differ if resolution of acquisition archive differs)
     new_elite_df = new_elite_archive.as_pandas(include_solutions=True)
-<<<<<<< HEAD
-=======
-    if self.acq_mes_flag:
-        new_elite_df = new_elite_df.sort_values(by=['objective'], ascending=False)
->>>>>>> 4a489ab (Only sample from highestperforming 85% of MES Elites)
 
     # remove all candidate solutions from new_elite_df, that have already been evaluated
     new_elite_df = new_elite_df[~np.isin(new_elite_df.solution_batch(), self.sol_array).all(1)]
@@ -259,11 +278,6 @@ def prepare_sample_elites(self: SailRun, new_elite_archive: GridArchive, old_eli
     # Map improved elites to objective archive indices
     improved_elites = improved_elites.assign(index = self.obj_archive.index_of(improved_elites.measures_batch()))
     new_bin_elites = new_bin_elites.assign(index = self.acq_archive.index_of(new_bin_elites.measures_batch()))
-
-    if self.acq_mes_flag and not pred_flag:
-        # Consider only highest 95% of elites as worthy for sampling
-        improved_elites = improved_elites.sort_values(by=['objective'], ascending=False).head(int(0.95*improved_elites.shape[0]))
-        new_bin_elites = new_bin_elites.sort_values(by=['objective'], ascending=False).head(int(0.95*new_bin_elites.shape[0]))
 
     # If duplicate indices exist, delete the one with the higher objective
     improved_elites = improved_elites.sort_values(by=['index'], ascending=False)
@@ -298,14 +312,13 @@ def select_samples(self: SailRun, improved_elites, new_bin_elites, acq_flag=Fals
     """
 
     if acq_flag:
-        target = "Acquisition"
         n_samples = BATCH_SIZE
     if pred_flag:
-        target = "Prediction"
         n_samples = PRED_N_OBJ_EVALS//PREDICTION_VERIFICATIONS
 
-    if self.acq_ucb_flag:
-        new_bin_elites = new_bin_elites.sample(frac=1, random_state=self.initial_seed)
+    new_bin_elites = new_bin_elites.sample(frac=1, random_state=self.initial_seed)
+    if self.vanilla_flag: # ToDo: restructure code to sort by objective_improvement if self.custom_flag
+        improved_elites = improved_elites.sample(frac=1, random_state=self.initial_seed)
 
     if self.acq_mes_flag:
 
