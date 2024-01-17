@@ -261,9 +261,9 @@ def prepare_sample_elites(self: SailRun, new_elite_archive: GridArchive, old_eli
     new_bin_elites = new_bin_elites.assign(index = self.acq_archive.index_of(new_bin_elites.measures_batch()))
 
     if self.acq_mes_flag and not pred_flag:
-        # Consider only highest 85% of elites as worthy for sampling
-        improved_elites = improved_elites.sort_values(by=['objective'], ascending=False).head(int(0.85*improved_elites.shape[0]))
-        new_bin_elites = new_bin_elites.sort_values(by=['objective'], ascending=False).head(int(0.85*new_bin_elites.shape[0]))
+        # Consider only highest 95% of elites as worthy for sampling
+        improved_elites = improved_elites.sort_values(by=['objective'], ascending=False).head(int(0.95*improved_elites.shape[0]))
+        new_bin_elites = new_bin_elites.sort_values(by=['objective'], ascending=False).head(int(0.95*new_bin_elites.shape[0]))
 
     # If duplicate indices exist, delete the one with the higher objective
     improved_elites = improved_elites.sort_values(by=['index'], ascending=False)

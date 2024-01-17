@@ -143,7 +143,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
                     acq_sum_t0 = np.sum(self.acq_archive.as_pandas().objective_batch())
                     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
                     target_archive.clear()
-                    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True, niche_restricted_update = True)
+                    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True, niche_restricted_update = False)
                     target_archive = self.acq_archive
                     acq_sum_t1 = np.sum(self.acq_archive.as_pandas().objective_batch())
                     improvement = acq_sum_t1 - acq_sum_t0
@@ -161,21 +161,21 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
         acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
         valid_indices, surface_batch = generate_parsec_coordinates(acq_elite_df.solution_batch(), io_flag=False)
         acq_elite_df = acq_elite_df.iloc[valid_indices]
-        self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True, niche_restricted_update = False)
+        self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True, niche_restricted_update = True)
         target_archive = self.acq_archive
         self.visualize_archive(archive=self.acq_archive, map_flag=True)
-
-    # calculate anytime stats
-    size_t1 = target_archive.stats.num_elites
-    print(f"\n{target} Size: ", str(size_t1))
-    print("[...] End Map-Elites\n\n")
-    if self.acq_mes_flag and acq_flag: self.mes_sobol_cellgrids = None # free RAM
 
     # For benchmarking purposes only:
     #   -> optimize MES using botorch.acqf()
     #   -> compare results to MES optimization
     if self.acq_mes_flag:
         optimize_mes(self, map_flag=True)
+
+    # calculate anytime stats
+    size_t1 = target_archive.stats.num_elites
+    print(f"\n{target} Size: ", str(size_t1))
+    print("[...] End Map-Elites\n\n")
+    if self.acq_mes_flag and acq_flag: self.mes_sobol_cellgrids = None # free RAM
 
     return new_elite_archive, size_t0, size_t1
 
