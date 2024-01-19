@@ -73,6 +73,12 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
             dims=number_bins,
             ranges=BHV_VALUE_RANGE,)
 
+    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+    self.acq_archive.clear()
+    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=acq_flag, pred_flag=pred_flag)
+    if self.acq_mes_flag and acq_flag: 
+        self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True, niche_restricted_update = True)
+
     mes_flag = self.acq_mes_flag
     if acq_flag:
         target = "Acq Archive"
@@ -95,7 +101,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
 
     size_t0 = target_archive.stats.num_elites
     print(f"{target} Size: ", str(size_t0))
-    improvement = 123456
+    improvement_percent = 123456
 
     with tqdm(total=total_iterations) as progress:
         while((remaining_evals-BATCH_SIZE >= 0)):
@@ -147,18 +153,16 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
                     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
                     target_archive.clear()
 
-                    # use niche restricted update after BATCH_SIZE*12 evaluations
-                    niche_restricted_update = False if remaining_evals % (BATCH_SIZE*12) != 0 else True
-                    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True, niche_restricted_update = niche_restricted_update)
+                    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True, niche_restricted_update = False)
 
                     target_archive = self.acq_archive
                     acq_sum_t1 = np.sum(self.acq_archive.as_pandas().objective_batch())
                     improvement = acq_sum_t1 - acq_sum_t0
+                    improvement_percent = 100*(improvement/acq_sum_t0)
                     print(f"Acquisition Value Sum (after update): {acq_sum_t1:.3f}")
                     print(f"Improvement: {improvement}")
+                    print(f"Improvement (%): {improvement_percent:.3f}%")
 
-            # Break loop if improvement is too small
-            if improvement < 0.2: break
             remaining_evals -= BATCH_SIZE
 
     if self.acq_mes_flag and acq_flag: new_elite_archive = self.acq_archive

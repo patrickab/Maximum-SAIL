@@ -135,7 +135,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
 
     while(current_eval_budget >= i_obj_evals):
 
-        if iteration == total_iterations - 9:
+        if iteration == total_iterations - 6:
             # Increase archive resolution
             acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
             self.acq_archive = GridArchive(
@@ -147,7 +147,11 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
             self.update_mutant_cellgrids()
             self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
 
-        if iteration == total_iterations - 6:
+            # Second Archive Update
+            acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+            self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
+
+        if iteration == total_iterations - 3:
             # Increase archive resolution
             acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
             self.acq_archive = GridArchive(
@@ -159,16 +163,8 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
             self.update_mutant_cellgrids()
             self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
 
-        if iteration == total_iterations - 3:
-            # Increase archive resolution for final 5 iterations
+            # Second Archive Update
             acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
-            self.acq_archive = GridArchive(
-                solution_dim=SOL_DIMENSION,
-                dims=OBJ_BHV_NUMBER_BINS,
-                ranges=BHV_VALUE_RANGE,
-                dtype=np.float64)
-            self.update_cellgrids()
-            self.update_mutant_cellgrids()
             self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
 
         # Produce new acquisition elites
