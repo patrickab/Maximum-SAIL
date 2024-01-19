@@ -72,7 +72,7 @@ def mes_map_elites(self, acq_flag=None, pred_flag=None):
     acq_archive = self.acq_archive
     n_evals = ACQ_N_MAP_EVALS
 
-    bhv_cellbounds_mutants, bhv_cellgrids_mutants, mes_cellgrid_mutants = mes_sobol_cellgrids(self, MUTANT_CELLRANGE)
+    bhv_cellbounds_mutants, bhv_cellgrids_mutants, mes_cellgrid_mutants = mes_sobol_cellgrids(self, mutant_cellrange=MUTANT_CELLRANGE)
     bhv_cellbounds_restricted, bhv_cellgrids_restricted, mes_cellgrid_restricted = mes_sobol_cellgrids(self, mutant_cellrange=-0.00001)
 
     # Perform niche-restricted update of acquisition archive under new GP
@@ -87,13 +87,17 @@ def mes_map_elites(self, acq_flag=None, pred_flag=None):
     # Inside optimize_mes() mutants are created & evaluated with these new solutions 
     acq_sum_t0 = np.sum(acq_archive.as_pandas().objective_batch())
     print(f"Mutant t_0: {acq_sum_t0:.3f}")
-    acq_archive = optimize_mes(self, acq_archive, bhv_cellgrids_mutants, mes_cellgrid_mutants, bhv_cellbounds_mutants)
+    acq_archive = optimize_mes(self, acq_archive, 
+        bhv_cellgrid=bhv_cellgrids_mutants,
+        mes_cellgrid=mes_cellgrid_mutants,
+        bhv_cellbounds=bhv_cellbounds_mutants)
 
     self.visualize_archive(archive=acq_archive, map_flag=True)
     acq_sum_t1 = np.sum(acq_archive.as_pandas().objective_batch())
     acq_improvment = acq_sum_t1 - acq_sum_t0
     print(f"Mutant t_1: {acq_sum_t1:.3f} - Improvement: {acq_improvment:.3f}")
-
+    print(f"Best MES Value: ", acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).head(1).objective_batch())
+    print(f"Worst MES Value: ", acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).tail(1).objective_batch())
 
     self.visualize_archive(archive=acq_archive, map_flag=True)
 
@@ -144,15 +148,30 @@ def mes_map_elites(self, acq_flag=None, pred_flag=None):
                         bhv_cellbounds=bhv_cellbounds_restricted)
                     acq_sum_t1 = np.sum(acq_archive.as_pandas().objective_batch())
                     acq_improvment = acq_sum_t1 - acq_sum_t0
-                    acq_improvment_factor = acq_improvment / acq_sum_t0
-                    print(f"Mutant t_1: {acq_sum_t1:.3f} - Improvement: {acq_improvment:.3f} - Factor: {acq_improvment_factor:.3f}")
+                    acq_improvment_percent = acq_improvment / acq_sum_t0
+                    print(f"Mutant t_1: {acq_sum_t1:.3f} - Improvement: {acq_improvment:.3f} - Improvement (Percent): {acq_improvment_percent:.3f}")
                 self.visualize_archive(archive=acq_archive, map_flag=True)
 
             # stop if improvement is less than 5%
-            if acq_improvment_factor < 1.05: break
+            if acq_improvment_percent < 0.05: break
             remaining_evals -= BATCH_SIZE
 
     new_elite_archive = self.acq_archive
+    print(f"Best MES Value: ", acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).head(1).objective_batch())
+    print(f"Worst MES Value: ", acq_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).tail(1).objective_batch())
+
+    for i in range(2):
+        acq_elite_df = acq_archive.as_pandas(include_solutions=True)
+        update_archive(self, archive=acq_archive, gp=gp_model, candidate_sol=acq_elite_df.solution_batch(),
+            bhv_cellgrid=bhv_cellgrids_restricted,
+            mes_cellgrid=mes_cellgrid_restricted,
+            bhv_cellbounds=bhv_cellbounds_restricted)
+
+    # For benchmarking purposes only:
+    #   -> optimize MES using botorch.acqf()
+    #   -> compare results to MES optimization
+    if self.acq_mes_flag:
+        optimize_mes(self, acq_archive, bhv_cellgrids_restricted, mes_cellgrid_restricted, bhv_cellbounds_restricted, benchmark_flag=True)
 
     # calculate anytime stats
     end_time = time.time()
@@ -201,20 +220,20 @@ def acq_mes(self, archive, gp_model, genomes, cellgrids, cellbounds):
 
 
 
-def optimize_mes(self, acq_archive, bhv_cellgrid, mes_cellgrid, bhv_cellbounds):
+def optimize_mes(self, acq_archive, bhv_cellgrid, mes_cellgrid, bhv_cellbounds, benchmark_flag=False):
 
     np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
+    target_logfile = "mes-vs-botorch-init.log" if not benchmark_flag else "mes-vs-botorch-final.log"
 
     gp_model = self.gp_model
     n_samples = N_BOTORCH_SAMPLES
+    sum_improvement_factor = 0
 
     acq_elite_df = acq_archive.as_pandas(include_solutions=True)
     acq_elite_df = acq_elite_df.sample(frac=1, random_state=self.current_seed)  # shuffle elites
     acq_elite_df = acq_elite_df.head(n=n_samples)                               # sample elites
 
     print("\nOptimize MES: n_samples", n_samples)
-
-    sum_perc_improvement = 0
 
     genomes = acq_elite_df.solution_batch()
     objectives = acq_elite_df.objective_batch()
@@ -260,17 +279,24 @@ def optimize_mes(self, acq_archive, bhv_cellgrid, mes_cellgrid, bhv_cellbounds):
         new_acquisitions[i] = new_acquisition
         new_genomes[i] = new_genome
 
-        perc_improvement = ((new_acquisition)-objectives[i])/objectives[i] * 500
-        sum_perc_improvement += perc_improvement
-        print("MES SAIL: {:.3f}  botorch.optimize_acqf(): {:.3f}  Improvement (Percent): {:.3f}".format(objectives[i], new_acquisition, perc_improvement))
+        improvement_factor = ((new_acquisition)/objectives[i])
+        sum_improvement_factor += improvement_factor
+        with open(target_logfile, "a") as f:
+            f.write("MES SAIL: {:.3f}  botorch.optimize_acqf(): {:.3f}  Improvement Factor: {:.3f}\n".format(objectives[i], new_acquisition, improvement_factor))
+        print("MES SAIL: {:.3f}  botorch.optimize_acqf(): {:.3f}  Improvement Factor: {:.3f}".format(objectives[i], new_acquisition, improvement_factor))
 
-    acq_archive = update_archive(self, archive=acq_archive, gp=gp_model, candidate_sol=new_genomes, 
-        bhv_cellgrid=bhv_cellgrid,
-        mes_cellgrid=mes_cellgrid,
-        bhv_cellbounds=bhv_cellbounds)
 
-    mean_perc_improvement = sum_perc_improvement / n_samples
-    print("Mean Improvement (Percent): ", mean_perc_improvement)
+    if not benchmark_flag:
+        acq_archive = update_archive(self, archive=acq_archive, gp=gp_model, candidate_sol=new_genomes, 
+            bhv_cellgrid=bhv_cellgrid,
+            mes_cellgrid=mes_cellgrid,
+            bhv_cellbounds=bhv_cellbounds)
+
+    mean_improvement_factor = sum_improvement_factor / n_samples
+    with open(target_logfile, "a") as f:
+        f.write("Mean Improvement Factor: {:.3f}\n".format(mean_improvement_factor))
+        f.write("Optimize MES Time: {:.3f}\n\n\n".format(time.time() - start))
+    print("Mean Improvement Factor: ", mean_improvement_factor)
     print("Optimize MES Time: ", time.time() - start)
 
     return acq_archive
@@ -343,7 +369,7 @@ def update_archive(self, gp, archive: GridArchive, bhv_cellgrid, mes_cellgrid, b
 
     if candidate_sol.shape[0] == 0:
         return
-    
+
     for i in range(0, candidate_sol.shape[0], BATCH_SIZE):
 
         i_candidate_sol = candidate_sol[i:i+BATCH_SIZE]

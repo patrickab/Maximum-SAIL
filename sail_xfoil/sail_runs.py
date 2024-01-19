@@ -28,7 +28,7 @@ CSV_BUFFERSIZE = (n_obj_evals/BATCH_SIZE) / 8
 ###### Import Custom Scripts ######
 
 from xfoil.eval_xfoil_loop import eval_xfoil_loop
-from acq_functions.acq_mes import optimize_mes
+from mes_map_elites import mes_map_elites
 from utils.pprint_nd import pprint
 from utils.anytime_metrics import initialize_anytime_metrics, calculate_anytime_metrics, store_anytime_metrics
 from xfoil.generate_airfoils import generate_parsec_coordinates
@@ -253,6 +253,11 @@ def ensure_n_new_elites(self: SailRun, new_elite_archive, acq_flag=False, pred_f
     """
 
     target = "Acq" if acq_flag else "Pred"
+
+    if self.acq_mes_flag and acq_flag:
+        map_loop = mes_map_elites
+    else:
+        map_loop = map_elites
 
     if acq_flag:
         n_samples = BATCH_SIZE
@@ -489,7 +494,7 @@ def initialize_archive(self):
         while remaining_evals > 0:
 
             # calculate MES Acquisition Elites
-            new_elite_archive, _, _ = map_elites(self, acq_flag=True)
+            new_elite_archive, _, _ = mes_map_elites(self, acq_flag=True)
             improved_elites, new_bin_elites = prepare_sample_elites(self=self, new_elite_archive=new_elite_archive, old_elite_archive=self.obj_archive)
             candidate_solutions_df = select_samples(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, acq_flag=True, curiosity=7)            # Select samples based on exploration behavior defined in the class constructor
 

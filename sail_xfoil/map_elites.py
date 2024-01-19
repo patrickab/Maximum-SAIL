@@ -43,6 +43,7 @@ import numpy as np
 ##### Import custom scripts #####
 from xfoil.generate_airfoils import generate_parsec_coordinates
 from gp.predict_objective import predict_objective
+from acq_functions.acq_ucb import acq_ucb
 from utils.pprint_nd import pprint
 
 from config.config import Config
@@ -61,9 +62,12 @@ ACQ_N_MAP_EVALS = config.ACQ_N_MAP_EVALS
 PRED_N_MAP_EVALS = config.PRED_N_MAP_EVALS
 PREDICTION_VERIFICATIONS = config.PREDICTION_VERIFICATIONS
 
-def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
+def map_elites(self, acq_flag=False, pred_flag=False):
+
 
     print("\n\nInitialize Map-Elites [...]")
+    target = "Acquisition" if acq_flag else "Prediction"
+    target_archive = self.acq_archive if acq_flag else self.pred_archive
 
     if self.acq_mes_flag and acq_flag:
         # Update Cellgrids using a new seed
@@ -114,10 +118,18 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
             n_evals = ACQ_N_MAP_EVALS*20
 
     if pred_flag:
-        target = "Pred Archive"
         target_function = predict_objective
-        target_archive = self.pred_archive
-        n_evals = PRED_N_MAP_EVALS if not self.pred_verific_flag else PRED_N_MAP_EVALS//(PREDICTION_VERIFICATIONS+1)
+        n_evals = PRED_N_MAP_EVALS
+
+    obj_elite_df = self.obj_archive.as_pandas(include_solutions=True)
+    target_archive_df = target_archive.as_pandas(include_solutions=True)
+    target_archive.clear()
+    target_archive.add(obj_elite_df.solution_batch(), obj_elite_df.objective_batch(), obj_elite_df.measures_batch())
+    if self.custom_flag:
+        self.update_archive(candidate_sol=target_archive_df.solution_batch(), candidate_bhv=target_archive_df.measures_batch(), acq_flag=acq_flag, pred_flag=pred_flag)
+
+    print(f"Best {target} Objective: ", target_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).head(1).objective_batch())
+    print(f"Worst {target} Objective: ", target_archive.as_pandas(include_solutions=True).sort_values(by='objective', ascending=False).tail(1).objective_batch())
 
     remaining_evals = n_evals
     total_iterations = remaining_evals // BATCH_SIZE
@@ -129,7 +141,6 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
         while((remaining_evals-BATCH_SIZE >= 0)):
 
             progress.update(1)
-            valid_indices = np.empty(0, dtype=int)
 
             sigma_mutants = SIGMA_MUTANTS
             sigma_emitter = SIGMA_EMITTER + 0.2*(remaining_evals/n_evals)
@@ -140,89 +151,28 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
             # Create Samples
             samples = scheduler.ask()
 
-            # Generate Parsec Coordinates & remove Invalid Samples
-            valid_indices, surface_batch = generate_parsec_coordinates(samples, io_flag=False)
+            # Generate Parsec Coordinates
+            valid_indices, _ = generate_parsec_coordinates(samples=samples, io_flag=False)
+            samples = samples[valid_indices]
 
             # Calculate Acquisitions/Predictions
             scheduler_bhv = samples[:,1:3]  # ToDO: generalize calculate_behavior()
-            candidate_sol = samples[valid_indices]
-            candidate_obj = target_function(self=self, genomes=candidate_sol, sigma_mutants=sigma_mutants, niche_restricted_update=True)
-            candidate_bhv = scheduler_bhv[valid_indices]
-
-            if mes_flag and acq_flag:
-                candidate_sol = self.mes_elites
+            candidate_sol = samples
+            candidate_obj = target_function(self=self, genomes=candidate_sol)
+            candidate_bhv = scheduler_bhv
 
             target_archive.add(solution_batch=candidate_sol, objective_batch=candidate_obj, measures_batch=candidate_bhv)
             new_elite_archive.add(candidate_sol, candidate_obj, candidate_bhv)
-
-            if mes_flag:
-
-                if remaining_evals % (n_evals//8) == 0 and remaining_evals != n_evals and remaining_evals != BATCH_SIZE:
-
-                    self.visualize_archive(archive=self.acq_archive, map_flag=True)
-                    acquisition_sum = np.sum(self.acq_archive.as_pandas().objective_batch())
-                    print(f"Acquisition Value Sum (before): {acquisition_sum:.3f}")
-
-                    print("updating...")
-                    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
-                    t0_acq_elite_df = acq_elite_df.copy()
-                    print(f"t0: {np.sum(acq_elite_df.objective_batch()):.3f}")
-                    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
-                                        niche_restricted_update=True, sigma_mutants=0.5)
-                    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
-                    print(f"t1: {np.sum(acq_elite_df.objective_batch()):.3f}")
-                    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
-                                        niche_restricted_update=True, sigma_mutants=0.4)
-                    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
-                    print(f"t2: {np.sum(acq_elite_df.objective_batch()):.3f}")
-                    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
-                                        niche_restricted_update=True, sigma_mutants=0.3)
-
-                    self.visualize_archive(archive=self.acq_archive, map_flag=True)
-                    acquisition_sum = np.sum(self.acq_archive.as_pandas().objective_batch())
-                    print(f"Acquisition Value Sum (after): {acquisition_sum:.3f}")
-
 
             remaining_evals -= BATCH_SIZE
 
     new_elite_archive = target_archive
 
-    # Niche Restricted Mutant Update
-    if mes_flag:
-        acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
-        valid_indices, surface_batch = generate_parsec_coordinates(acq_elite_df.solution_batch(), io_flag=False)
-        acq_elite_df = acq_elite_df.iloc[valid_indices]
-        t0_acq_elite_df = acq_elite_df.copy()
-
-        acq_sum_t0 = np.sum(self.acq_archive.as_pandas().objective_batch())
-        print("\nNiche Restricted Mutant Update [...]")
-        print(f"Before Update: {acq_sum_t0:.3f}")
-
-        self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
-                            niche_restricted_update=True, sigma_mutants=0.4)
-        acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
-        print(f"First Update: {np.sum(self.acq_archive.as_pandas().objective_batch())}")
-
-        self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
-                            niche_restricted_update=True, sigma_mutants=0.3)
-        acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
-        print(f"Second Update: {np.sum(self.acq_archive.as_pandas().objective_batch())}")
-
-        self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
-                            niche_restricted_update=True, sigma_mutants=0.2)
-
-        acq_sum_t1 = np.sum(self.acq_archive.as_pandas().objective_batch())
-        print(f"Final Update: {acq_sum_t1:.3f}")
-
-        target_archive = self.acq_archive
-        self.visualize_archive(archive=self.acq_archive, map_flag=True)
-
     # calculate anytime stats
+    new_elite_archive = self.acq_archive # ToDo: remove concept of new_elite_archive
     size_t1 = target_archive.stats.num_elites
     print(f"\n{target} Size: ", str(size_t1))
     print("[...] End Map-Elites\n\n")
-    if self.acq_mes_flag and acq_flag: self.mes_sobol_cellgrids = None # free RAM
-
     return new_elite_archive, size_t0, size_t1
 
 
