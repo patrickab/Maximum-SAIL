@@ -190,11 +190,16 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
         i_obj_evals = PRED_N_OBJ_EVALS//PREDICTION_VERIFICATIONS
         target_archive = self.pred_archive
 
+    if self.acq_mes_flag and acq_loop:
+        map_loop = mes_map_elites
+    else:
+        map_loop = map_elites
+
     while(current_eval_budget >= i_obj_evals):
 
         # Produce new acquisition elites
         target_t0 = target_archive.stats.num_elites
-        new_target_elites, _, _ = map_elites(self, acq_flag=acq_loop, pred_flag=pred_loop)
+        new_target_elites, _, _ = map_loop(self, acq_flag=acq_loop, pred_flag=pred_loop)
         if new_target_elites.stats.num_elites < BATCH_SIZE: new_target_elites = ensure_n_new_elites(self=self, new_elite_archive=new_target_elites, acq_flag=acq_loop, pred_flag=pred_loop)   # Sample until enough new acquisition elites are found
 
         # visualize resulting archive (multiple times during prediction verification to ensure videos of equal length)
