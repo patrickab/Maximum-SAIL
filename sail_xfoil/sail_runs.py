@@ -135,12 +135,6 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
 
     while(current_eval_budget >= i_obj_evals):
 
-        if iteration == total_iterations - 6:
-            set_archive_resolution(self=self, resolution=[12,12])
-
-        if iteration == total_iterations - 3:
-            set_archive_resolution(self=self, resolution=[14,14])
-
         # Produce new acquisition elites
         target_t0 = target_archive.stats.num_elites
         new_target_elites, _, _ = map_elites(self, acq_flag=acq_loop, pred_flag=pred_loop)
