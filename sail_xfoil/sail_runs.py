@@ -136,36 +136,10 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
     while(current_eval_budget >= i_obj_evals):
 
         if iteration == total_iterations - 6:
-            # Increase archive resolution
-            acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
-            self.acq_archive = GridArchive(
-                solution_dim=SOL_DIMENSION,
-                dims=[15,15],
-                ranges=BHV_VALUE_RANGE,
-                dtype=np.float64)
-            self.update_cellgrids()
-            self.update_mutant_cellgrids()
-            self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
-
-            # Second Archive Update
-            acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
-            self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
+            set_archive_resolution(self=self, resolution=[12,12])
 
         if iteration == total_iterations - 3:
-            # Increase archive resolution
-            acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
-            self.acq_archive = GridArchive(
-                solution_dim=SOL_DIMENSION,
-                dims=[20,20],
-                ranges=BHV_VALUE_RANGE,
-                dtype=np.float64)
-            self.update_cellgrids()
-            self.update_mutant_cellgrids()
-            self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
-
-            # Second Archive Update
-            acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
-            self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
+            set_archive_resolution(self=self, resolution=[14,14])
 
         # Produce new acquisition elites
         target_t0 = target_archive.stats.num_elites
@@ -210,6 +184,24 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
             gc.collect()
 
     return
+
+
+def set_archive_resolution(self: SailRun, resolution: list):
+    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+    self.acq_archive = GridArchive(
+        solution_dim=SOL_DIMENSION,
+        dims=resolution,
+        ranges=BHV_VALUE_RANGE,
+        dtype=np.float64)
+    self.acq_archive.add(acq_elite_df.solution_batch(), acq_elite_df.objective_batch(), acq_elite_df.measures_batch())
+
+    self.update_cellgrids()
+    self.update_mutant_cellgrids()
+    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
+
+    # Second Archive Update
+    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
 
 
 def ensure_n_new_elites(self: SailRun, new_elite_archive, acq_flag=False, pred_flag=False):
@@ -358,6 +350,16 @@ def scale_samples(samples, boundaries=SOL_VALUE_RANGE):
 
     samples = samples * (upper_bounds - lower_bounds) + lower_bounds    
     return samples
+
+
+def set_archive_resolution(self: SailRun, resolution: list):
+    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+    self.acq_archive = GridArchive(
+        solution_dim=SOL_DIMENSION,
+        dims=resolution,
+        ranges=BHV_VALUE_RANGE,
+        dtype=np.float64)
+    self.acq_archive.add(acq_elite_df.solution_batch(), acq_elite_df.objective_batch(), acq_elite_df.measures_batch())
 
 
 def initialize_archive(self):
