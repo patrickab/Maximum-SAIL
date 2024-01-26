@@ -71,11 +71,17 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
         new_elite_archive = GridArchive(
             solution_dim=SOL_DIMENSION,
             dims=number_bins,
-            ranges=BHV_VALUE_RANGE,)
+            ranges=BHV_VALUE_RANGE,)        
 
     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
     self.acq_archive.clear()
-    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=acq_flag, pred_flag=pred_flag)
+    if self.acq_ucb_flag:
+        obj_elite_df = self.obj_archive.as_pandas(include_solutions=True)
+        self.update_archive(candidate_sol=obj_elite_df.solution_batch(), candidate_bhv=obj_elite_df.measures_batch(), acq_flag=acq_flag, pred_flag=pred_flag)
+
+    if not self.vanilla_flag:
+        self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=acq_flag, pred_flag=pred_flag)
+
     if self.acq_mes_flag and acq_flag: 
         self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True, niche_restricted_update = True)
 
@@ -165,7 +171,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
 
             remaining_evals -= BATCH_SIZE
 
-    if self.acq_mes_flag and acq_flag: new_elite_archive = self.acq_archive
+    new_elite_archive = self.acq_archive
 
     # Niche Restricted Mutant Update
     if self.acq_mes_flag and acq_flag:

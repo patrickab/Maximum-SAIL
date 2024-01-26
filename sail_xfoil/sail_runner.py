@@ -373,6 +373,7 @@ def store_final_data(self: SailRun):
     error_dataframe.to_csv(f"{initial_seed}_{domain}_error_archive.csv", index=False)
 
 
+
 def evaluate_prediction_archive(self: SailRun):
 
     """

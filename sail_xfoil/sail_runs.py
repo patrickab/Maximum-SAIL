@@ -77,7 +77,7 @@ def run_vanilla_sail(self: SailRun):
         target_t0 = self.acq_archive.stats.num_elites
         new_acq_elites, _, _ = map_elites(self, acq_flag=True)
         if new_acq_elites.stats.num_elites < BATCH_SIZE: ensure_n_new_elites(self=self, new_elite_archive=new_acq_elites, acq_flag=True)                  # Sample until enough new acquisition elites are found
-        candidate_solutions_df = self.acq_archive.as_pandas(include_solutions=True).sample(n=BATCH_SIZE, random_state=self.initial_seed, replace=False)   # IMPORTANT ToDo: sobol sample in seed paper
+        candidate_solutions_df = self.acq_archive.as_pandas(include_solutions=True).sample(n=BATCH_SIZE, random_state=self.initial_seed, replace=False)   # ToDo: implement sobol sample as done in seed paper
         target_t1 = self.acq_archive.stats.num_elites
 
         self.visualize_archive(archive=self.acq_archive, acq_flag=True)
@@ -116,7 +116,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
     if not pred_loop:
         initialize_archive(self)
 
-    CURIOSITY = 2 # For Hybrid Approach: 'CURIOSITY//BATCH_SIZE' new bin elites are to be sampled
+    CURIOSITY = 3 # For Hybrid Approach: 'CURIOSITY//BATCH_SIZE' new bin elites are to be sampled
 
     anytime_metric_kwargs = initialize_anytime_metrics(self=self, acq_flag=acq_loop, pred_flag=pred_loop)
 
@@ -200,8 +200,11 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
         iteration = anytime_metric_kwargs['iteration']
         current_eval_budget = anytime_metric_kwargs['current_eval_budget']
 
-        if iteration % 2 == 0:
+        print(iteration)
+        print(CURIOSITY)
+        if iteration % 10 == 0:
             CURIOSITY += 1
+            CURIOSITY = min(CURIOSITY, 7)
 
         if iteration % 20 == 0:
             gc.collect()
@@ -254,49 +257,46 @@ def prepare_sample_elites(self: SailRun, new_elite_archive: GridArchive, old_eli
         Old Elite Archive
         New Elite Archive
     """
+    obj_archive_df = self.obj_archive.as_pandas(include_solutions=True)
+    target_archive_df = new_elite_archive.as_pandas(include_solutions=True)
 
-    old_elite_df = old_elite_archive.as_pandas(include_solutions=True).sort_values(by=['index'])
+    # Remove invalid designs
+    valid_indices, _ = generate_parsec_coordinates(target_archive_df.solution_batch(), io_flag=False)
+    target_archive_df = target_archive_df.iloc[valid_indices]
 
-    # Map Acquisition Elites to Objective Archive Indices (may differ if resolution of acquisition archive differs)
-    new_elite_df = new_elite_archive.as_pandas(include_solutions=True)
+    # Remove all candidate solutions from target_archive_df, that have already been evaluated
+    target_archive_df = target_archive_df[~np.isin(target_archive_df.solution_batch(), self.sol_array).all(1)]
 
-    # remove all candidate solutions from new_elite_df, that have already been evaluated
-    new_elite_df = new_elite_df[~np.isin(new_elite_df.solution_batch(), self.sol_array).all(1)]
-    new_elite_indices = self.obj_archive.index_of(new_elite_df.measures_batch())
+    # Map Acquisition Elites to Objective Archive Indices 
+    # (allows different archive resolutions for acq and obj archive)
+    new_elite_indices = self.obj_archive.index_of(target_archive_df.measures_batch())
 
     # Index refers to the bin, that the elite belongs to
     # Therefore the index can be used to seperate improved elites from new bin elites
-    is_improved_new_elite = np.isin(new_elite_indices, old_elite_df['index'])
+    is_improved_new_elite = np.isin(new_elite_indices, obj_archive_df['index'])
 
-    improved_elites = new_elite_df[is_improved_new_elite]
-    new_bin_elites   = new_elite_df[~is_improved_new_elite]
+    improved_elites = target_archive_df[is_improved_new_elite]
+    new_bin_elites   = target_archive_df[~is_improved_new_elite]
 
     # Map improved elites to objective archive indices
     improved_elites = improved_elites.assign(index = self.obj_archive.index_of(improved_elites.measures_batch()))
     new_bin_elites = new_bin_elites.assign(index = self.acq_archive.index_of(new_bin_elites.measures_batch()))
 
-    # If duplicate indices exist, delete the one with the higher objective
+    # If duplicate indices exist, keep the one with the higher objective
     improved_elites = improved_elites.sort_values(by=['index'], ascending=False)
     improved_elites = improved_elites.drop_duplicates(subset=['index'], keep='first')
 
     # Select old elites that have been improved
-    is_improved_old_elite = np.isin(old_elite_df['index'], new_elite_indices)
-    improved_old_elites = old_elite_df[is_improved_old_elite]
+    is_improved_old_elite = np.isin(obj_archive_df['index'], new_elite_indices)
+    improved_old_elites = obj_archive_df[is_improved_old_elite]
 
     improved_elites = improved_elites.sort_values(by=['index'])
     improved_old_elites = improved_old_elites.sort_values(by=['index'])
 
-    new_bin_elites = new_bin_elites.assign(objective_improvement = np.array(new_bin_elites['objective'])).sort_values(by=['objective_improvement'], ascending=False)
-
-    if self.acq_ucb_flag:
-        improved_elites = improved_elites.assign(objective_improvement = np.array(improved_elites['objective'] - np.array(improved_old_elites['objective']))).sort_values(by=['objective_improvement'], ascending=False)
-
-    if self.acq_mes_flag: # Dont calculate objective improvement for MES
-        if pred_flag:
-            improved_elites = improved_elites.assign(objective_improvement = np.array(improved_elites['objective'] - np.array(improved_old_elites['objective']))).sort_values(by=['objective_improvement'], ascending=False)
-        else:
-            improved_elites = improved_elites.assign(objective_improvement = np.array(improved_elites['objective'])).sort_values(by=['objective_improvement'], ascending=False)
-
+    # For custom approach, calculate objective improvement, if UCB or Prediction is calculated
+    if self.custom_flag and (self.acq_ucb_flag or pred_flag):
+        new_bin_elites = new_bin_elites.assign(objective_improvement = np.array(new_bin_elites['objective']))
+        improved_elites = improved_elites.assign(objective_improvement = np.array(improved_elites['objective'] - np.array(improved_old_elites['objective'])))
 
     return improved_elites, new_bin_elites
 
@@ -306,26 +306,28 @@ def select_samples(self: SailRun, improved_elites, new_bin_elites, acq_flag=Fals
     - Selects samples based on exploration behavior defined in the class constructor
     - In case of MES, the best 70% of elites are selected, then randomly shuffled. This is done due to different MES value ranges
     """
-
+    
     if acq_flag:
         n_samples = BATCH_SIZE
     if pred_flag:
         n_samples = PRED_N_OBJ_EVALS//PREDICTION_VERIFICATIONS
 
-    new_bin_elites = new_bin_elites.sample(frac=1, random_state=self.initial_seed)
-    if self.vanilla_flag: # ToDo: restructure code to sort by objective_improvement if self.custom_flag
-        improved_elites = improved_elites.sample(frac=1, random_state=self.initial_seed)
-
-    if self.acq_mes_flag:
-
-        # shuffle elites
-        improved_elites = improved_elites.sample(frac=1, random_state=self.initial_seed)
+    if self.vanilla_flag or (self.acq_mes_flag and acq_flag):
+        # shuffle elites (elites are sorted by index, which is not random)
         new_bin_elites = new_bin_elites.sample(frac=1, random_state=self.initial_seed)
+        improved_elites = improved_elites.sample(frac=1, random_state=self.initial_seed)
 
-    if self.greedy_flag: # Evaluate only maximum improvement, regardeless of new/old bin
-        candidate_elite_df = pandas.concat([new_bin_elites, improved_elites]).sort_values(by=['objective_improvement'], ascending=False).head(n_samples)
+    # For custom approach, sort by objective improvement, if UCB or Prediction is calculated
+    if self.custom_flag and (self.acq_ucb_flag or pred_flag):
+        new_bin_elites = new_bin_elites.sample(frac=1, random_state=self.initial_seed)
+        improved_elites = improved_elites.sort_values(by=['objective_improvement'], ascending=False)
+
+    if self.vanilla_flag:
+        candidate_elite_df = pandas.concat([new_bin_elites.head(n_samples), improved_elites.head(n_samples)])
+        candidate_elite_df = candidate_elite_df.sample(frac=1, random_state=self.initial_seed)
 
     if self.hybrid_flag: # Evenly balance sampling of best new_bin_elites & best improved_elites
+
         n_new_bin_elites = new_bin_elites.shape[0]
         n_improved_elites = improved_elites.shape[0]
 
@@ -381,6 +383,13 @@ def initialize_archive(self):
         self.acq_function = acq_ucb
         self.acq_mes_flag = False
         self.acq_ucb_flag = True
+
+        # initialize acq archive with sobol samples
+        solution_batch = create_sobol_samples(order=50000, dim=len(SOL_VALUE_RANGE), seed=self.current_seed)
+        solution_batch = solution_batch.T
+        solution_batch = scale_samples(solution_batch)
+        measures_batch = solution_batch[:, 1:3]
+        self.update_archive(candidate_sol=solution_batch, candidate_bhv=measures_batch, acq_flag=True)
 
     # use MES to fill obj archive
     if self.custom_flag and self.mes_init:

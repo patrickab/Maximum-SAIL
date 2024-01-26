@@ -115,7 +115,7 @@ def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_pred
         self.acq_archive.as_pandas(include_solutions=True).to_csv(f"exceptional_acq_archive_{self.domain}_{self.initial_seed}_{self.current_seed}.csv")
 
     if candidate_targetvalues is not None:
-        if candidate_targetvalues.shape[0] != 0:
+        if candidate_targetvalues.shape[0] != 0 and new_objectives.shape[0] != 0:
 
             print(f"\n\nObjective Evaluation Results and Corresponding {target} Values:")
             target_objectives = np.vstack(np.hstack(candidate_targetvalues))

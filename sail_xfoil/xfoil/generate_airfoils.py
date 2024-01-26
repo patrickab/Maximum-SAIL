@@ -45,8 +45,8 @@ def export_parsec_coordinates(upper_xy, lower_xy, io_flag):
         is_itersecting_airfoil = True if np.any(delta_y < 0) else False
         is_negative_upper_y = True if np.any(upper_y < 0) else False
 
-        is_invalid_airfoil = False # Disable constraints for now
-        # is_invalid_airfoil = True if is_rollercoaster_airfoil or is_itersecting_airfoil or is_negative_upper_y else False
+        is_invalid_airfoil = False
+        #is_invalid_airfoil = True if is_itersecting_airfoil else False 
 
         if not is_invalid_airfoil:
 
