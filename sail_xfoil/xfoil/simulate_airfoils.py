@@ -66,7 +66,10 @@ def xfoil(iterations):
             success_indices.remove(index)
         else:
             obj = calculate_obj(drag, lift)
-            obj_batch.append(obj)
+            if np.isfinite(obj) and not np.isnan(obj):
+                obj_batch.append(obj)
+            if ~np.isfinite(obj) or np.isnan(obj):
+                success_indices.remove(index)
 
     obj_batch = np.array(obj_batch)
     convergence_errors = iterations - len(success_indices)
