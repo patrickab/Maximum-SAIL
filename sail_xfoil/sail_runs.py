@@ -122,15 +122,15 @@ def mes_local_competition(self, acq_elite_df):
 
         if index%row_dim != 0:
             neighbor_index_left = index-1
-            neighbor_index_left_up = index+24
-            neighbor_index_left_down = index-26
+            neighbor_index_left_up = index-1+row_dim
+            neighbor_index_left_down = index-1-row_dim
             neighbor_indices.append(neighbor_index_left) if neighbor_index_left >= 0 else None
             neighbor_indices.append(neighbor_index_left_up) if neighbor_index_left_up < np.prod(acq_archive_dims)-1 else None
             neighbor_indices.append(neighbor_index_left_down) if neighbor_index_left_down >= 0 else None
         if (index+1) % row_dim != 0:
             neighbor_index_right = index+1
-            neighbor_index_right_up = index+26
-            neighbor_index_right_down = index-24
+            neighbor_index_right_up = index+1+row_dim
+            neighbor_index_right_down = index-1-row_dim
             neighbor_indices.append(neighbor_index_right) if neighbor_index_right < np.prod(acq_archive_dims)-1 else None
             neighbor_indices.append(neighbor_index_right_up) if neighbor_index_right_up < np.prod(acq_archive_dims)-1 else None
             neighbor_indices.append(neighbor_index_right_down) if neighbor_index_right_down >= 0 else None
@@ -196,6 +196,12 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
             raise ValueError("Duplicate Solution Error: New Solutions already exist in GP Data")
 
         print("Curiosity: ", CURIOSITY)
+        if self.acq_mes_flag and acq_loop:
+            optimize_mes(self, 
+                         solution_batch=solution_batch,
+                         objective_batch=objective_batch,
+                         benchmark_flag=True)
+
         obj_t0, obj_t1, n_new_obj_elites = eval_xfoil_loop(self, solution_batch=solution_batch, measures_batch=measures_batch, candidate_targetvalues=objective_batch, acq_flag=acq_loop, pred_flag=pred_loop)       # Evaluate Acquisition Elites & Update Acq Archive under resulting GP Model
 
         # Calculate, Print & Store Anytime Metrics
@@ -205,9 +211,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
         iteration = anytime_metric_kwargs['iteration']
         current_eval_budget = anytime_metric_kwargs['current_eval_budget']
 
-        print(iteration)
-        print(CURIOSITY)
-        if iteration % 3 == 0:
+        if iteration % 2 == 0:
             CURIOSITY += 1
             CURIOSITY = min(CURIOSITY, 7)
 
@@ -215,24 +219,6 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
             gc.collect()
 
     return
-
-
-def set_archive_resolution(self: SailRun, resolution: list):
-    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
-    self.acq_archive = GridArchive(
-        solution_dim=SOL_DIMENSION,
-        dims=resolution,
-        ranges=BHV_VALUE_RANGE,
-        dtype=np.float64)
-    self.acq_archive.add(acq_elite_df.solution_batch(), acq_elite_df.objective_batch(), acq_elite_df.measures_batch())
-
-    self.update_cellgrids()
-    self.update_mutant_cellgrids()
-    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
-
-    # Second Archive Update
-    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
-    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True)
 
 
 def ensure_n_new_elites(self: SailRun, new_elite_archive, acq_flag=False, pred_flag=False):
@@ -342,10 +328,13 @@ def select_samples(self: SailRun, improved_elites, new_bin_elites, acq_flag=Fals
         improved_elites = improved_elites.sample(frac=1, random_state=self.initial_seed)
 
     if self.acq_mes_flag and acq_flag:
-        new_bin_elites = new_bin_elites.sort_values(by=['n_stronger_neighbors'], ascending=True)
-        improved_elites = improved_elites.sort_values(by=['n_stronger_neighbors'], ascending=True)
-
-    # For custom approach, sort by objective improvement, if UCB or Prediction is calculated
+        # Shuffle indices randomly
+        new_bin_elites = new_bin_elites.sample(frac=1, random_state=self.initial_seed)
+        improved_elites = improved_elites.sample(frac=1, random_state=self.initial_seed)
+        # Sort by n_stronger_neighbors
+        new_bin_elites = new_bin_elites.sort_values(by=['n_stronger_neighbors'])
+        improved_elites = improved_elites.sort_values(by=['n_stronger_neighbors'])
+    
     if self.custom_flag and (self.acq_ucb_flag or pred_flag):
         new_bin_elites = new_bin_elites.sample(frac=1, random_state=self.initial_seed)
         improved_elites = improved_elites.sort_values(by=['objective_improvement'], ascending=False)
@@ -365,6 +354,13 @@ def select_samples(self: SailRun, improved_elites, new_bin_elites, acq_flag=Fals
         n_improved_samples = n_samples - n_new_bin_samples
         print(f"Attempting --- New Bin Elites: {n_new_bin_samples} - Improved Elites: {n_improved_samples}")
 
+        empty_bins = np.prod(OBJ_BHV_NUMBER_BINS) - self.acq_archive.stats.num_elites
+        if n_new_bin_elites < n_new_bin_samples and empty_bins > BATCH_SIZE:
+            dims = self.acq_archive.dims
+            new_dims = dims + [3,3]
+            if new_dims[0] <= OBJ_BHV_NUMBER_BINS[0]:
+                set_archive_resolution(self, resolution=new_dims)
+
         if n_new_bin_elites >= n_new_bin_samples and n_improved_elites >= n_improved_samples:
             new_bin_elites = new_bin_elites.head(n_new_bin_samples)
             candidate_elite_df = pandas.concat([new_bin_elites.head(n_new_bin_samples), improved_elites.head(n_improved_samples)])
@@ -374,6 +370,9 @@ def select_samples(self: SailRun, improved_elites, new_bin_elites, acq_flag=Fals
                 candidate_elite_df = pandas.concat([new_bin_elites, improved_elites.head(n_samples - n_new_bin_elites)])
             else:
                 candidate_elite_df = pandas.concat([new_bin_elites.head(n_samples - n_improved_elites), improved_elites])
+
+    candidate_elite_df = candidate_elite_df.sort_values(by='objective', ascending=False)
+    print(candidate_elite_df.head(10))
 
     return candidate_elite_df
 
@@ -389,13 +388,40 @@ def scale_samples(samples, boundaries=SOL_VALUE_RANGE):
 
 
 def set_archive_resolution(self: SailRun, resolution: list):
-    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+    t0_acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
     self.acq_archive = GridArchive(
         solution_dim=SOL_DIMENSION,
         dims=resolution,
         ranges=BHV_VALUE_RANGE,
         dtype=np.float64)
-    self.acq_archive.add(acq_elite_df.solution_batch(), acq_elite_df.objective_batch(), acq_elite_df.measures_batch())
+
+    # Update archive under new GP 
+    self.update_cellgrids()
+    self.update_mutant_cellgrids()
+    self.update_archive(candidate_sol=t0_acq_elite_df.solution_batch(),
+                        candidate_bhv=t0_acq_elite_df.measures_batch(),
+                        acq_flag=True, niche_restricted_update=True,
+                        sigma_mutants=0.5)
+
+    # Mutants Update
+    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), 
+                        candidate_bhv=acq_elite_df.measures_batch(), 
+                        acq_flag=True, niche_restricted_update=False,
+                        sigma_mutants=0.5)
+    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+    self.acq_archive.clear()
+    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), 
+                        candidate_bhv=acq_elite_df.measures_batch(), 
+                        acq_flag=True, niche_restricted_update=False,
+                        sigma_mutants=0.5)
+
+    # Niche restricted update
+    self.acq_archive.clear()
+    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), 
+                        candidate_bhv=acq_elite_df.measures_batch(), 
+                        acq_flag=True, niche_restricted_update=True,
+                        sigma_mutants=0.2)
 
 
 def initialize_archive(self):

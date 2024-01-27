@@ -107,7 +107,6 @@ def sail(initial_seed, acq_ucb_flag=False, acq_mes_flag=False, sail_vanilla_flag
 
 if __name__ == "__main__":
 
-    subprocess.run("clean", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) # custom bash command to remove all files from last run
     exec_start = time.time()
 
     for i in range(TEST_RUNS):
@@ -117,7 +116,7 @@ if __name__ == "__main__":
         benchmark_domains = []
 
         #sail(initial_seed=i, sail_vanilla_flag=True, acq_ucb_flag=True)
-        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=True, hybrid_flag=True, acq_mes_flag=True, random_init=True)
+        sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, hybrid_flag=True, acq_mes_flag=True, random_init=True)
         gc.collect()
 
         img_filenames = [f"imgs/final_heatmaps_{i}_{benchmark_domain}.png" for benchmark_domain in benchmark_domains]
@@ -129,11 +128,11 @@ if __name__ == "__main__":
 
     benchmark_filepaths = " ".join(["imgs/" + benchmark_domain for benchmark_domain in benchmark_domains])
     current_time = datetime.datetime.now()
-    timestamp = current_time.strftime("%Y%m%d%H%M")
+    timestamp = current_time.strftime("%Y%m%d")
     os.makedirs(timestamp)
     subprocess.run(f"cp config/config.ini {timestamp}/reproduction_info.txt", shell=True)
     subprocess.run(f'mv *.csv csv', shell=True)
-    subprocess.run(f'mv csv *.mp4 imgs stats_log {timestamp}', shell=True)
+    subprocess.run(f'mv csv *.mp4 imgs stats_log mes-vs-botorch* {timestamp}', shell=True)
     if not os.path.exists("benchmarks"): os.makedirs("benchmarks")
     subprocess.run(f"mv {timestamp} benchmarks", shell=True)
 

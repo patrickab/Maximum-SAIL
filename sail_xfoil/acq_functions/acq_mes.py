@@ -17,6 +17,7 @@ SOL_DIMENSION = config.SOL_DIMENSION
 BHV_DIMENSION = config.BHV_DIMENSION
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 SIGMA_MUTANTS = config.SIGMA_MUTANTS
+BATCH_SIZE = config.BATCH_SIZE
 
 
 def acq_mes(self, genomes, niche_restricted_update=True, sigma_mutants=SIGMA_MUTANTS):
@@ -117,23 +118,28 @@ def assamble_cellgrid(self, genome):
     return mes_cellgrid
 
 
-def optimize_mes(self, init_flag=False, benchmark_flag=False):
+def optimize_mes(self, init_flag=False, benchmark_flag=False, solution_batch=None, objective_batch=None):
 
     np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
     target_logfile = "mes-vs-botorch-init.log" if not benchmark_flag else "mes-vs-botorch-final.log"
+    target_logfile = "mes-vs-botorch-obj-evals.log" if solution_batch is not None else target_logfile
 
     sum_improvement_factor = 0
     gp_model = self.gp_model
-    n_samples = 10
-
-    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
-    acq_elite_df = acq_elite_df.sample(frac=1, random_state=self.current_seed)
-    acq_elite_df = acq_elite_df.head(n=n_samples)
+    n_samples = 25 if solution_batch is None else BATCH_SIZE
 
     print("\nOptimize MES: n_samples", n_samples)
 
-    genomes = acq_elite_df.solution_batch()
-    objectives = acq_elite_df.objective_batch()
+    if solution_batch is not None:
+        genomes = solution_batch
+        objectives = objective_batch
+    else:
+        acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+        acq_elite_df = acq_elite_df.sample(frac=1, random_state=self.current_seed)
+        acq_elite_df = acq_elite_df.head(n=n_samples)
+
+        genomes = acq_elite_df.solution_batch()
+        objectives = acq_elite_df.objective_batch()
 
     if init_flag:
         self.acq_archive.clear()
@@ -175,11 +181,14 @@ def optimize_mes(self, init_flag=False, benchmark_flag=False):
         new_genomes[i] = new_genome
         new_acquisitions[i] = new_acquisition
 
-        improvement_factor = ((new_acquisition)/objectives[i])
+        improvement_factor = (objectives[i]/new_acquisition)
         sum_improvement_factor += improvement_factor
         with open(target_logfile, "a") as f:
-            f.write("MES SAIL: {:.3f}  botorch.optimize_acqf(): {:.3f}  Improvement Factor: {:.3f}\n".format(objectives[i], new_acquisition, improvement_factor))
-        print("MES SAIL: {:.3f}  botorch.optimize_acqf(): {:.3f}  Improvement Factor: {:.3f}".format(objectives[i], new_acquisition, improvement_factor))
+            f.write("MES SAIL: {:.3f}  botorch.optimize_acqf(): {:.3f}  Ratio: {:.3f}\n".format(objectives[i], new_acquisition, improvement_factor))
+        print("MES SAIL: {:.3f}  botorch.optimize_acqf(): {:.3f}  Ratio: {:.3f}".format(objectives[i], new_acquisition, improvement_factor))
+
+    duration = time.time() - start
+    print("Optimize MES Time: ", duration)
 
     # Self.update_archive() will trigger acq_mes()
     # acq_mes() will calculate MES values for the new_genomes & their mutants
@@ -189,10 +198,9 @@ def optimize_mes(self, init_flag=False, benchmark_flag=False):
 
     mean_improvement_factor = sum_improvement_factor / n_samples
     with open(target_logfile, "a") as f:
-        f.write("Mean Improvement Factor: {:.3f}\n".format(mean_improvement_factor))
-        f.write("Optimize MES Time: {:.3f}\n\n\n".format(time.time() - start))
-    print("Mean Improvement Factor: ", mean_improvement_factor)
-    print("Optimize MES Time: ", time.time() - start)
+        f.write("Mean Ratio: {:.3f}\n".format(mean_improvement_factor))
+        f.write("Optimize MES Time: {:.3f}\n\n\n".format(duration))
+    print("Mean Ratio: ", mean_improvement_factor)
 
 
 def simple_mes(self, genomes):
