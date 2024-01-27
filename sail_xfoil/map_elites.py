@@ -71,19 +71,33 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
         new_elite_archive = GridArchive(
             solution_dim=SOL_DIMENSION,
             dims=number_bins,
-            ranges=BHV_VALUE_RANGE,)        
+            ranges=BHV_VALUE_RANGE,)
 
     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
     self.acq_archive.clear()
+
+    if self.custom_flag:
+        self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=acq_flag, pred_flag=pred_flag)
+        if self.acq_mes_flag and acq_flag:
+            acq_sum_t0 = np.sum(self.acq_archive.as_pandas().objective_batch())
+            print(f"Acquisition Value Sum (before update): {acq_sum_t0:.3f}")
+            optimize_mes(self=self)
+            for i in range(2):
+                acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+                self.acq_archive.clear()
+                self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True, niche_restricted_update = False)
+
     if self.acq_ucb_flag:
         obj_elite_df = self.obj_archive.as_pandas(include_solutions=True)
         self.update_archive(candidate_sol=obj_elite_df.solution_batch(), candidate_bhv=obj_elite_df.measures_batch(), acq_flag=acq_flag, pred_flag=pred_flag)
 
-    if not self.vanilla_flag:
-        self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=acq_flag, pred_flag=pred_flag)
-
-    if self.acq_mes_flag and acq_flag: 
+    if self.acq_mes_flag and acq_flag:
+        acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+        self.acq_archive.clear()
         self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True, niche_restricted_update = True)
+        self.visualize_archive(archive=self.acq_archive, map_flag=True)
+        acq_sum_t1 = np.sum(self.acq_archive.as_pandas().objective_batch())
+        print(f"Acquisition Value Sum (after update): {acq_sum_t1:.3f}")
 
     mes_flag = self.acq_mes_flag
     if acq_flag:
@@ -91,7 +105,6 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
         target_function = self.acq_function
         target_archive = self.acq_archive
         if self.acq_mes_flag: # allows to reduce number of acquisition evaluations for MES
-            optimize_mes(self, map_flag=True)
             n_evals = ACQ_N_MAP_EVALS
         else:
             n_evals = ACQ_N_MAP_EVALS*20
@@ -107,7 +120,6 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
 
     size_t0 = target_archive.stats.num_elites
     print(f"{target} Size: ", str(size_t0))
-    improvement_percent = 123456
 
     with tqdm(total=total_iterations) as progress:
         while((remaining_evals-BATCH_SIZE >= 0)):
@@ -139,35 +151,10 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
 
             if mes_flag and acq_flag:
 
-                # prevent entering with mes_flag 
-                # this is done to leave this functionality in this module
-                # without using it at the moment
-                if not mes_flag and remaining_evals % (BATCH_SIZE*5) == 0 or remaining_evals % (BATCH_SIZE*9) == 0:
-                    # Delete all acquisition elites with invalid indices
-                    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
-                    valid_indices, surface_batch = generate_parsec_coordinates(acq_elite_df.solution_batch(), io_flag=False)
-                    acq_elite_df = acq_elite_df.iloc[valid_indices]
-
-                    target_archive.clear()
-                    target_archive.add(solution_batch=acq_elite_df.solution_batch(), objective_batch=acq_elite_df.objective_batch(), measures_batch=acq_elite_df.measures_batch())
-
-                if remaining_evals % (BATCH_SIZE*6) == 0:
+                if remaining_evals % (n_evals//10) == 0 and remaining_evals != n_evals and remaining_evals != 0:
                     self.visualize_archive(archive=self.acq_archive, map_flag=True)
                     acquisition_sum = np.sum(self.acq_archive.as_pandas().objective_batch())
                     print(f"Acquisition Value Sum: {acquisition_sum:.3f}")
-                    acq_sum_t0 = np.sum(self.acq_archive.as_pandas().objective_batch())
-                    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
-                    target_archive.clear()
-
-                    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True, niche_restricted_update = False)
-
-                    target_archive = self.acq_archive
-                    acq_sum_t1 = np.sum(self.acq_archive.as_pandas().objective_batch())
-                    improvement = acq_sum_t1 - acq_sum_t0
-                    improvement_percent = 100*(improvement/acq_sum_t0)
-                    print(f"Acquisition Value Sum (after update): {acq_sum_t1:.3f}")
-                    print(f"Improvement: {improvement}")
-                    print(f"Improvement (%): {improvement_percent:.3f}%")
 
             remaining_evals -= BATCH_SIZE
 
@@ -181,13 +168,13 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
             acq_elite_df = acq_elite_df.iloc[valid_indices]
             self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True, niche_restricted_update = True)
             target_archive = self.acq_archive
-            self.visualize_archive(archive=self.acq_archive, map_flag=True)
+        self.visualize_archive(archive=self.acq_archive, map_flag=True)
 
     # For benchmarking purposes only:
     #   -> optimize MES using botorch.acqf()
     #   -> compare results to MES optimization
     if self.acq_mes_flag:
-        optimize_mes(self, map_flag=True)
+        optimize_mes(self, benchmark_flag=True)
 
     # calculate anytime stats
     size_t1 = target_archive.stats.num_elites

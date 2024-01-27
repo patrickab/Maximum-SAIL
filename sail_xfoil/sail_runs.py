@@ -12,7 +12,6 @@ from config.config import Config
 config = Config(os.path.join(os.path.dirname(__file__), 'config', 'config.ini'))
 PREDICTION_VERIFICATIONS = config.PREDICTION_VERIFICATIONS
 INIT_N_ACQ_EVALS = config.INIT_N_ACQ_EVALS
-INIT_N_SOBOL_ACQ = config.INIT_N_SOBOL_ACQ
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 ACQ_N_OBJ_EVALS = config.ACQ_N_OBJ_EVALS
 ACQ_N_MAP_EVALS = config.ACQ_N_MAP_EVALS
@@ -154,7 +153,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
     if not pred_loop:
         initialize_archive(self)
 
-    CURIOSITY = 3 # For Hybrid Approach: 'CURIOSITY//BATCH_SIZE' new bin elites are to be sampled
+    CURIOSITY = 4 # For Hybrid Approach: 'CURIOSITY//BATCH_SIZE' new bin elites are to be sampled
 
     anytime_metric_kwargs = initialize_anytime_metrics(self=self, acq_flag=acq_loop, pred_flag=pred_loop)
 
@@ -208,7 +207,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
 
         print(iteration)
         print(CURIOSITY)
-        if iteration % 10 == 0:
+        if iteration % 3 == 0:
             CURIOSITY += 1
             CURIOSITY = min(CURIOSITY, 7)
 
@@ -263,7 +262,7 @@ def ensure_n_new_elites(self: SailRun, new_elite_archive, acq_flag=False, pred_f
 
         print(f'\n\nNot enough {target} Improvements: Re-entering {target}')
         print(f'New {target} Elites (before): {new_elite_archive.stats.num_elites}')
-        new_elite_archive, _, _ = map_elites(self, new_elite_archive=new_elite_archive, acq_flag=acq_flag, pred_flag=pred_flag, re_enter_flag=True)
+        new_elite_archive, _, _ = map_elites(self, new_elite_archive=new_elite_archive, acq_flag=acq_flag, pred_flag=pred_flag)
         print(f'New {target} Elites (after):  {new_elite_archive.stats.num_elites}')
 
     return new_elite_archive

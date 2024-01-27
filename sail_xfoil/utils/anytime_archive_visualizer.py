@@ -74,7 +74,7 @@ def anytime_archive_visualizer(self, archive, vmin, vmax, obj_flag=False, acq_fl
         output_filename = f'{prefix}_{initial_seed}_{domain}_{iteration}_heatmap.mp4'
 
         subprocess.run(f"ffmpeg -framerate 2 -pattern_type glob -i '*.png' -r 30 -pix_fmt yuv420p {output_filename}", shell=True, input=b'y\n', stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        subprocess.run("rm *.png", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
+        #subprocess.run("rm *.png", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
 
         # if two buffered videos exist, combine them
         if iteration % (PNG_BUFFERSIZE*2) == 0:
@@ -96,7 +96,7 @@ def anytime_archive_visualizer(self, archive, vmin, vmax, obj_flag=False, acq_fl
             ]
             
             subprocess.run(ffmpeg_combine, input=b'y\n', stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            subprocess.run(f"rm {file_a} {buffervid_b}", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
+            #subprocess.run(f"rm {file_a} {buffervid_b}", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
             gc.collect()
 
         # if two combined videos exist, combine them
@@ -119,7 +119,7 @@ def anytime_archive_visualizer(self, archive, vmin, vmax, obj_flag=False, acq_fl
                 combined_file_b
             ]
             subprocess.run(ffmpeg_combine, input=b'y\n', stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            subprocess.run(f"rm {combined_file_a} {buffervid_b}", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
+            #subprocess.run(f"rm {combined_file_a} {buffervid_b}", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
             gc.collect()
 
 
@@ -142,7 +142,7 @@ def anytime_archive_visualizer(self, archive, vmin, vmax, obj_flag=False, acq_fl
             ]
 
             subprocess.run(ffmpeg_combine, input=b'y\n', stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            subprocess.run(f"rm {combined_file_a} {buffervid_b}", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
+            #subprocess.run(f"rm {combined_file_a} {buffervid_b}", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=True)
             gc.collect()
 
         # if the last iteration is reached & all videos are buffered
@@ -153,13 +153,13 @@ def anytime_archive_visualizer(self, archive, vmin, vmax, obj_flag=False, acq_fl
             
             # Move all contents from all subdirectories to the parent directory - then delete all subdirectories (except for pred)
             subprocess.run(f"mv obj/* acq/* new/* .", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            subprocess.run(f"rm -rf obj acq new", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            #subprocess.run(f"rm -rf obj acq new", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
             # then combine all 3 videos horizontally, first obj_*.mp4 then acq_*.mp4 then new_*.mp4
             subprocess.run(f"ffmpeg -i obj_{initial_seed}_{domain}_{iteration}_heatmap.mp4 -i acq_{initial_seed}_{domain}_{iteration}_heatmap.mp4 -i new_{initial_seed}_{domain}_{iteration}_heatmap.mp4 -filter_complex \"[0:v][1:v][2:v]hstack=inputs=3[v]\" -map \"[v]\" {domain}_{initial_seed}_heatmaps.mp4", input=b'y\n', shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
             # remove all 3 subdirectories, then move back to sail rootfolder
-            subprocess.run(f"rm -rf obj acq new", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            #subprocess.run(f"rm -rf obj acq new", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             os.chdir("../../..")
             return
 

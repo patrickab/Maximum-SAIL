@@ -30,7 +30,7 @@ def initialize_anytime_metrics(self: SailRun, acq_flag=False, pred_flag=False):
         total_target_eval_budget = PRED_N_MAP_EVALS
 
     anytime_metric_kwargs = {
-        'iteration': 0,
+        'iteration': 1,
         'consumed_obj_evals': 0,
         'consumed_target_evals': 0,
 

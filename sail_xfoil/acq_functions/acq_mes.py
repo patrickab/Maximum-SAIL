@@ -19,7 +19,7 @@ SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 SIGMA_MUTANTS = config.SIGMA_MUTANTS
 
 
-def acq_mes(self, genomes, niche_restricted_update=False):
+def acq_mes(self, genomes, niche_restricted_update=True):
     """This function is used only in MES-Map-Elites and may not be up to date"""
 
     gp_model = self.gp_model
@@ -117,9 +117,10 @@ def assamble_cellgrid(self, genome):
     return mes_cellgrid
 
 
-def optimize_mes(self, init_flag=False, map_flag=False):
+def optimize_mes(self, init_flag=False, benchmark_flag=False):
 
     np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
+    target_logfile = "mes-vs-botorch-init.log" if not benchmark_flag else "mes-vs-botorch-final.log"
 
     sum_improvement_factor = 0
     gp_model = self.gp_model
@@ -176,16 +177,23 @@ def optimize_mes(self, init_flag=False, map_flag=False):
 
         improvement_factor = ((new_acquisition)/objectives[i])
         sum_improvement_factor += improvement_factor
+        with open(target_logfile, "a") as f:
+            f.write("MES SAIL: {:.3f}  botorch.optimize_acqf(): {:.3f}  Improvement Factor: {:.3f}\n".format(objectives[i], new_acquisition, improvement_factor))
         print("MES SAIL: {:.3f}  botorch.optimize_acqf(): {:.3f}  Improvement Factor: {:.3f}".format(objectives[i], new_acquisition, improvement_factor))
 
     # Self.update_archive() will trigger acq_mes()
     # acq_mes() will calculate MES values for the new_genomes & their mutants
     # this will further optimize the MES values for the new_genomes
-    self.update_archive(candidate_sol=new_genomes, candidate_bhv=new_genomes[:,1:3], acq_flag=True)
+    if not benchmark_flag:
+        self.update_archive(candidate_sol=new_genomes, candidate_bhv=new_genomes[:,1:3], acq_flag=True)
 
-    mean_perc_improvement = sum_improvement_factor / n_samples
-    print("Mean Improvement Factor: ", mean_perc_improvement)
+    mean_improvement_factor = sum_improvement_factor / n_samples
+    with open(target_logfile, "a") as f:
+        f.write("Mean Improvement Factor: {:.3f}\n".format(mean_improvement_factor))
+        f.write("Optimize MES Time: {:.3f}\n\n\n".format(time.time() - start))
+    print("Mean Improvement Factor: ", mean_improvement_factor)
     print("Optimize MES Time: ", time.time() - start)
+
 
 def simple_mes(self, genomes):
 
