@@ -106,6 +106,44 @@ OBJ_BHV_NUMBER_BINS = config.OBJ_BHV_NUMBER_BINS
 BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 
 
+def mes_local_competition(self, acq_elite_df):
+    acq_elite_df['n_stronger_neighbors'] = np.nan
+    df_indices = acq_elite_df['index'].values
+    acq_archive_dims = self.acq_archive.dims
+    row_dim = acq_archive_dims[0]
+
+    for index in df_indices:
+
+        neighbor_index_up = index+row_dim
+        neighbor_index_down = index-row_dim
+
+        neighbor_indices = []
+        neighbor_indices.append(neighbor_index_up) if neighbor_index_up < np.prod(acq_archive_dims)-1 else None
+        neighbor_indices.append(neighbor_index_down) if neighbor_index_down >= 0 else None
+
+        if index%row_dim != 0:
+            neighbor_index_left = index-1
+            neighbor_index_left_up = index+24
+            neighbor_index_left_down = index-26
+            neighbor_indices.append(neighbor_index_left) if neighbor_index_left >= 0 else None
+            neighbor_indices.append(neighbor_index_left_up) if neighbor_index_left_up < np.prod(acq_archive_dims)-1 else None
+            neighbor_indices.append(neighbor_index_left_down) if neighbor_index_left_down >= 0 else None
+        if (index+1) % row_dim != 0:
+            neighbor_index_right = index+1
+            neighbor_index_right_up = index+26
+            neighbor_index_right_down = index-24
+            neighbor_indices.append(neighbor_index_right) if neighbor_index_right < np.prod(acq_archive_dims)-1 else None
+            neighbor_indices.append(neighbor_index_right_up) if neighbor_index_right_up < np.prod(acq_archive_dims)-1 else None
+            neighbor_indices.append(neighbor_index_right_down) if neighbor_index_right_down >= 0 else None
+
+        elite = acq_elite_df[acq_elite_df['index'] == index]
+        elite_neighbors = acq_elite_df[acq_elite_df['index'].isin(neighbor_indices)]
+        n_stronger_neighbors = elite_neighbors[elite_neighbors['objective'] > elite['objective'].values[0]].shape[0]
+        acq_elite_df.loc[acq_elite_df['index'] == index, 'n_stronger_neighbors'] = n_stronger_neighbors
+
+    return acq_elite_df
+
+
 def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
     """
     Args:
@@ -245,6 +283,7 @@ def prepare_sample_elites(self: SailRun, new_elite_archive: GridArchive, old_eli
     """
     obj_archive_df = self.obj_archive.as_pandas(include_solutions=True)
     target_archive_df = new_elite_archive.as_pandas(include_solutions=True)
+    target_archive_df = mes_local_competition(self, target_archive_df)
 
     # Remove invalid designs
     valid_indices, _ = generate_parsec_coordinates(target_archive_df.solution_batch(), io_flag=False)
@@ -298,10 +337,14 @@ def select_samples(self: SailRun, improved_elites, new_bin_elites, acq_flag=Fals
     if pred_flag:
         n_samples = PRED_N_OBJ_EVALS//PREDICTION_VERIFICATIONS
 
-    if self.vanilla_flag or (self.acq_mes_flag and acq_flag):
+    if self.vanilla_flag:
         # shuffle elites (elites are sorted by index, which is not random)
         new_bin_elites = new_bin_elites.sample(frac=1, random_state=self.initial_seed)
         improved_elites = improved_elites.sample(frac=1, random_state=self.initial_seed)
+
+    if self.acq_mes_flag and acq_flag:
+        new_bin_elites = new_bin_elites.sort_values(by=['n_stronger_neighbors'], ascending=True)
+        improved_elites = improved_elites.sort_values(by=['n_stronger_neighbors'], ascending=True)
 
     # For custom approach, sort by objective improvement, if UCB or Prediction is calculated
     if self.custom_flag and (self.acq_ucb_flag or pred_flag):
