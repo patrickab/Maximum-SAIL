@@ -166,7 +166,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
             acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
             valid_indices, surface_batch = generate_parsec_coordinates(acq_elite_df.solution_batch(), io_flag=False)
             acq_elite_df = acq_elite_df.iloc[valid_indices]
-            self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True, niche_restricted_update = True)
+            self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True, niche_restricted_update = True, sigma_mutants=0.1)
             target_archive = self.acq_archive
         self.visualize_archive(archive=self.acq_archive, map_flag=True)
 

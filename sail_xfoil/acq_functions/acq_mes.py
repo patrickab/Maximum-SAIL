@@ -19,7 +19,7 @@ SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 SIGMA_MUTANTS = config.SIGMA_MUTANTS
 
 
-def acq_mes(self, genomes, niche_restricted_update=True):
+def acq_mes(self, genomes, niche_restricted_update=True, sigma_mutants=SIGMA_MUTANTS):
     """This function is used only in MES-Map-Elites and may not be up to date"""
 
     gp_model = self.gp_model
@@ -39,7 +39,7 @@ def acq_mes(self, genomes, niche_restricted_update=True):
     genomes = np.repeat(genomes, MES_MUTANTS, axis=0).reshape(len(genomes), MES_MUTANTS, SOL_DIMENSION)   
     for i in range(len(genomes)):
         scaled_noise = rng.normal(
-                            scale=np.abs(SIGMA_MUTANTS *(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), 
+                            scale=np.abs(sigma_mutants *(cell_solutionbounds[i,:,1] - cell_solutionbounds[i,:,0])), 
                             size=(MES_MUTANTS, SOL_DIMENSION))
 
         genomes[i] = np.clip(genomes[i] + scaled_noise, cell_solutionbounds[i,:,0], cell_solutionbounds[i,:,1])

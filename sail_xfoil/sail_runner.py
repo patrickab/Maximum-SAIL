@@ -19,6 +19,7 @@ OBJ_DIMENSION = config.OBJ_DIMENSION
 BHV_DIMENSION = config.BHV_DIMENSION
 BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
+SIGMA_MUTANTS = config.SIGMA_MUTANTS
 MUTANT_CELLRANGE = config.MUTANT_CELLRANGE
 OBJ_BHV_NUMBER_BINS = config.OBJ_BHV_NUMBER_BINS
 ACQ_BHV_NUMBER_BINS = config.ACQ_BHV_NUMBER_BINS
@@ -201,7 +202,7 @@ class SailRun:
         if map_flag:
             self.map_current_iteration += 1
 
-    def update_archive(self, candidate_sol=None, candidate_obj=None, candidate_bhv=None, obj_flag=False, acq_flag=False, pred_flag=False, evaluate_prediction_archive=False, niche_restricted_update=False):
+    def update_archive(self, candidate_sol=None, candidate_obj=None, candidate_bhv=None, obj_flag=False, acq_flag=False, pred_flag=False, evaluate_prediction_archive=False, niche_restricted_update=False, sigma_mutants=SIGMA_MUTANTS):
         """"
         Input:
             Option 1: Call with archive & archive flag
@@ -245,9 +246,7 @@ class SailRun:
 
                 elif self.acq_mes_flag:
                     i_candidate_sol = candidate_sol[i:i+BATCH_SIZE]
-                    i_candidate_acq = self.acq_function(self=self, genomes=i_candidate_sol)
-                    if niche_restricted_update:
-                        self.acq_function(self=self, genomes=i_candidate_sol, niche_restricted_update=True)
+                    i_candidate_acq = self.acq_function(self=self, genomes=i_candidate_sol, niche_restricted_update=niche_restricted_update, sigma_mutants=sigma_mutants)
 
                     if i_candidate_sol.shape[0] != 0:
                         i_candidate_sol = self.mes_elites                 
