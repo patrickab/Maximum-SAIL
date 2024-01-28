@@ -11,7 +11,7 @@ config = Config('config/config.ini')
 SIGMA_UCB = config.SIGMA_UCB
 
 
-def acq_ucb(self, genomes):
+def acq_ucb(self, genomes, sigma_mutants=None):
 
     genomes = tensor(genomes, dtype=float64)          # Shape: PARALLEL_BATCH_SIZE x SOL_DIMENSION
     transformed_genomes = genomes.unsqueeze(1)        # Shape: PARALLEL_BATCH_SIZE x 1 x SOL_DIMENSION

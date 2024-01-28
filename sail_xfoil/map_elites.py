@@ -51,6 +51,7 @@ config = Config('config/config.ini')
 TEST_RUNS = config.TEST_RUNS
 BATCH_SIZE = config.BATCH_SIZE
 SIGMA_EMITTER = config.SIGMA_EMITTER
+SIGMA_MUTANTS = config.SIGMA_MUTANTS
 SOL_DIMENSION = config.SOL_DIMENSION
 SOL_VALUE_RANGE = config.SOL_VALUE_RANGE
 OBJ_BHV_NUMBER_BINS = config.OBJ_BHV_NUMBER_BINS
@@ -132,7 +133,8 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
             progress.update(1)
             valid_indices = np.empty(0, dtype=int)
 
-            sigma_emitter = SIGMA_EMITTER + 0.3*(remaining_evals/n_evals)
+            sigma_mutants = SIGMA_MUTANTS + 0.3*(remaining_evals/n_evals)
+            sigma_emitter = SIGMA_EMITTER + 0.2*(remaining_evals/n_evals)
             emitter = update_emitter(self, target_archive=target_archive, sigma_emitter=sigma_emitter)
             scheduler = _Scheduler(target_archive, emitter)
 
@@ -145,7 +147,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
             # Calculate Acquisitions/Predictions
             scheduler_bhv = samples[:,1:3]  # ToDO: generalize calculate_behavior()
             candidate_sol = samples[valid_indices]
-            candidate_obj = target_function(self=self, genomes=candidate_sol)
+            candidate_obj = target_function(self=self, genomes=candidate_sol, sigma_mutants=sigma_mutants)
             candidate_bhv = scheduler_bhv[valid_indices]
 
             if mes_flag and acq_flag:
