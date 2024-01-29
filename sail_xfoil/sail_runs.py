@@ -18,6 +18,7 @@ ACQ_N_MAP_EVALS = config.ACQ_N_MAP_EVALS
 PRED_N_OBJ_EVALS = config.PRED_N_OBJ_EVALS
 PRED_N_MAP_EVALS = config.PRED_N_MAP_EVALS
 SOL_DIMENSION = config.SOL_DIMENSION
+BHV_DIMENSION = config.BHV_DIMENSION
 INIT_N_EVALS = config.INIT_N_EVALS
 BATCH_SIZE = config.BATCH_SIZE
 
@@ -228,7 +229,11 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
 
         if iteration % 1 == 0:
             CURIOSITY += 1
-            CURIOSITY = min(CURIOSITY, 9)
+            CURIOSITY = min(CURIOSITY, 8)
+            dims = self.acq_archive.dims
+            if (dims != OBJ_BHV_NUMBER_BINS).any():
+                dims += np.ones(BHV_DIMENSION, dtype=int)
+                set_archive_resolution(self, dims)
 
         if iteration % 20 == 0:
             gc.collect()
