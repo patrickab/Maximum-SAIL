@@ -93,7 +93,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
     if self.acq_mes_flag and acq_flag:
         acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
         self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
-                            niche_restricted_update = True, sigma_mutants=0.15)
+                            niche_restricted_update = True, sigma_mutants=0.25)
         self.acq_archive.add(t0_acq_elite_df.solution_batch(), t0_acq_elite_df.objective_batch(), t0_acq_elite_df.measures_batch())
         self.visualize_archive(archive=self.acq_archive, map_flag=True)
 
@@ -128,8 +128,8 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
             progress.update(1)
             valid_indices = np.empty(0, dtype=int)
 
-            sigma_mutants = SIGMA_MUTANTS + 0.3*(remaining_evals/n_evals)
-            sigma_emitter = SIGMA_EMITTER + 0.2*(remaining_evals/n_evals)
+            sigma_mutants = SIGMA_MUTANTS + 0.5*(remaining_evals/n_evals)
+            sigma_emitter = SIGMA_EMITTER + 0.3*(remaining_evals/n_evals)
             emitter = update_emitter(self, target_archive=target_archive, sigma_emitter=sigma_emitter)
             scheduler = _Scheduler(target_archive, emitter)
 
@@ -153,10 +153,11 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
 
             if mes_flag and acq_flag:
 
-                if remaining_evals % (n_evals//2) == 0:
+                if remaining_evals % (n_evals//4) == 0 and remaining_evals != n_evals and remaining_evals != BATCH_SIZE:
                     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
                     self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
                                         niche_restricted_update=True, sigma_mutants=0.4)
+                    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
                     self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
                                         niche_restricted_update=True, sigma_mutants=0.1)
 
@@ -176,7 +177,10 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
         acq_elite_df = acq_elite_df.iloc[valid_indices]
 
         self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
-                            niche_restricted_update = True, sigma_mutants=0.15)
+                            niche_restricted_update=True, sigma_mutants=0.4)
+        acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+        self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
+                            niche_restricted_update = True, sigma_mutants=0.1)
 
         target_archive = self.acq_archive
         self.visualize_archive(archive=self.acq_archive, map_flag=True)
