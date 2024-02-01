@@ -138,7 +138,9 @@ def mes_local_competition(self, acq_elite_df):
         elite = acq_elite_df[acq_elite_df['index'] == index]
         elite_neighbors = acq_elite_df[acq_elite_df['index'].isin(neighbor_indices)]
         n_stronger_neighbors = elite_neighbors[elite_neighbors['objective'] > elite['objective'].values[0]].shape[0]
+        mean_relative_improvement = np.mean(elite['objective'].values / elite_neighbors['objective'].values)
         acq_elite_df.loc[acq_elite_df['index'] == index, 'n_stronger_neighbors'] = n_stronger_neighbors
+        acq_elite_df.loc[acq_elite_df['index'] == index, 'mean_relative_improvement'] = mean_relative_improvement
 
     return acq_elite_df
 
@@ -153,7 +155,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
     if not pred_loop:
         initialize_archive(self)
 
-    CURIOSITY = 5 # For Hybrid Approach: 'CURIOSITY//BATCH_SIZE' new bin elites are to be sampled
+    CURIOSITY = 3 # For Hybrid Approach: 'CURIOSITY//BATCH_SIZE' new bin elites are to be sampled
 
     anytime_metric_kwargs = initialize_anytime_metrics(self=self, acq_flag=acq_loop, pred_flag=pred_loop)
 
@@ -332,9 +334,9 @@ def select_samples(self: SailRun, improved_elites, new_bin_elites, acq_flag=Fals
         new_bin_elites = new_bin_elites.sample(frac=1, random_state=self.initial_seed)
         improved_elites = improved_elites.sample(frac=1, random_state=self.initial_seed)
         # Sort by n_stronger_neighbors
-        new_bin_elites = new_bin_elites.sort_values(by=['n_stronger_neighbors'])
-        improved_elites = improved_elites.sort_values(by=['n_stronger_neighbors'])
-    
+        new_bin_elites = new_bin_elites.sort_values(by=['mean_relative_improvement'], ascending=False)
+        improved_elites = improved_elites.sort_values(by=['mean_relative_improvement'], ascending=False)
+
     if self.custom_flag and (self.acq_ucb_flag or pred_flag):
         new_bin_elites = new_bin_elites.sample(frac=1, random_state=self.initial_seed)
         improved_elites = improved_elites.sort_values(by=['objective_improvement'], ascending=False)
