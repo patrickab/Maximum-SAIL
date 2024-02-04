@@ -178,17 +178,18 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
         target_t0 = target_archive.stats.num_elites
         new_target_elites, _, _ = map_elites(self, acq_flag=acq_loop, pred_flag=pred_loop)
         if new_target_elites.stats.num_elites < BATCH_SIZE: new_target_elites = ensure_n_new_elites(self=self, new_elite_archive=new_target_elites, acq_flag=acq_loop, pred_flag=pred_loop)   # Sample until enough new acquisition elites are found
-        improved_elites, new_bin_elites = prepare_sample_elites(self=self, new_elite_archive=new_target_elites, old_elite_archive=self.obj_archive, pred_flag=pred_loop)                      # Split new_target_elites into improved elites & new bin elites, then (if self.acq_ucb_flag or pred_flag) calculate objective improvement (else) objective_improvement = objective
-        candidate_solutions_df = select_samples(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, acq_flag=acq_loop, pred_flag=pred_loop, curiosity=CURIOSITY)            # Select samples based on exploration behavior defined in the class constructor
-        target_t1 = target_archive.stats.num_elites
 
-        # visualize resulting archives (multiple times during prediction verification to ensure videos of equal length)
+        # visualize resulting archive (multiple times during prediction verification to ensure videos of equal length)
         iterations = i_obj_evals//BATCH_SIZE
         while iterations > 0:
             self.visualize_archive(archive=self.acq_archive, acq_flag=True)
             if pred_loop:
                 self.visualize_archive(archive=self.pred_archive, pred_flag=True)
             iterations -= 1
+
+        improved_elites, new_bin_elites = prepare_sample_elites(self=self, new_elite_archive=new_target_elites, old_elite_archive=self.obj_archive, pred_flag=pred_loop)                      # Split new_target_elites into improved elites & new bin elites, then (if self.acq_ucb_flag or pred_flag) calculate objective improvement (else) objective_improvement = objective
+        candidate_solutions_df = select_samples(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, acq_flag=acq_loop, pred_flag=pred_loop, curiosity=CURIOSITY)            # Select samples based on exploration behavior defined in the class constructor
+        target_t1 = target_archive.stats.num_elites
 
         solution_batch = candidate_solutions_df.solution_batch()
         objective_batch = candidate_solutions_df.objective_batch()

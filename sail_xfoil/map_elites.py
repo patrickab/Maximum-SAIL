@@ -100,7 +100,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
         acq_sum_t1 = np.sum(self.acq_archive.as_pandas().objective_batch())
         print(f"Acquisition Value Sum (after update): {acq_sum_t1:.3f}")
 
-    mes_flag = self.acq_mes_flag
+    mes_flag = self.acq_mes_flag and acq_flag
     if acq_flag:
         target = "Acq Archive"
         target_function = self.acq_function
@@ -129,8 +129,9 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
             valid_indices = np.empty(0, dtype=int)
 
             sigma_mutants = SIGMA_MUTANTS + 0.5*(remaining_evals/n_evals)
-            sigma_emitter = SIGMA_EMITTER + 0.3*(remaining_evals/n_evals)
-            emitter = update_emitter(self, target_archive=target_archive, sigma_emitter=sigma_emitter)
+            sigma_emitter = SIGMA_EMITTER + 0.2*(remaining_evals/n_evals)
+            emitter = update_emitter(self, target_archive=target_archive, sigma_emitter=sigma_emitter, mes_flag=mes_flag)
+
             scheduler = _Scheduler(target_archive, emitter)
 
             # Create Samples
@@ -151,7 +152,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
             target_archive.add(solution_batch=candidate_sol, objective_batch=candidate_obj, measures_batch=candidate_bhv)
             new_elite_archive.add(candidate_sol, candidate_obj, candidate_bhv)
 
-            if mes_flag and acq_flag:
+            if mes_flag:
 
                 if remaining_evals % (n_evals//8) == 0 and remaining_evals != n_evals and remaining_evals != BATCH_SIZE:
                     print("updating...")
@@ -172,7 +173,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
     new_elite_archive = target_archive
 
     # Niche Restricted Mutant Update
-    if self.acq_mes_flag and acq_flag:
+    if mes_flag:
         acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
         valid_indices, surface_batch = generate_parsec_coordinates(acq_elite_df.solution_batch(), io_flag=False)
         acq_elite_df = acq_elite_df.iloc[valid_indices]
@@ -212,7 +213,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
     return new_elite_archive, size_t0, size_t1
 
 
-def update_emitter(self, target_archive, sigma_emitter=SIGMA_EMITTER, sol_value_range=SOL_VALUE_RANGE):
+def update_emitter(self, target_archive, sigma_emitter=SIGMA_EMITTER, sol_value_range=SOL_VALUE_RANGE, mes_flag=None):
 
     self.update_seed()
 
@@ -222,7 +223,8 @@ def update_emitter(self, target_archive, sigma_emitter=SIGMA_EMITTER, sol_value_
         sigma=sigma_emitter,
         bounds= np.array(sol_value_range),
         batch_size=BATCH_SIZE,
-        seed=self.current_seed
+        seed=self.current_seed,
+        mes_flag=mes_flag
     )]
 
     return emitter
@@ -242,11 +244,13 @@ class ScaledGaussianEmitter(GaussianEmitter):
                  sigma,
                  bounds=None,
                  batch_size=BATCH_SIZE,
-                 seed=None):
+                 seed=None,
+                 mes_flag=False):
 
         self._rng = np.random.default_rng(seed)
         self._batch_size = batch_size
         self._sigma = np.array(sigma, dtype=archive.dtype)
+        self.mes_flag = mes_flag
 
         if archive.stats.num_elites == 0:
             raise ValueError("Archive must be filled with initial solutions.")
@@ -269,6 +273,52 @@ class ScaledGaussianEmitter(GaussianEmitter):
         """int: Number of solutions to return in :meth:`ask`."""
         return self._batch_size
 
+    def mes_local_competition(self):
+
+        mes_elite_df = self.archive.as_pandas(include_solutions=True)
+
+        df_indices = mes_elite_df['index'].values
+        archive_dims = self.archive.dims
+        row_dim = archive_dims[0]
+
+        for index in df_indices:
+
+            neighbor_index_up = index+row_dim
+            neighbor_index_down = index-row_dim
+
+            neighbor_indices = []
+            neighbor_indices.append(neighbor_index_up) if neighbor_index_up < np.prod(archive_dims)-1 else None
+            neighbor_indices.append(neighbor_index_down) if neighbor_index_down >= 0 else None
+
+            if index%row_dim != 0:
+                neighbor_index_left = index-1
+                neighbor_index_left_up = index-1+row_dim
+                neighbor_index_left_down = index-1-row_dim
+                neighbor_indices.append(neighbor_index_left) if neighbor_index_left >= 0 else None
+                neighbor_indices.append(neighbor_index_left_up) if neighbor_index_left_up < np.prod(archive_dims)-1 else None
+                neighbor_indices.append(neighbor_index_left_down) if neighbor_index_left_down >= 0 else None
+            if (index+1) % row_dim != 0:
+                neighbor_index_right = index+1
+                neighbor_index_right_up = index+1+row_dim
+                neighbor_index_right_down = index-1-row_dim
+                neighbor_indices.append(neighbor_index_right) if neighbor_index_right < np.prod(archive_dims)-1 else None
+                neighbor_indices.append(neighbor_index_right_up) if neighbor_index_right_up < np.prod(archive_dims)-1 else None
+                neighbor_indices.append(neighbor_index_right_down) if neighbor_index_right_down >= 0 else None
+
+            elite = mes_elite_df[mes_elite_df['index'] == index]
+            elite_neighbors = mes_elite_df[mes_elite_df['index'].isin(neighbor_indices)]
+            mean_relative_improvement = np.mean(elite['objective'].values / elite_neighbors['objective'].values)
+            mes_elite_df.loc[mes_elite_df['index'] == index, 'mean_relative_improvement'] = mean_relative_improvement
+
+        # Preserve 70% of highestperforming local elites
+        n_elites = max(self._batch_size, int(mes_elite_df.shape[0]*0.7))
+        mes_elite_df = mes_elite_df.sort_values(by='mean_relative_improvement', ascending=False)
+        mes_elite_df = mes_elite_df.head(n_elites)
+        mes_elite_df = mes_elite_df.sample(n=self._batch_size, random_state=self._rng, replace=False)
+
+        mes_parents = mes_elite_df.solution_batch()
+        return mes_parents
+
     def ask(self):
         """Creates solutions by adding Gaussian noise to elites in the archive.
 
@@ -276,7 +326,10 @@ class ScaledGaussianEmitter(GaussianEmitter):
         chosen elite with standard deviation ``self.sigma``.
         """
 
-        parents = self.archive.sample_elites(self._batch_size).solution_batch
+        if not self.mes_flag:
+            parents = self.archive.sample_elites(self._batch_size).solution_batch
+        else:
+            parents = self.mes_local_competition()
 
         scaled_noise = self._rng.normal(
             scale=np.abs(self._sigma*(self.upper_bounds-self.lower_bounds)),
