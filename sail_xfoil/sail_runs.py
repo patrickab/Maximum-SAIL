@@ -106,41 +106,58 @@ BHV_VALUE_RANGE = config.BHV_VALUE_RANGE
 
 
 def mes_local_competition(self, acq_elite_df):
-    acq_elite_df['n_stronger_neighbors'] = np.nan
+
+    obj_elite_df = self.obj_archive.as_pandas(include_solutions=True)
     df_indices = acq_elite_df['index'].values
     acq_archive_dims = self.acq_archive.dims
-    row_dim = acq_archive_dims[0]
+    obj_archive_dims = self.obj_archive.dims
+    acq_row_dim = acq_archive_dims[0]
+    obj_row_dim = obj_archive_dims[0]
 
     for index in df_indices:
 
-        neighbor_index_up = index+row_dim
-        neighbor_index_down = index-row_dim
+        obj_index = self.obj_archive.index_of_single(acq_elite_df[acq_elite_df['index'] == index].measures_batch())
 
-        neighbor_indices = []
-        neighbor_indices.append(neighbor_index_up) if neighbor_index_up < np.prod(acq_archive_dims)-1 else None
-        neighbor_indices.append(neighbor_index_down) if neighbor_index_down >= 0 else None
+        obj_neighbor_indices = [
+            obj_index - 1,                # left
+            obj_index - 2,                # left-left
+            obj_index + 1,                # right
+            obj_index + 2,                # right-right
+            obj_index - obj_row_dim,      # up
+            obj_index - 2*obj_row_dim,    # up-up
+            obj_index + obj_row_dim,      # down
+            obj_index + 2*obj_row_dim,    # down-down
+            obj_index - 1 + obj_row_dim,  # left-up
+            obj_index + 1 + obj_row_dim,  # right-up
+            obj_index - 1 - obj_row_dim,  # left-down
+            obj_index + 1 - obj_row_dim   # right-down
+        ]
 
-        if index%row_dim != 0:
-            neighbor_index_left = index-1
-            neighbor_index_left_up = index-1+row_dim
-            neighbor_index_left_down = index-1-row_dim
-            neighbor_indices.append(neighbor_index_left) if neighbor_index_left >= 0 else None
-            neighbor_indices.append(neighbor_index_left_up) if neighbor_index_left_up < np.prod(acq_archive_dims)-1 else None
-            neighbor_indices.append(neighbor_index_left_down) if neighbor_index_left_down >= 0 else None
-        if (index+1) % row_dim != 0:
-            neighbor_index_right = index+1
-            neighbor_index_right_up = index+1+row_dim
-            neighbor_index_right_down = index-1-row_dim
-            neighbor_indices.append(neighbor_index_right) if neighbor_index_right < np.prod(acq_archive_dims)-1 else None
-            neighbor_indices.append(neighbor_index_right_up) if neighbor_index_right_up < np.prod(acq_archive_dims)-1 else None
-            neighbor_indices.append(neighbor_index_right_down) if neighbor_index_right_down >= 0 else None
+        acq_neighbor_indices = [
+            index - 1,                # left
+            index + 1,                # right
+            index - acq_row_dim,      # up
+            index + acq_row_dim,      # down
+            index - 1 + acq_row_dim,  # left-up
+            index + 1 + acq_row_dim,  # right-up
+            index - 1 - acq_row_dim,  # left-down
+            index + 1 - acq_row_dim   # right-down
+        ]
+
+        obj_neighbor_indices = np.clip(obj_neighbor_indices, 0, np.prod(obj_archive_dims) - 1)
+        acq_neighbor_indices = np.clip(acq_neighbor_indices, 0, np.prod(acq_archive_dims) - 1)
+
 
         elite = acq_elite_df[acq_elite_df['index'] == index]
-        elite_neighbors = acq_elite_df[acq_elite_df['index'].isin(neighbor_indices)]
-        n_stronger_neighbors = elite_neighbors[elite_neighbors['objective'] > elite['objective'].values[0]].shape[0]
-        mean_relative_improvement = np.mean(elite['objective'].values / elite_neighbors['objective'].values)
-        acq_elite_df.loc[acq_elite_df['index'] == index, 'n_stronger_neighbors'] = n_stronger_neighbors
-        acq_elite_df.loc[acq_elite_df['index'] == index, 'mean_relative_improvement'] = mean_relative_improvement
+        acq_elite_neighbors = acq_elite_df[acq_elite_df['index'].isin(acq_neighbor_indices)]
+        mean_relative_improvement = np.mean(elite['objective'].values / acq_elite_neighbors['objective'].values)
+
+        n_obj_neighbors = obj_elite_df[obj_elite_df['index'].isin(obj_neighbor_indices)].shape[0]
+        population_density = (n_obj_neighbors+1) / 12
+
+        mes_local_competition_reward = mean_relative_improvement * 1/population_density
+
+        acq_elite_df.loc[acq_elite_df['index'] == index, 'mes_local_competition_reward'] = mes_local_competition_reward
 
     return acq_elite_df
 
@@ -335,8 +352,8 @@ def select_samples(self: SailRun, improved_elites, new_bin_elites, acq_flag=Fals
         new_bin_elites = new_bin_elites.sample(frac=1, random_state=self.initial_seed)
         improved_elites = improved_elites.sample(frac=1, random_state=self.initial_seed)
         # Sort by n_stronger_neighbors
-        new_bin_elites = new_bin_elites.sort_values(by=['mean_relative_improvement'], ascending=False)
-        improved_elites = improved_elites.sort_values(by=['mean_relative_improvement'], ascending=False)
+        new_bin_elites = new_bin_elites.sort_values(by=['mes_local_competition_reward'], ascending=False)
+        improved_elites = improved_elites.sort_values(by=['mes_local_competition_reward'], ascending=False)
 
     if self.custom_flag and (self.acq_ucb_flag or pred_flag):
         new_bin_elites = new_bin_elites.sample(frac=1, random_state=self.initial_seed)
