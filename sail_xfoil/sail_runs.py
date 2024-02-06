@@ -116,7 +116,7 @@ def mes_local_competition(self, acq_elite_df):
 
     for index in df_indices:
 
-        obj_index = self.obj_archive.index_of_single(acq_elite_df[acq_elite_df['index'] == index].measures_batch())
+        obj_index = self.obj_archive.index_of_single(acq_elite_df[acq_elite_df['index'] == index].measures_batch()[0])
 
         obj_neighbor_indices = [
             obj_index - 1,                # left
@@ -408,7 +408,8 @@ def scale_samples(samples, boundaries=SOL_VALUE_RANGE):
 
 
 def set_archive_resolution(self: SailRun, resolution: list):
-    t0_acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+
+    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
     self.acq_archive = GridArchive(
         solution_dim=SOL_DIMENSION,
         dims=resolution,
@@ -418,26 +419,21 @@ def set_archive_resolution(self: SailRun, resolution: list):
     # Update archive under new GP 
     self.update_cellgrids()
     self.update_mutant_cellgrids()
-    self.update_archive(candidate_sol=t0_acq_elite_df.solution_batch(),
-                        candidate_bhv=t0_acq_elite_df.measures_batch(),
+    self.update_archive(candidate_sol=acq_elite_df.solution_batch(),
+                        candidate_bhv=acq_elite_df.measures_batch(),
                         acq_flag=True, niche_restricted_update=True,
-                        sigma_mutants=0.5)
-
-    # Mutants Update
+                        sigma_mutants=0.6)
+    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+    self.update_archive(candidate_sol=acq_elite_df.solution_batch(),
+                        candidate_bhv=acq_elite_df.measures_batch(),
+                        acq_flag=True, niche_restricted_update=True,
+                        sigma_mutants=0.3)
     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
     self.update_archive(candidate_sol=acq_elite_df.solution_batch(), 
                         candidate_bhv=acq_elite_df.measures_batch(), 
-                        acq_flag=True, niche_restricted_update=False,
-                        sigma_mutants=0.5)
+                        acq_flag=True, niche_restricted_update=True,
+                        sigma_mutants=0.6)
     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
-    self.acq_archive.clear()
-    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), 
-                        candidate_bhv=acq_elite_df.measures_batch(), 
-                        acq_flag=True, niche_restricted_update=False,
-                        sigma_mutants=0.5)
-
-    # Niche restricted update
-    self.acq_archive.clear()
     self.update_archive(candidate_sol=acq_elite_df.solution_batch(), 
                         candidate_bhv=acq_elite_df.measures_batch(), 
                         acq_flag=True, niche_restricted_update=True,

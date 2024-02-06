@@ -128,8 +128,8 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
             progress.update(1)
             valid_indices = np.empty(0, dtype=int)
 
-            sigma_mutants = SIGMA_MUTANTS + 0.5*(remaining_evals/n_evals)
-            sigma_emitter = SIGMA_EMITTER + 0.2*(remaining_evals/n_evals)
+            sigma_mutants = SIGMA_MUTANTS + 0.3*(remaining_evals/n_evals)
+            sigma_emitter = SIGMA_EMITTER + 0.3*(remaining_evals/n_evals)
             emitter = update_emitter(self, target_archive=target_archive, sigma_emitter=sigma_emitter, mes_flag=mes_flag)
 
             scheduler = _Scheduler(target_archive, emitter)
@@ -183,14 +183,21 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
         print(f"Before Update: {acq_sum_t0:.3f}")
         self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
                             niche_restricted_update=True, sigma_mutants=0.6)
+
         acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
         print(f"First Update: {np.sum(self.acq_archive.as_pandas().objective_batch())}")
         self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
                             niche_restricted_update = True, sigma_mutants=0.3)
+
         acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
         print(f"Second Update: {np.sum(self.acq_archive.as_pandas().objective_batch())}")
         self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
-                            niche_restricted_update = True, sigma_mutants=0.1)
+                            niche_restricted_update = True, sigma_mutants=0.6)
+
+        acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+        print(f"Third Update: {np.sum(self.acq_archive.as_pandas().objective_batch())}")
+        self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
+                            niche_restricted_update = True, sigma_mutants=0.15)
 
         acq_sum_t1 = np.sum(self.acq_archive.as_pandas().objective_batch())
         print(f"Final Update: {acq_sum_t1:.3f}")

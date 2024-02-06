@@ -126,7 +126,7 @@ def optimize_mes(self, init_flag=False, benchmark_flag=False, solution_batch=Non
 
     sum_improvement_factor = 0
     gp_model = self.gp_model
-    n_samples = 25 if solution_batch is None else BATCH_SIZE
+    n_samples = 35 if solution_batch is None else BATCH_SIZE
 
     print("\nOptimize MES: n_samples", n_samples)
 
