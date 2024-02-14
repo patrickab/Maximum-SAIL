@@ -165,7 +165,7 @@ class SailRun:
 
     def update_cellgrids(self):
 
-        self.bhv_cellbounds, self.bhv_sobol_cellgrids, self.mes_sobol_cellgrid = mes_sobol_cellgrids(self)
+        self.bhv_cellbounds, self.bhv_sobol_cellgrids, self.mes_sobol_cellgrid = mes_sobol_cellgrids(self, mutant_cellrange=-0.0001)
         return
     
     def update_mutant_cellgrids(self, mutant_cellrange=MUTANT_CELLRANGE):

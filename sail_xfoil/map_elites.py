@@ -36,7 +36,7 @@ from ribs.schedulers import Scheduler
 from ribs.archives import GridArchive
 from ribs.emitters import GaussianEmitter
 from ribs.emitters._emitter_base import EmitterBase
-from acq_functions.acq_mes import optimize_mes
+from acq_functions.acq_mes import optimize_mes, simple_mes
 from tqdm import tqdm
 import numpy as np
 
@@ -65,6 +65,10 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
 
     print("\n\nInitialize Map-Elites [...]")
 
+    if self.acq_mes_flag and acq_flag:
+        # Update Cellgrids using a new seed
+        self.update_mutant_cellgrids()
+
     if new_elite_archive is None:
 
         number_bins = ACQ_BHV_NUMBER_BINS if acq_flag else OBJ_BHV_NUMBER_BINS
@@ -79,7 +83,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
 
     if self.custom_flag:
         self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=acq_flag, pred_flag=pred_flag,
-                            niche_restricted_update=True, sigma_mutants=0.5)
+                            niche_restricted_update=False, sigma_mutants=0.2)
         t0_acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
         if self.acq_mes_flag and acq_flag:
             acq_sum_t0 = np.sum(self.acq_archive.as_pandas().objective_batch())
@@ -93,7 +97,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
     if self.acq_mes_flag and acq_flag:
         acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
         self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
-                            niche_restricted_update = True, sigma_mutants=0.25)
+                            niche_restricted_update = False, sigma_mutants=0.2)
         self.acq_archive.add(t0_acq_elite_df.solution_batch(), t0_acq_elite_df.objective_batch(), t0_acq_elite_df.measures_batch())
         self.visualize_archive(archive=self.acq_archive, map_flag=True)
 
@@ -128,8 +132,8 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
             progress.update(1)
             valid_indices = np.empty(0, dtype=int)
 
-            sigma_mutants = SIGMA_MUTANTS + 0.3*(remaining_evals/n_evals)
-            sigma_emitter = SIGMA_EMITTER + 0.3*(remaining_evals/n_evals)
+            sigma_mutants = SIGMA_MUTANTS
+            sigma_emitter = SIGMA_EMITTER + 0.2*(remaining_evals/n_evals)
             emitter = update_emitter(self, target_archive=target_archive, sigma_emitter=sigma_emitter, mes_flag=mes_flag)
 
             scheduler = _Scheduler(target_archive, emitter)
@@ -143,7 +147,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
             # Calculate Acquisitions/Predictions
             scheduler_bhv = samples[:,1:3]  # ToDO: generalize calculate_behavior()
             candidate_sol = samples[valid_indices]
-            candidate_obj = target_function(self=self, genomes=candidate_sol, sigma_mutants=sigma_mutants)
+            candidate_obj = target_function(self=self, genomes=candidate_sol, sigma_mutants=sigma_mutants, niche_restricted_update=False)
             candidate_bhv = scheduler_bhv[valid_indices]
 
             if mes_flag and acq_flag:
@@ -155,18 +159,30 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
             if mes_flag:
 
                 if remaining_evals % (n_evals//8) == 0 and remaining_evals != n_evals and remaining_evals != BATCH_SIZE:
-                    print("updating...")
-                    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
-                    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
-                                        niche_restricted_update=True, sigma_mutants=0.5)
-                    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
-                    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
-                                        niche_restricted_update=True, sigma_mutants=0.25)
 
-                if remaining_evals % (n_evals//16) == 0 and remaining_evals != n_evals and remaining_evals != 0:
                     self.visualize_archive(archive=self.acq_archive, map_flag=True)
                     acquisition_sum = np.sum(self.acq_archive.as_pandas().objective_batch())
-                    print(f"Acquisition Value Sum: {acquisition_sum:.3f}")
+                    print(f"Acquisition Value Sum (before): {acquisition_sum:.3f}")
+
+                    print("updating...")
+                    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+                    t0_acq_elite_df = acq_elite_df.copy()
+                    print(f"t0: {np.sum(acq_elite_df.objective_batch()):.3f}")
+                    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
+                                        niche_restricted_update=False, sigma_mutants=0.5)
+                    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+                    print(f"t1: {np.sum(acq_elite_df.objective_batch()):.3f}")
+                    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
+                                        niche_restricted_update=False, sigma_mutants=0.4)
+                    acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+                    print(f"t2: {np.sum(acq_elite_df.objective_batch()):.3f}")
+                    self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
+                                        niche_restricted_update=False, sigma_mutants=0.3)
+
+                    self.visualize_archive(archive=self.acq_archive, map_flag=True)
+                    acquisition_sum = np.sum(self.acq_archive.as_pandas().objective_batch())
+                    print(f"Acquisition Value Sum (after): {acquisition_sum:.3f}")
+
 
             remaining_evals -= BATCH_SIZE
 
@@ -177,39 +193,30 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
         acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
         valid_indices, surface_batch = generate_parsec_coordinates(acq_elite_df.solution_batch(), io_flag=False)
         acq_elite_df = acq_elite_df.iloc[valid_indices]
+        t0_acq_elite_df = acq_elite_df.copy()
 
         acq_sum_t0 = np.sum(self.acq_archive.as_pandas().objective_batch())
         print("\nNiche Restricted Mutant Update [...]")
         print(f"Before Update: {acq_sum_t0:.3f}")
-        self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
-                            niche_restricted_update=True, sigma_mutants=0.6)
 
+        self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
+                            niche_restricted_update=False, sigma_mutants=0.4)
         acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
         print(f"First Update: {np.sum(self.acq_archive.as_pandas().objective_batch())}")
-        self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
-                            niche_restricted_update = True, sigma_mutants=0.3)
 
+        self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
+                            niche_restricted_update=False, sigma_mutants=0.3)
         acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
         print(f"Second Update: {np.sum(self.acq_archive.as_pandas().objective_batch())}")
-        self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
-                            niche_restricted_update = True, sigma_mutants=0.6)
 
-        acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
-        print(f"Third Update: {np.sum(self.acq_archive.as_pandas().objective_batch())}")
         self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
-                            niche_restricted_update = True, sigma_mutants=0.15)
+                            niche_restricted_update=False, sigma_mutants=0.2)
 
         acq_sum_t1 = np.sum(self.acq_archive.as_pandas().objective_batch())
         print(f"Final Update: {acq_sum_t1:.3f}")
 
         target_archive = self.acq_archive
         self.visualize_archive(archive=self.acq_archive, map_flag=True)
-
-    # For benchmarking purposes only:
-    #   -> optimize MES using botorch.acqf()
-    #   -> compare results to MES optimization
-    #if self.acq_mes_flag:
-    #    optimize_mes(self, benchmark_flag=True)
 
     # calculate anytime stats
     size_t1 = target_archive.stats.num_elites
@@ -317,9 +324,10 @@ class ScaledGaussianEmitter(GaussianEmitter):
             mean_relative_improvement = np.mean(elite['objective'].values / elite_neighbors['objective'].values)
             mes_elite_df.loc[mes_elite_df['index'] == index, 'mean_relative_improvement'] = mean_relative_improvement
 
-        # Preserve 70% of highestperforming local elites
-        n_elites = max(self._batch_size, int(mes_elite_df.shape[0]*0.7))
+        # Preserve 85% of highestperforming local elites
+        n_elites = max(self._batch_size, int(mes_elite_df.shape[0]*0.65))
         mes_elite_df = mes_elite_df.sort_values(by='mean_relative_improvement', ascending=False)
+        mes_elite_df = mes_elite_df.head(self.batch_size)
         mes_elite_df = mes_elite_df.head(n_elites)
         mes_elite_df = mes_elite_df.sample(n=self._batch_size, random_state=self._rng, replace=False)
 

@@ -14,7 +14,7 @@ ALFA = config.ALFA
 MACH = config.MACH
 REYNOLDS = config.REYNOLDS
 
-def predict_objective(self, genomes, sigma_mutants=None):
+def predict_objective(self, genomes, sigma_mutants=None, niche_restricted_update=None):
 
     self.gp_model.eval()
     genomes_tensor = torch.tensor(genomes, dtype=float64)           # Shape: PARALLEL_BATCH_SIZE x SOL_DIMENSION

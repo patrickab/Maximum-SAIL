@@ -172,7 +172,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
     if not pred_loop:
         initialize_archive(self)
 
-    CURIOSITY = 3 # For Hybrid Approach: 'CURIOSITY//BATCH_SIZE' new bin elites are to be sampled
+    CURIOSITY = 7 # For Hybrid Approach: 'CURIOSITY//BATCH_SIZE' new bin elites are to be sampled
 
     anytime_metric_kwargs = initialize_anytime_metrics(self=self, acq_flag=acq_loop, pred_flag=pred_loop)
 
@@ -231,7 +231,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
         iteration = anytime_metric_kwargs['iteration']
         current_eval_budget = anytime_metric_kwargs['current_eval_budget']
 
-        if iteration % 2 == 0:
+        if iteration % 1 == 0:
             CURIOSITY += 1
             CURIOSITY = min(CURIOSITY, 9)
 
@@ -427,17 +427,17 @@ def set_archive_resolution(self: SailRun, resolution: list):
     self.update_archive(candidate_sol=acq_elite_df.solution_batch(),
                         candidate_bhv=acq_elite_df.measures_batch(),
                         acq_flag=True, niche_restricted_update=True,
-                        sigma_mutants=0.3)
+                        sigma_mutants=0.5)
     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
     self.update_archive(candidate_sol=acq_elite_df.solution_batch(), 
                         candidate_bhv=acq_elite_df.measures_batch(), 
                         acq_flag=True, niche_restricted_update=True,
-                        sigma_mutants=0.6)
+                        sigma_mutants=0.4)
     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
     self.update_archive(candidate_sol=acq_elite_df.solution_batch(), 
                         candidate_bhv=acq_elite_df.measures_batch(), 
                         acq_flag=True, niche_restricted_update=True,
-                        sigma_mutants=0.2)
+                        sigma_mutants=0.4)
 
 
 def initialize_archive(self):

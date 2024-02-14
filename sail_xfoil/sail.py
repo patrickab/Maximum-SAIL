@@ -48,6 +48,7 @@ TEST_RUNS = config.TEST_RUNS
 
 
 import warnings
+import time
 warnings.filterwarnings("ignore", message="CUDA initialization: The NVIDIA driver on your system is too old")
 np.set_printoptions(precision=4, suppress=True, floatmode='fixed', linewidth=120)
 
@@ -110,13 +111,23 @@ if __name__ == "__main__":
     exec_start = time.time()
 
     for i in range(TEST_RUNS):
-
         gc.collect()
-
         benchmark_domains = []
 
-        #sail(initial_seed=i, sail_vanilla_flag=True, acq_ucb_flag=True)
+        start_time = time.time()
+
         sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, hybrid_flag=True, acq_mes_flag=True, random_init=True)
+
+        end_time = time.time()
+        duration = end_time - start_time
+        hours = int(duration // 3600)
+        minutes = int((duration % 3600) // 60)
+        seconds = int(duration % 60)
+        duration_str = f"Duration: {hours:02d}:{minutes:02d}:{seconds:02d}"
+
+        with open("stats_log", "a") as file: 
+            file.write()
+
         gc.collect()
 
         img_filenames = [f"imgs/final_heatmaps_{i}_{benchmark_domain}.png" for benchmark_domain in benchmark_domains]
