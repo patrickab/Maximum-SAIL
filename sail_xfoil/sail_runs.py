@@ -216,11 +216,6 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
             raise ValueError("Duplicate Solution Error: New Solutions already exist in GP Data")
 
         print("Curiosity: ", CURIOSITY)
-        if self.acq_mes_flag and acq_loop:
-            optimize_mes(self, 
-                         solution_batch=solution_batch,
-                         objective_batch=objective_batch,
-                         benchmark_flag=True)
 
         obj_t0, obj_t1, n_new_obj_elites = eval_xfoil_loop(self, solution_batch=solution_batch, measures_batch=measures_batch, candidate_targetvalues=objective_batch, acq_flag=acq_loop, pred_flag=pred_loop)       # Evaluate Acquisition Elites & Update Acq Archive under resulting GP Model
 

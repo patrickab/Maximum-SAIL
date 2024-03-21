@@ -88,7 +88,6 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
         if self.acq_mes_flag and acq_flag:
             acq_sum_t0 = np.sum(self.acq_archive.as_pandas().objective_batch())
             print(f"Acquisition Value Sum (before update): {acq_sum_t0:.3f}")
-            optimize_mes(self=self)
 
     if self.acq_ucb_flag:
         obj_elite_df = self.obj_archive.as_pandas(include_solutions=True)
