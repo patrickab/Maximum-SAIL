@@ -126,7 +126,7 @@ if __name__ == "__main__":
         duration_str = f"Duration: {hours:02d}:{minutes:02d}:{seconds:02d}"
 
         with open("stats_log", "a") as file: 
-            file.write()
+            file.write(duration_str)
 
         gc.collect()
 

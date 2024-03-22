@@ -152,7 +152,7 @@ def anytime_archive_visualizer(self, archive, vmin, vmax, obj_flag=False, acq_fl
             os.chdir("..")
             
             # Move all contents from all subdirectories to the parent directory - then delete all subdirectories (except for pred)
-            subprocess.run(f"mv obj/* acq/* new/* .", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(f"cp obj/* acq/* new/* .", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             #subprocess.run(f"rm -rf obj acq new", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
             # then combine all 3 videos horizontally, first obj_*.mp4 then acq_*.mp4 then new_*.mp4

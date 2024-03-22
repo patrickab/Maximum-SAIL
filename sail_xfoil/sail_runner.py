@@ -347,7 +347,7 @@ def store_final_data(self: SailRun):
     initial_seed = self.initial_seed
     domain = self.domain
 
-    img_filenames = [f"imgs/{domain}/{initial_seed}/final_{initial_seed}_{domain}_{prefix}_heatmap.png" for prefix in ["obj", "acq", "pred", "evaluted_pred", "error"]]
+    img_filenames = [f"imgs/{domain}/{initial_seed}/final_{initial_seed}_{domain}_{prefix}_heatmap.png" for prefix in ["obj", "pred", "evaluted_pred", "error"]]
     imgs = [PIL.Image.open(img) for img in img_filenames]
     imgs_comb = np.hstack([img for img in imgs])
     imgs_comb = PIL.Image.fromarray(imgs_comb)
