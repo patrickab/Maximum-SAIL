@@ -83,7 +83,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
 
     if self.custom_flag:
         self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=acq_flag, pred_flag=pred_flag,
-                            niche_restricted_update=False, sigma_mutants=0.2)
+                            niche_restricted_update=True, sigma_mutants=0.2)
         t0_acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
         if self.acq_mes_flag and acq_flag:
             acq_sum_t0 = np.sum(self.acq_archive.as_pandas().objective_batch())
@@ -96,7 +96,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
     if self.acq_mes_flag and acq_flag:
         acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
         self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
-                            niche_restricted_update = False, sigma_mutants=0.2)
+                            niche_restricted_update=True, sigma_mutants=0.2)
         self.acq_archive.add(t0_acq_elite_df.solution_batch(), t0_acq_elite_df.objective_batch(), t0_acq_elite_df.measures_batch())
         self.visualize_archive(archive=self.acq_archive, map_flag=True)
 
@@ -146,7 +146,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
             # Calculate Acquisitions/Predictions
             scheduler_bhv = samples[:,1:3]  # ToDO: generalize calculate_behavior()
             candidate_sol = samples[valid_indices]
-            candidate_obj = target_function(self=self, genomes=candidate_sol, sigma_mutants=sigma_mutants, niche_restricted_update=False)
+            candidate_obj = target_function(self=self, genomes=candidate_sol, sigma_mutants=sigma_mutants, niche_restricted_update=True)
             candidate_bhv = scheduler_bhv[valid_indices]
 
             if mes_flag and acq_flag:
@@ -168,15 +168,15 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
                     t0_acq_elite_df = acq_elite_df.copy()
                     print(f"t0: {np.sum(acq_elite_df.objective_batch()):.3f}")
                     self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
-                                        niche_restricted_update=False, sigma_mutants=0.5)
+                                        niche_restricted_update=True, sigma_mutants=0.5)
                     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
                     print(f"t1: {np.sum(acq_elite_df.objective_batch()):.3f}")
                     self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
-                                        niche_restricted_update=False, sigma_mutants=0.4)
+                                        niche_restricted_update=True, sigma_mutants=0.4)
                     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
                     print(f"t2: {np.sum(acq_elite_df.objective_batch()):.3f}")
                     self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
-                                        niche_restricted_update=False, sigma_mutants=0.3)
+                                        niche_restricted_update=True, sigma_mutants=0.3)
 
                     self.visualize_archive(archive=self.acq_archive, map_flag=True)
                     acquisition_sum = np.sum(self.acq_archive.as_pandas().objective_batch())
@@ -199,17 +199,17 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
         print(f"Before Update: {acq_sum_t0:.3f}")
 
         self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
-                            niche_restricted_update=False, sigma_mutants=0.4)
+                            niche_restricted_update=True, sigma_mutants=0.4)
         acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
         print(f"First Update: {np.sum(self.acq_archive.as_pandas().objective_batch())}")
 
         self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
-                            niche_restricted_update=False, sigma_mutants=0.3)
+                            niche_restricted_update=True, sigma_mutants=0.3)
         acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
         print(f"Second Update: {np.sum(self.acq_archive.as_pandas().objective_batch())}")
 
         self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
-                            niche_restricted_update=False, sigma_mutants=0.2)
+                            niche_restricted_update=True, sigma_mutants=0.2)
 
         acq_sum_t1 = np.sum(self.acq_archive.as_pandas().objective_batch())
         print(f"Final Update: {acq_sum_t1:.3f}")

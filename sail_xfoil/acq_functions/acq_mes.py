@@ -110,8 +110,8 @@ def assamble_cellgrid(self, genome):
     genome_behavior = genome[1:3]
     genome_cell_index = self.acq_archive.index_of_single(genome_behavior)
 
-    mes_cellgrid = self.mes_sobol_cellgrid_mutants.copy()
-    bhv_cellgrid_i = self.bhv_sobol_cellgrids_mutants[genome_cell_index].copy()
+    mes_cellgrid = self.mes_sobol_cellgrid.copy()
+    bhv_cellgrid_i = self.bhv_sobol_cellgrids[genome_cell_index].copy()
 
     mes_cellgrid[:,1:3] = bhv_cellgrid_i
 
