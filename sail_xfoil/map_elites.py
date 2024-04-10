@@ -187,7 +187,7 @@ def update_emitter(self, target_archive, sigma_emitter=SIGMA_EMITTER, sol_value_
     self.update_seed()
 
     emitter = [
-        _GaussianEmitter(
+        _Gaussian_LocalCompetitionEmitter(
         archive=target_archive,
         sigma=sigma_emitter,
         bounds= np.array(sol_value_range),
@@ -199,7 +199,7 @@ def update_emitter(self, target_archive, sigma_emitter=SIGMA_EMITTER, sol_value_
     return emitter
 
 
-class _GaussianEmitter(GaussianEmitter):
+class _Gaussian_LocalCompetitionEmitter(GaussianEmitter):
 
     """
     Custom Emitter class
@@ -243,6 +243,53 @@ class _GaussianEmitter(GaussianEmitter):
         """int: Number of solutions to return in :meth:`ask`."""
         return self._batch_size
 
+    def mes_local_competition(self):
+
+        mes_elite_df = self.archive.as_pandas(include_solutions=True)
+
+        df_indices = mes_elite_df['index'].values
+        archive_dims = self.archive.dims
+        row_dim = archive_dims[0]
+
+        for index in df_indices:
+
+            neighbor_index_up = index+row_dim
+            neighbor_index_down = index-row_dim
+
+            neighbor_indices = []
+            neighbor_indices.append(neighbor_index_up) if neighbor_index_up < np.prod(archive_dims)-1 else None
+            neighbor_indices.append(neighbor_index_down) if neighbor_index_down >= 0 else None
+
+            if index%row_dim != 0:
+                neighbor_index_left = index-1
+                neighbor_index_left_up = index-1+row_dim
+                neighbor_index_left_down = index-1-row_dim
+                neighbor_indices.append(neighbor_index_left) if neighbor_index_left >= 0 else None
+                neighbor_indices.append(neighbor_index_left_up) if neighbor_index_left_up < np.prod(archive_dims)-1 else None
+                neighbor_indices.append(neighbor_index_left_down) if neighbor_index_left_down >= 0 else None
+            if (index+1) % row_dim != 0:
+                neighbor_index_right = index+1
+                neighbor_index_right_up = index+1+row_dim
+                neighbor_index_right_down = index-1-row_dim
+                neighbor_indices.append(neighbor_index_right) if neighbor_index_right < np.prod(archive_dims)-1 else None
+                neighbor_indices.append(neighbor_index_right_up) if neighbor_index_right_up < np.prod(archive_dims)-1 else None
+                neighbor_indices.append(neighbor_index_right_down) if neighbor_index_right_down >= 0 else None
+
+            elite = mes_elite_df[mes_elite_df['index'] == index]
+            elite_neighbors = mes_elite_df[mes_elite_df['index'].isin(neighbor_indices)]
+            mean_relative_improvement = np.mean(elite['objective'].values / elite_neighbors['objective'].values)
+            mes_elite_df.loc[mes_elite_df['index'] == index, 'mean_relative_improvement'] = mean_relative_improvement
+
+        # Preserve 85% of highestperforming local elites
+        n_elites = max(self._batch_size, int(mes_elite_df.shape[0]*0.65))
+        mes_elite_df = mes_elite_df.sort_values(by='mean_relative_improvement', ascending=False)
+        mes_elite_df = mes_elite_df.head(self.batch_size)
+        mes_elite_df = mes_elite_df.head(n_elites)
+        mes_elite_df = mes_elite_df.sample(n=self._batch_size, random_state=self._rng, replace=False)
+
+        mes_parents = mes_elite_df.solution_batch()
+        return mes_parents
+
     def ask(self):
         """Creates solutions by adding Gaussian noise to elites in the archive.
 
@@ -250,7 +297,10 @@ class _GaussianEmitter(GaussianEmitter):
         chosen elite with standard deviation ``self.sigma``.
         """
 
-        parents = self.archive.sample_elites(self._batch_size).solution_batch
+        if not self.mes_flag:
+            parents = self.archive.sample_elites(self._batch_size).solution_batch
+        else:
+            parents = self.mes_local_competition()
 
         scaled_noise = self._rng.normal(
             scale=np.abs(self._sigma*(self.upper_bounds-self.lower_bounds)),
