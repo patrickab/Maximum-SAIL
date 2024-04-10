@@ -151,7 +151,13 @@ class SailRun:
 
     def update_cellgrids(self):
 
-        self.bhv_cellbounds, self.bhv_sobol_cellgrids, self.mes_sobol_cellgrid = mes_sobol_cellgrids(self)
+        self.bhv_cellbounds, self.bhv_sobol_cellgrids, self.mes_sobol_cellgrid = mes_sobol_cellgrids(self, mutant_cellrange=-0.0001)
+        return
+
+
+    def update_mutant_cellgrids(self, mutant_cellrange=MUTANT_CELLRANGE):
+
+        self.bhv_cellbounds_mutants, self.bhv_sobol_cellgrids_mutants, self.mes_sobol_cellgrid_mutants = mes_sobol_cellgrids(self, mutant_cellrange=mutant_cellrange)
         return
 
 
@@ -419,7 +425,7 @@ def evaluate_prediction_archive(self: SailRun):
     return
 
 
-def mes_sobol_cellgrids(self: SailRun):
+def mes_sobol_cellgrids(self: SailRun, mutant_cellrange):
 
     """
     Creates a Sobol Cellgrid that can be used for all cells
@@ -440,6 +446,20 @@ def mes_sobol_cellgrids(self: SailRun):
 
         Therefore, we can rapidly assamble the final cellgrid
         for each sample within the MAP-Loop
+
+    Mutant Cellrange:
+
+        Defines the boundaries for the cellgrids.
+        These boundaries are also used as boundaries
+        for the mutants, that are created inside acq_mes.py
+
+        For example:
+            mutant_cellrange = 0.1 -> mutants may exceed cellbounds by 10%
+            mutant_cellrange = 0.0 -> mutants are not allowed to exceed cellbounds
+            mutant_cellrange = -0.01 -> mutants are not allowed to exceed cellbounds, but are allowed to be sampled from a smaller cell
+
+        Setting mutant_cellrange to -0.01 avoids edge cases
+
 
     Returns:
 
@@ -470,7 +490,6 @@ def mes_sobol_cellgrids(self: SailRun):
     cell_range_0 = np.diff(boundaries_0)[0]
     cell_range_1 = np.diff(boundaries_1)[0]
 
-    # 625 bins, 9000 samples, 2 dimensions
     bhv_cellgrids = np.empty((n_cells, MES_GRID_SIZE, BHV_DIMENSION))
     bhv_cellbounds = np.empty((n_cells, BHV_DIMENSION, 2))
 
@@ -478,11 +497,11 @@ def mes_sobol_cellgrids(self: SailRun):
 
         measure_0_idx, measure_1_idx = idx[i]
 
-        cell_bounds_0 = (boundaries_0[measure_0_idx] - cell_range_0,
-                         boundaries_0[measure_0_idx+1] + cell_range_0)
+        cell_bounds_0 = (boundaries_0[measure_0_idx] - cell_range_0 * mutant_cellrange,
+                         boundaries_0[measure_0_idx+1] + cell_range_0 * mutant_cellrange)
 
-        cell_bounds_1 = (boundaries_1[measure_1_idx] - cell_range_1,
-                         boundaries_1[measure_1_idx+1] + cell_range_1)
+        cell_bounds_1 = (boundaries_1[measure_1_idx] - cell_range_1 * mutant_cellrange,
+                         boundaries_1[measure_1_idx+1] + cell_range_1 * mutant_cellrange)
 
         # Restrict cellbounds to solution space boundaries
         cell_bounds_0 = np.clip(cell_bounds_0, boundaries_0[0], boundaries_0[-1])
