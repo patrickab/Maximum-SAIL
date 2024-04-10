@@ -22,7 +22,7 @@ import numpy as np
 from xfoil.express_airfoils import generate_parsec_coordinates
 from xfoil.simulate_airfoils import xfoil
 from utils.pprint_nd import pprint
-from sail_runner import SailRun
+from sail_run import SailRun
 
 
 ### Global Parameters ###
