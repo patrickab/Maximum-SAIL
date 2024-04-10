@@ -9,9 +9,10 @@ function. In the case of SAIL, MAP-Elites is used to optimize
 acquisition & prediction values as objective.
 """
 
-from ribs.schedulers import Scheduler
-from ribs.archives import GridArchive
+from ribs.emitters._emitter_base import EmitterBase
 from ribs.emitters import GaussianEmitter
+from ribs.archives import GridArchive
+from ribs.schedulers import Scheduler
 from tqdm import tqdm
 import numpy as np
 
@@ -186,7 +187,7 @@ def update_emitter(self, target_archive, sigma_emitter=SIGMA_EMITTER, sol_value_
     self.update_seed()
 
     emitter = [
-        GaussianEmitter(
+        _GaussianEmitter(
         archive=target_archive,
         sigma=sigma_emitter,
         bounds= np.array(sol_value_range),
@@ -196,6 +197,67 @@ def update_emitter(self, target_archive, sigma_emitter=SIGMA_EMITTER, sol_value_
     )]
 
     return emitter
+
+
+class _GaussianEmitter(GaussianEmitter):
+
+    """
+    Custom Emitter class
+
+    - Scales Gaussian Noise to the boundaries of the solution space
+
+    """
+
+    def __init__(self,
+                 archive,
+                 *,
+                 sigma,
+                 bounds=None,
+                 batch_size=BATCH_SIZE,
+                 seed=None,
+                 mes_flag=False):
+
+        self._rng = np.random.default_rng(seed)
+        self._batch_size = batch_size
+        self._sigma = np.array(sigma, dtype=archive.dtype)
+        self.mes_flag = mes_flag
+
+        if archive.stats.num_elites == 0:
+            raise ValueError("Archive must be filled with initial solutions.")
+
+        EmitterBase.__init__(
+            self,
+            archive,
+            solution_dim=archive.solution_dim,
+            bounds=bounds,
+        )
+
+    @property
+    def sigma(self):
+        """float or numpy.ndarray: Standard deviation of the (diagonal) Gaussian
+        distribution when the archive is not empty."""
+        return self._sigma
+
+    @property
+    def batch_size(self):
+        """int: Number of solutions to return in :meth:`ask`."""
+        return self._batch_size
+
+    def ask(self):
+        """Creates solutions by adding Gaussian noise to elites in the archive.
+
+        Each solution is drawn from a distribution centered at a randomly
+        chosen elite with standard deviation ``self.sigma``.
+        """
+
+        parents = self.archive.sample_elites(self._batch_size).solution_batch
+
+        scaled_noise = self._rng.normal(
+            scale=np.abs(self._sigma*(self.upper_bounds-self.lower_bounds)),
+            size=(self._batch_size, self.solution_dim),
+        )
+
+        return np.clip(parents + scaled_noise, self.lower_bounds, self.upper_bounds)
 
 
 class _Scheduler(Scheduler):
