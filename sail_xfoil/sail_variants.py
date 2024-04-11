@@ -46,8 +46,7 @@ def run_vanilla_sail(self: SailRun):
     while(current_eval_budget >= BATCH_SIZE):
 
         # Produce new acquisition elites
-        new_acq_elites, _, _ = map_elites(self, acq_flag=True)
-        if new_acq_elites.stats.num_elites < BATCH_SIZE: ensure_n_new_elites(self=self, new_elite_archive=new_acq_elites, acq_flag=True)
+        new_acq_elite = map_elites(self, acq_flag=True)
         candidate_solutions_df = self.acq_archive.as_pandas(include_solutions=True)
         candidate_solutions_df = candidate_solutions_df.sample(n=BATCH_SIZE, random_state=self.initial_seed, replace=False) 
 
