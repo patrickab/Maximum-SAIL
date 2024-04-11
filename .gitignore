@@ -1,0 +1,13 @@
+**/__pycache__/
+sail_xfoil/treasurebox
+sail_xfoil/benchmarks
+error_log
+*.dat
+*.csv
+*.log
+*.png
+*.mp4
+fragen.txt
+sail_xfoil/xfoil/simulate_airfoils.py
+sail_xfoil/.vscode
+sail_xfoil/:00.bl
