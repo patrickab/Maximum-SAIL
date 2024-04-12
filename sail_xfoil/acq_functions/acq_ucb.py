@@ -15,3 +15,4 @@ def acq_ucb(self, genomes, sigma_mutants=None, niche_restricted_update=None):
     ucb_ndarray = ucb_tensor.detach().numpy()
 
     return ucb_ndarray
+

@@ -103,3 +103,4 @@ def eval_xfoil_loop(self: SailRun, solution_batch, measures_batch, evaluate_pred
     obj_t1 = self.obj_archive.stats.num_elites
     self.convergence_errors = n_errors
     return obj_t0, obj_t1, n_new_obj_elites
+

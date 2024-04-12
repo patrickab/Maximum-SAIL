@@ -37,3 +37,4 @@ def fit_gp_model(x_sol, y_obj):
     fit_gpytorch_model(mll)
 
     return gp_model
+

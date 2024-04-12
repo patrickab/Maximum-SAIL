@@ -25,3 +25,4 @@ def csv_to_archive(csv_path: str):
 
     archive.add(df.solution_batch(), df.objective_batch(), df.measures_batch())
     return archive
+

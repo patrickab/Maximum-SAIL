@@ -84,7 +84,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
     # (CURIOSITY//10)*BATCH_SIZE
     # new bin elites are selected
     # from acquisition map
-    CURIOSITY = 9
+    CURIOSITY = 5
 
     total_eval_budget = ACQ_N_OBJ_EVALS + PRED_N_OBJ_EVALS
     current_eval_budget = total_eval_budget

@@ -17,3 +17,4 @@ def predict_objective(self, genomes, sigma_mutants=None, niche_restricted_update
     posterior_mean_predictions = numpy.array([prediction[0] for prediction_array in posterior_mean_predictions for prediction in prediction_array]).T
 
     return posterior_mean_predictions
+

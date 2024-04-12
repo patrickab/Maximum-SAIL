@@ -189,3 +189,4 @@ def archive_visualizer(self, archive, prefix, name, min_val, max_val):
 
     os.chdir(f"../../..")
     return
+

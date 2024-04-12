@@ -23,10 +23,10 @@ def xfoil(iterations):
     """Executes xfoil with given parameters, implements Thread counting errors on stdout"""
 
     print("\nstart xfoil [...]")
-      
+
     n_cores = os.cpu_count()
     executor = concurrent.futures.ProcessPoolExecutor(max_workers=n_cores)
-    
+
     # Submit tasks to the ThreadPoolExecutor for concurrent execution
     futures = [executor.submit(run_xfoil, i) for i in range(iterations)]
 
@@ -45,7 +45,7 @@ def xfoil(iterations):
     obj_batch = []
     success_indices_copy = success_indices.copy()
     for index in success_indices_copy:
-        
+
         output_index_data = numpy.loadtxt(f'airfoil_{index}.log', skiprows=12)
 
         lift, drag = output_index_data[1], output_index_data[2]
@@ -97,7 +97,7 @@ def run_xfoil(index):
     output_thread = threading.Thread(target=populate_queue, args=(process.stdout, queue)) # mysteriously, threads are executed twice (debug in future)
     output_thread.deamon = True # thread dies with the process
     output_thread.start()
-    
+
     # command part
     commands = ''
 
@@ -131,7 +131,7 @@ def run_xfoil(index):
     process.stdin.close()
 
     is_valid_solution = capture_errors(process=process, queue=queue, i=index)
-            
+
     process.stdout.close()
     process.terminate()
 
@@ -153,7 +153,7 @@ def command(cmd):
 def capture_errors(process, queue, i):
     """
     Captures & reacts to errors from XFOIL stdout
-    
+
     returns:
         True    (for converged airfoils)
         False   (if error occured)
@@ -186,7 +186,7 @@ def capture_errors(process, queue, i):
                 print(f"{i}: (viscal error)")
                 terminate_subprocess(process, i)
                 return False
-            
+
         except Empty: # when viscal error occurs, stdout will stop producing output, thus queue.get() will throw an Empty exception, however, viscal errors are *sometimes* not printed to stdout, so it cant always be captured
             print(f"{i}: (queue.Empty)")
             terminate_subprocess(process, i)
@@ -197,7 +197,7 @@ def capture_errors(process, queue, i):
             print(f"Value Error: {i}")
             return False
 
-    
+
 
 def populate_queue(stdout, queue):
     """
@@ -211,7 +211,7 @@ def populate_queue(stdout, queue):
     try:
         for line in iter(stdout.readline, b''): # b'' is empty byte string
             queue.put(line)
-            
+
     except ValueError:
             pass
 
@@ -222,3 +222,4 @@ def terminate_subprocess(process, i):
 
     process.terminate()
     process.stdout.close()
+

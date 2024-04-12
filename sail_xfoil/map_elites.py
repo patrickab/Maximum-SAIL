@@ -280,7 +280,7 @@ class _Gaussian_LocalCompetitionEmitter(GaussianEmitter):
             mean_relative_improvement = np.mean(elite['objective'].values / elite_neighbors['objective'].values)
             mes_elite_df.loc[mes_elite_df['index'] == index, 'mean_relative_improvement'] = mean_relative_improvement
 
-        # Preserve 85% of highestperforming local elites
+        # Preserve 65% of highestperforming local elites
         n_elites = max(self._batch_size, int(mes_elite_df.shape[0]*0.65))
         mes_elite_df = mes_elite_df.sort_values(by='mean_relative_improvement', ascending=False)
         mes_elite_df = mes_elite_df.head(self.batch_size)

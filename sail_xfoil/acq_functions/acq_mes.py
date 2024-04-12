@@ -114,3 +114,4 @@ def assamble_cellgrid(self, genome):
     mes_cellgrid[:,1:3] = bhv_cellgrid_i
 
     return mes_cellgrid
+
