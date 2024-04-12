@@ -97,7 +97,7 @@ def main():
 
         start_time = time.time()
 
-        benchmark_domain = sail(initial_seed=i, sail_vanilla_flag=True, acq_ucb_flag=True)
+        benchmark_domain = sail(initial_seed=i, sail_custom_flag=True, pred_verific_flag=False, acq_mes_flag=True)
 
         end_time = time.time()
         duration = end_time - start_time

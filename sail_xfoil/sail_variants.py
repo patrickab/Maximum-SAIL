@@ -138,7 +138,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
 
         if iteration % 1 == 0:
             CURIOSITY += 1
-            CURIOSITY = min(CURIOSITY, 9)
+            CURIOSITY = min(CURIOSITY, 5)
 
         if iteration % 20 == 0:
             gc.collect()
