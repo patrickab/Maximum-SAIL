@@ -94,7 +94,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
 
             progress.update(1)
 
-            sigma_mutants = SIGMA_MUTANTS
+            sigma_mutants = SIGMA_MUTANTS + 0.2*(remaining_evals/n_evals)
             sigma_emitter = SIGMA_EMITTER + 0.2*(remaining_evals/n_evals)
             emitter = update_emitter(self, target_archive=target_archive, sigma_emitter=sigma_emitter, mes_flag=mes_flag)
 
@@ -111,6 +111,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
                 candidate_sol = self.mes_elites
 
             target_archive.add(solution_batch=candidate_sol, objective_batch=candidate_obj, measures_batch=candidate_bhv)
+
 
             if mes_flag:
 
@@ -136,6 +137,7 @@ def map_elites(self, acq_flag=False, pred_flag=False, new_elite_archive=None):
                                         niche_restricted_update=False, sigma_mutants=0.3 + 0.1*(remaining_evals/n_evals))
 
                     acq_elite_df = self.acq_archive.as_pandas(include_solutions=True)
+                    t0_acq_elite_df = acq_elite_df.copy()
                     print(f"t2: {np.sum(acq_elite_df.objective_batch()):.3f}")
                     self.update_archive(candidate_sol=acq_elite_df.solution_batch(), candidate_bhv=acq_elite_df.measures_batch(), acq_flag=True,
                                         niche_restricted_update=False, sigma_mutants=0.3)
@@ -317,7 +319,7 @@ class _Scheduler(Scheduler):
     to use scheduler.ask() scheduler.tell() as
     required by the original implementation.
     """
-    
+
     def ask(self):
 
         self._last_called = "ask"

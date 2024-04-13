@@ -84,7 +84,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
     # (CURIOSITY//10)*BATCH_SIZE
     # new bin elites are selected
     # from acquisition map
-    CURIOSITY = 5
+    CURIOSITY = 9
 
     total_eval_budget = ACQ_N_OBJ_EVALS + PRED_N_OBJ_EVALS
     current_eval_budget = total_eval_budget
@@ -138,7 +138,7 @@ def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):
 
         if iteration % 1 == 0:
             CURIOSITY += 1
-            CURIOSITY = min(CURIOSITY, 5)
+            CURIOSITY = min(CURIOSITY, 9)
 
         if iteration % 20 == 0:
             gc.collect()
