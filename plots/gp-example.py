@@ -89,3 +89,22 @@ plt.close()
 
 import subprocess
 subprocess.call(["convert", "+append", "bo-example-objective.png", "bo-example-gp.png", "bo-example.png"]) 
+
+from botorch.acquisition import UpperConfidenceBound
+def acq_ucb(gp_model):
+    x = np.linspace(-10, 10, 1000)
+    x_tensor = torch.tensor(x, dtype=torch.float64).unsqueeze(1).unsqueeze(2)
+    UCB = UpperConfidenceBound(gp_model, beta=2)
+    ucb_tensor = UCB(x_tensor)
+    return ucb_tensor.detach().numpy()
+
+# Plot the UCB acquisition function
+ucb = acq_ucb(gp_model)
+plt.plot(x, ucb, 'r-', label='UCB')
+plt.xlabel('x')
+plt.ylabel('UCB(x)')
+plt.title('UCB Acquisition Function')
+plt.ylim(-35, 35)
+plt.legend(loc='upper left')
+plt.grid(True)
+plt.savefig('bo-example-ucb.png')
