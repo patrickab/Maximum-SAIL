@@ -108,3 +108,34 @@ plt.ylim(-35, 35)
 plt.legend(loc='upper left')
 plt.grid(True)
 plt.savefig('bo-example-ucb.png')
+
+subprocess.call(["convert", "+append", "bo-example-gp.png", "bo-example-ucb.png", "bo-example-gp-ucb.png"])
+
+plt.close()
+
+from botorch.acquisition import qLowerBoundMaxValueEntropy
+def simple_mes(gp_model):
+    x = np.linspace(-10, 10, 1000)
+    x_tensor = torch.tensor(x, dtype=torch.float64)
+    transformed_x = x_tensor.unsqueeze(1)
+    acq_solution_tensor = torch.tensor(np.zeros(len(x)), dtype=torch.float64)
+    acq_entropy_tensor = torch.tensor(np.zeros((len(x), 1)), dtype=torch.float64)
+    MES = qLowerBoundMaxValueEntropy(model=gp_model, candidate_set=transformed_x, num_mv_samples=200)
+    for i in range(x.shape[0]):
+        acq_entropy = MES(transformed_x[i].unsqueeze(0))  # Reshape to have 2 dimensions
+        acq_entropy_tensor[i] = acq_entropy
+        acq_solution_tensor[i] = x_tensor[i]
+    mes_ndarray = acq_entropy_tensor.detach().numpy()
+    return np.hstack(mes_ndarray)
+
+subprocess.call(["convert", "+append", "bo-example-gp.png", "bo-example-mes.png", "bo-example-gp-mes.png"])
+
+# Plot the MES acquisition function
+mes = simple_mes(gp_model)
+plt.plot(x, mes, 'r-', label='MES')
+plt.xlabel('x')
+plt.ylabel('MES(x)')
+plt.title('MES Acquisition Function')
+plt.legend(loc='upper left')
+plt.grid(True)
+plt.savefig('bo-example-mes.png')
