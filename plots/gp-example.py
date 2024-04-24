@@ -1,0 +1,91 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import torch
+from botorch.models.transforms import Standardize, Normalize
+from botorch.models import SingleTaskGP
+from botorch.fit import fit_gpytorch_model
+from gpytorch.mlls import ExactMarginalLogLikelihood
+import sobol_seq
+
+
+# Define the objective function
+def objective_function(x):
+    return 0.5 * x**2 * np.sin(x)
+
+# Define the search space
+lower_bound = -10.0
+upper_bound = 10.0
+space = [(lower_bound, upper_bound)]  # Bounds for x
+
+# Generate random design points
+n_design_points = 15
+X_design = np.random.uniform(low=-10, high=10, size=(n_design_points, 1))
+
+# X_design = sobol_seq.i4_sobol_generate(1, n_design_points)
+# X_design = lower_bound + (upper_bound - lower_bound) * X_design
+
+# Evaluate objective function at design points
+Y_design = [objective_function(x) for x in X_design]
+
+# Plot the design points
+x = np.linspace(-10, 10, 1000)
+y = objective_function(x)
+plt.plot(x, y, 'r-', label='Objective Function')
+plt.scatter(X_design, Y_design, color='blue', marker='o', label='Design Points')
+plt.xlabel('x')
+plt.ylabel('f(x)')
+plt.title('Objective Function Evaluated on Uniform Random Sample (n=15)')
+plt.ylim(-35, 35)
+plt.legend(loc='upper left')
+plt.grid(True)
+plt.savefig('bo-example-objective.png')
+
+plt.close()
+
+def fit_gp_model(x_sol, y_obj):
+    x_tensor = torch.tensor(x_sol, dtype=torch.float64)
+    y_tensor = torch.tensor(y_obj, dtype=torch.float64)
+
+    l_bound = torch.tensor([lower_bound], dtype=torch.float64)
+    u_bound = torch.tensor([upper_bound], dtype=torch.float64)
+    bounds = torch.stack([l_bound, u_bound])
+
+    input_transform = Normalize(d=1, bounds=bounds)
+
+    gp_model = SingleTaskGP(x_tensor, y_tensor,
+        input_transform=input_transform,
+        outcome_transform=Standardize(m=1))
+
+    mll = ExactMarginalLogLikelihood(gp_model.likelihood, gp_model)
+
+    fit_gpytorch_model(mll)
+
+    return gp_model
+
+# Fit a gaussian process model using botorch to the design points, plot the mean and the 95% confidence interval
+gp_model = fit_gp_model(X_design, Y_design)
+# Plot the model and its credible intervals
+x = np.linspace(-10, 10, 1000)
+x_tensor = torch.tensor(x, dtype=torch.float64).view(-1, 1)
+with torch.no_grad():
+    f_mean = gp_model.posterior(x_tensor).mean
+    f_std = gp_model.posterior(x_tensor).stddev
+
+f_mean = gp_model.posterior(x_tensor).mean.squeeze().detach().numpy()
+f_std = gp_model.posterior(x_tensor).stddev.squeeze().detach().numpy()
+
+plt.plot(x, f_mean, 'r-', label='GP Mean')
+plt.fill_between(x, f_mean - 1.96 * f_std, f_mean + 1.96 * f_std, alpha=0.2, label='95% Credible Interval')
+plt.scatter(X_design, Y_design, color='blue', marker='o', label='Design Points')
+plt.xlabel('x')
+plt.ylabel('f(x)')
+plt.title('GP Model and 95% Credible Interval')
+plt.ylim(-35, 35)
+plt.legend(loc='upper left')
+plt.grid(True)
+plt.savefig('bo-example-gp.png')
+
+plt.close()
+
+import subprocess
+subprocess.call(["convert", "+append", "bo-example-objective.png", "bo-example-gp.png", "bo-example.png"]) 
