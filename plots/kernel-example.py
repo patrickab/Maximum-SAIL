@@ -59,7 +59,7 @@ samples = np.random.multivariate_normal(mu.ravel(), cov, 3)
 
 from numpy.linalg import inv
 
-def posterior(X_s, X_train, Y_train, l=1.0, sigma_f=1.0):
+def posterior(X_s, X_train, Y_train, l=1.0, sigma_f=1.0, sigma_y=0):
     """
     Computes the suffifient statistics of the posterior distribution 
     from m training data X_train and Y_train and n new inputs X_s.
@@ -70,11 +70,12 @@ def posterior(X_s, X_train, Y_train, l=1.0, sigma_f=1.0):
         Y_train: Training targets (m x 1).
         l: Kernel length parameter.
         sigma_f: Kernel vertical variation parameter.
+        sigma_y: Noise parameter.
 
     Returns:
         Posterior mean vector (n x d) and covariance matrix (n x n).
     """
-    K = kernel(X_train, X_train, l, sigma_f)
+    K = kernel(X_train, X_train, l, sigma_f) + sigma_y**2 * np.eye(len(X_train))
     K_s = kernel(X_train, X_s, l, sigma_f)
     K_ss = kernel(X_s, X_s, l, sigma_f) + 1e-8 * np.eye(len(X_s))
     K_inv = inv(K)
@@ -116,11 +117,26 @@ for i, (l, sigma_f) in enumerate(kernel_params):
 
 import subprocess
 
+noise_params = [
+    (1.0, 1.0, 0.0),
+    (1.0, 1.0, 0.3),
+]
+
+for i, (l, sigma_f, sigma_y) in enumerate(noise_params):
+    plt.close()
+    mu_s, cov_s = posterior(X, X_train, Y_train, l=l, sigma_f=sigma_f, sigma_y=sigma_y)
+    plt.title(f'sigma_y = {sigma_y}, l = {l}, sigma_f = {sigma_f}')
+    plt.ylim(-5, 5)
+    plot_gp(mu_s, cov_s, X, X_train=X_train, Y_train=Y_train, i=i+4)
+
 # Combine gp_0.png and gp_1.png side by side
 subprocess.call(["convert", "+append", "gp_0.png", "gp_1.png", "lengthscale.png"])
 
 # Combine gp_2.png and gp_3.png side by side
 subprocess.call(["convert", "+append", "gp_2.png", "gp_3.png", "sigma_f.png"])
 
+# Combine gp_3.png and gp_4.png side by side
+subprocess.call(["convert", "+append", "gp_4.png", "gp_5.png", "sigma_y.png"])
+
 # Stack buffer_1.png below buffer_0.png
-subprocess.call(["convert", "-append", "lengthscale.png", "sigma_f.png", "kernel-parameters.png"])
+subprocess.call(["convert", "-append", "lengthscale.png", "sigma_f.png", "sigma_y.png", "kernel-parameters.png"])
