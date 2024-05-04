@@ -431,7 +431,7 @@ def initialize_archive(self):
         while current_eval_budget >= BATCH_SIZE:
 
             # calculate MES Acquisition Elites
-            new_target_elites, _, _ = map_elites(self, acq_flag=True)
+            new_target_elites = map_elites(self, acq_flag=True)
 
             improved_elites, new_bin_elites = prepare_sample_elites(self=self, new_elite_archive=new_target_elites, old_elite_archive=self.obj_archive, pred_flag=False)                      # Split new_target_elites into improved elites & new bin elites, then (if self.acq_ucb_flag or pred_flag) calculate objective improvement (else) objective_improvement = objective
             candidate_solutions_df = select_samples(self, improved_elites=improved_elites, new_bin_elites=new_bin_elites, acq_flag=True, pred_flag=False, curiosity=CURIOSITY)            # Select samples based on exploration behavior defined in the class constructor
