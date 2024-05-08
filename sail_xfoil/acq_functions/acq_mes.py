@@ -1,5 +1,6 @@
 #### Packages
 from torch import float64, tensor
+from botorch.optim import optimize_acqf
 from botorch.acquisition import qMaxValueEntropy, qLowerBoundMaxValueEntropy
 import numpy as np
 import gc
@@ -108,10 +109,55 @@ def assamble_cellgrid(self, genome):
     genome_behavior = genome[1:3]
     genome_cell_index = self.acq_archive.index_of_single(genome_behavior)
 
-    mes_cellgrid = self.mes_sobol_cellgrid_mutants.copy()
-    bhv_cellgrid_i = self.bhv_sobol_cellgrids_mutants[genome_cell_index].copy()
+    mes_cellgrid = self.mes_sobol_cellgrid.copy()
+    bhv_cellgrid_i = self.bhv_sobol_cellgrids[genome_cell_index].copy()
 
     mes_cellgrid[:,1:3] = bhv_cellgrid_i
 
     return mes_cellgrid
 
+
+def botorch_optimize_acqf(self, genomes):
+
+    print()
+
+    gp_model = self.gp_model
+    cell_indices = self.acq_archive.index_of(genomes[:,1:3])
+
+    cellbounds = self.bhv_cellbounds[cell_indices]
+    cellbounds[:,:1,0] = cellbounds[:,:1,0]
+    cellbounds[:,:1,1] = cellbounds[:,:1,1]
+    solutionbounds = np.array(SOL_VALUE_RANGE)
+    cell_solutionbounds = np.repeat(solutionbounds[np.newaxis,:,:], len(genomes), axis=0)
+    cell_solutionbounds[:, 1:3] = cellbounds
+
+    genomes_tensor = tensor(genomes, dtype=float64)
+
+    new_genomes = np.empty((len(genomes), SOL_DIMENSION))
+    new_acquisitions = np.empty((len(genomes), 1))
+
+    for i in range(genomes.shape[0]):
+
+        print(f"genome {i}")
+
+        cellgrid = assamble_cellgrid(self, genomes_tensor[i])
+        cellgrid = tensor(cellgrid, dtype=float64)
+        MES = qLowerBoundMaxValueEntropy(model=gp_model, candidate_set=cellgrid, num_mv_samples=NUM_MV_SAMPLES)
+
+        new_genome, new_acquisition = optimize_acqf(
+            acq_function=MES,
+            bounds=tensor(cell_solutionbounds[i].T, dtype=float64),
+            q=1,
+            num_restarts=512,
+            raw_samples=4096,
+        )
+
+        new_genome = new_genome.detach().numpy()
+        new_acquisition = new_acquisition.detach().numpy()
+
+        new_genomes[i] = new_genome
+        new_acquisitions[i] = new_acquisition
+
+    print()
+
+    return new_genomes

@@ -13,7 +13,7 @@ import os
 from xfoil.eval_xfoil_loop import eval_xfoil_loop
 from utils.anytime_metrics import initialize_anytime_metrics, calculate_anytime_metrics, store_anytime_metrics
 from xfoil.express_airfoils import generate_parsec_coordinates
-from acq_functions.acq_mes import acq_mes
+from acq_functions.acq_mes import acq_mes, botorch_optimize_acqf
 from acq_functions.acq_ucb import acq_ucb
 from chaospy import create_sobol_samples
 from map_elites import map_elites
@@ -68,6 +68,40 @@ def run_vanilla_sail(self: SailRun):
             gc.collect()
 
     return
+
+
+def run_botorch_acqf(self: SailRun):
+
+    initialize_archive(self)
+
+    total_eval_budget = ACQ_N_OBJ_EVALS + PRED_N_OBJ_EVALS
+    current_eval_budget = total_eval_budget
+
+    anytime_metric_kwargs = self.anytime_metric_kwargs
+    if anytime_metric_kwargs is None:
+        anytime_metric_kwargs = initialize_anytime_metrics(self=self, acq_flag=True)
+        anytime_metric_kwargs['current_eval_budget'] = total_eval_budget
+        anytime_metric_kwargs['total_eval_budget'] = total_eval_budget
+
+
+    while(current_eval_budget >= BATCH_SIZE):
+
+        acq_elite_sample = self.acq_archive.as_pandas(include_solutions=True).sample(n=BATCH_SIZE, random_state=self.current_seed, replace=False)
+        genomes = acq_elite_sample.solution_batch()
+        self.update_seed()
+
+        optimized_genomes = botorch_optimize_acqf(self, genomes)
+
+        obj_t0, obj_t1, n_new_obj_elites = eval_xfoil_loop(self, solution_batch=optimized_genomes, measures_batch=acq_elite_sample.measures_batch(), acq_flag=True)
+
+        anytime_metric_kwargs = calculate_anytime_metrics(self=self, obj_t0=obj_t0, obj_t1=obj_t1, n_new_obj_elites=n_new_obj_elites, anytime_metric_kwargs=anytime_metric_kwargs, acq_flag=True)
+        store_anytime_metrics(self=self, acq_flag=True, anytime_metric_kwargs=anytime_metric_kwargs)
+
+        current_eval_budget = anytime_metric_kwargs['current_eval_budget']
+
+    return
+
+
 
 
 def run_custom_sail(self: SailRun, acq_loop=False, pred_loop=False):

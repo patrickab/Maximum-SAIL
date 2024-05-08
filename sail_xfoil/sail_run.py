@@ -42,7 +42,7 @@ MAX_RENDER_THRESHHOLD = 5.5
 
 class SailRun:
 
-    def __init__(self, initial_seed, acq_ucb_flag=False, acq_mes_flag=False, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, pred_verific_flag=False, mes_init=False):
+    def __init__(self, initial_seed, acq_ucb_flag=False, acq_mes_flag=False, sail_vanilla_flag=False, sail_custom_flag=False, botorch_flag=False, sail_random_flag=False, pred_verific_flag=False, mes_init=False):
 
         """
         Initialize a SAIL Run.
@@ -79,6 +79,8 @@ class SailRun:
             self.domain = "randomsearch"
         if sail_vanilla_flag:
             self.domain = "vanilla"
+        if botorch_flag:
+            self.domain = "botorch_acqf"
         if pred_verific_flag:
             self.domain = self.domain + "_verification"
         if mes_init:

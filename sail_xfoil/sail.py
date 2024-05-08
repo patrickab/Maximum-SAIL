@@ -26,7 +26,7 @@ import gc
 import os
 
 ###### Import Custom Scripts ######
-from sail_variants import run_custom_sail, run_vanilla_sail, run_random_search
+from sail_variants import run_custom_sail, run_vanilla_sail, run_random_search, run_botorch_acqf
 from sail_run import SailRun, evaluate_prediction_archive, store_final_data
 from map_elites import map_elites
 
@@ -42,9 +42,9 @@ TEST_RUNS = config.TEST_RUNS
 
 np.set_printoptions(precision=4, suppress=True, floatmode='fixed', linewidth=120)
 
-def sail(initial_seed, acq_ucb_flag=False, acq_mes_flag=False, sail_vanilla_flag=False, sail_custom_flag=False, sail_random_flag=False, pred_verific_flag=False, mes_init=False):
+def sail(initial_seed, acq_ucb_flag=False, acq_mes_flag=False, sail_vanilla_flag=False, sail_custom_flag=False, botorch_flag=False, sail_random_flag=False, pred_verific_flag=False, mes_init=False):
 
-    current_run = SailRun(initial_seed, acq_ucb_flag=acq_ucb_flag, acq_mes_flag=acq_mes_flag, sail_vanilla_flag=sail_vanilla_flag, sail_custom_flag=sail_custom_flag, sail_random_flag=sail_random_flag, pred_verific_flag=pred_verific_flag, mes_init=mes_init) 
+    current_run = SailRun(initial_seed, acq_ucb_flag=acq_ucb_flag, acq_mes_flag=acq_mes_flag, sail_vanilla_flag=sail_vanilla_flag, sail_custom_flag=sail_custom_flag, botorch_flag=botorch_flag, sail_random_flag=sail_random_flag, pred_verific_flag=pred_verific_flag, mes_init=mes_init) 
 
     if sail_vanilla_flag:
         run_vanilla_sail(current_run)
@@ -53,6 +53,10 @@ def sail(initial_seed, acq_ucb_flag=False, acq_mes_flag=False, sail_vanilla_flag
     if sail_custom_flag:
         run_custom_sail(current_run, acq_loop=True)
         gc.collect()
+
+    if botorch_flag:
+        run_botorch_acqf(current_run)
+
 
     if sail_random_flag:
         run_random_search(current_run)
@@ -97,7 +101,7 @@ def main():
 
         start_time = time.time()
 
-        benchmark_domain = sail(initial_seed=i, sail_custom_flag=True, acq_ucb_flag=True, mes_init=True)
+        benchmark_domain = sail(initial_seed=i, botorch_flag=True, acq_mes_flag=True)
 
         end_time = time.time()
         duration = end_time - start_time
