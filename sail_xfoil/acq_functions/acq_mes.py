@@ -90,7 +90,7 @@ def simple_mes(self, genomes):
         cellgrid = tensor(cellgrid, dtype=float64)      # Shape: 4000 x SOL_DIMENSION
         MES = qLowerBoundMaxValueEntropy(model=self.gp_model, candidate_set=cellgrid, num_mv_samples=NUM_MV_SAMPLES)
         acq_entropy = MES(transformed_genomes[i])
-        
+
         elite_index = acq_entropy.argmax()
         acq_entropy_tensor[i] = acq_entropy[elite_index]
         acq_solution_tensor[i] = genomes_tensor[i,elite_index]
