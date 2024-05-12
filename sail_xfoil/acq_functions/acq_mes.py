@@ -148,8 +148,8 @@ def botorch_optimize_acqf(self, genomes):
             acq_function=MES,
             bounds=tensor(cell_solutionbounds[i].T, dtype=float64),
             q=1,
-            num_restarts=512,
-            raw_samples=4096,
+            num_restarts=1024,
+            raw_samples=8192,
         )
 
         new_genome = new_genome.detach().numpy()
